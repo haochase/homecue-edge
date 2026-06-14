@@ -465,7 +465,7 @@ npm run dev
 | 1 | "sleep mode" | `COMMAND_WORDS[1]` Sleep mode | 睡眠模式，柔和灯光 + 温和提醒 |
 | 2 | "movie time" | `COMMAND_WORDS[2]` Movie time | 观影夜：暖光、影院模式、环境音 |
 
-> `esp32-audio.ino` 里的 `SR_COMMANDS` 第三列是音素/G2P 串（如 `"IY AM HhOWM"`），针对 english multinet 模型，**当前为占位符**。上板前必须用 esp-sr 的 multinet 命令词工具针对你实际烧入的模型重新生成并替换，否则识别会失准。命令词文字与 `COMMAND_WORDS` 标签可以不同，只要 `sr_cmd_t` 的 id 落在 `0..COMMAND_COUNT-1` 即可。
+> `esp32-audio.ino` 里的 `SR_COMMANDS` 第三列是音素/G2P 串，已用 esp-sr 的 `gen_sr_commands.py` 针对 arduino-esp32 3.0.7 的 english multinet 模型生成。**换 core 版本或换模型后需重新生成并替换**，否则识别会失准。命令词文字与 `COMMAND_WORDS` 标签可以不同，只要 `sr_cmd_t` 的 id 落在 `0..COMMAND_COUNT-1` 即可。
 
 ### 4C.5 与按键 / 串口兜底的关系
 
