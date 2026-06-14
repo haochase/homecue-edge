@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+# HomeCue Edge pre-commit hook.
+# Runs the privacy/secret scanner against the staged changes and aborts the
+# commit if any secret-shaped token or non-technical keyword is found.
+#
+# Install (from the repo root):
+#
+#   git config core.hooksPath scripts/hooks        # recommended (versioned)
+#
+# or copy this file into the local hooks dir:
+#
+#   cp scripts/hooks/pre-commit .git/hooks/pre-commit   # bash/sh
+#   Copy-Item scripts/hooks/pre-commit .git/hooks/pre-commit   # PowerShell
+#
+# Requires PowerShell (pwsh on Linux/macOS, or powershell.exe on Windows).
+
+set -e
+
+if command -v pwsh >/dev/null 2>&1; then
+    PWSH=pwsh
+elif command -v powershell.exe >/dev/null 2>&1; then
+    PWSH=powershell.exe
+elif command -v powershell >/dev/null 2>&1; then
+    PWSH=powershell
+else
+    echo "pre-commit: PowerShell not found; skipping scan-secrets (install pwsh to enable)." >&2
+    exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+"$PWSH" -NoProfile -ExecutionPolicy Bypass -File "$REPO_ROOT/scripts/scan-secrets.ps1" -Staged

@@ -81,6 +81,20 @@ Open the Vite URL and keep the API on `http://localhost:8723`. For a public no-b
 
 This runs API dependency install, Python compile, API tests, and web lint/build. GitHub Actions runs the same API tests and web lint/build on pushes and pull requests via `.github/workflows/ci.yml`.
 
+## Contributing & Security
+
+This repository is public and holds technical content only. Before committing,
+run the privacy/secret scanner:
+
+```powershell
+pwsh ./scripts/scan-secrets.ps1            # scan all tracked files
+pwsh ./scripts/scan-secrets.ps1 -Staged    # scan staged changes (pre-commit)
+```
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full pre-commit flow and how to
+install the git hook, and [`AGENTS.md`](AGENTS.md) for the rules that apply to
+human contributors and AI coding agents.
+
 ## License
 
 MIT License. See `LICENSE`.

@@ -15,8 +15,21 @@ build/
 .env.*
 !.env.example
 
+# Secrets / credentials (defense in depth)
+*.pem
+*.key
+!*.example.key
+secrets.*
+!secrets.*.example
+
 # Firmware secrets (Wi-Fi creds, PC IP) - never commit
 firmware/**/secrets.h
+!firmware/**/secrets.h.example
+
+# Backup / mirror clones of git history - never commit or push
+*.git/
+*-backup-*/
+*.bak
 
 # OS/editor
 .DS_Store

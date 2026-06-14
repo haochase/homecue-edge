@@ -1,3 +1,7 @@
+param(
+  [switch]$SkipFirmware
+)
+
 $ErrorActionPreference = "Stop"
 
 function Invoke-Checked {
@@ -24,6 +28,11 @@ try {
 }
 finally {
   Pop-Location
+}
+
+if (-not $SkipFirmware) {
+  Write-Host "Checking HomeCue Edge firmware flow..."
+  Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\check-firmware-flow.ps1" -Required }
 }
 
 Write-Host "Checking HomeCue Edge web console..."

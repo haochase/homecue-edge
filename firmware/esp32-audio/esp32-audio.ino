@@ -24,7 +24,13 @@
  * Button-route MVP (default): no ESP-SR / vendor libs. Keys via bare I2C
  * TCA9555 read + BOOT (GPIO0). RGB logs to Serial until vendor driver wired.
  *
- * Voice route (optional): ESP-SR + vendor TCA9555 RGB driver — see TODO[VENDOR].
+ * Serial test route: send commands over the USB serial port to exercise the
+ * same /plan -> /execute path without touching the physical keys:
+ *   homecue:plan [0|1|2]
+ *   homecue:execute
+ *   homecue:reject
+ *
+ * Voice route (optional): ESP-SR + vendor TCA9555 RGB driver - see TODO[VENDOR].
  *
  * ---- Board / IDE setup ----------------------------------------------------
  *   Boards Manager URL : https://espressif.github.io/arduino-esp32/package_esp32_index.json
@@ -50,7 +56,7 @@
 #include "secrets.h"  // copy secrets.h.example -> secrets.h and fill in (gitignored)
 
 // ---------------------------------------------------------------------------
-// Types — MUST be before any function definition (Arduino .ino auto-prototypes)
+// Types - MUST be before any function definition (Arduino .ino auto-prototypes)
 // ---------------------------------------------------------------------------
 enum RgbState { RGB_IDLE, RGB_LISTENING, RGB_THINKING, RGB_READY, RGB_REJECTED, RGB_OFFLINE };
 enum UserKey { KEY_NONE, KEY_CONFIRM, KEY_REJECT, KEY_NEXT };
@@ -61,7 +67,7 @@ struct CommandWord {
 };
 
 // ---------------------------------------------------------------------------
-// Button-route MVP — GPIO / TCA9555 (no vendor libraries)
+// Button-route MVP - GPIO / TCA9555 (no vendor libraries)
 // ---------------------------------------------------------------------------
 // I2C: SDA=GPIO11, SCL=GPIO10. TCA9555 @ 0x20. User keys on expander pins 9/10/11
 // (active low, inverted in hardware). BOOT = GPIO0 (active low).
@@ -77,6 +83,7 @@ static constexpr uint32_t KEY_COOLDOWN_MS = 400;
 
 static bool g_tca9555Ok = false;
 static uint32_t g_lastKeyMs = 0;
+static String g_serialLine;
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -87,10 +94,11 @@ static String planUrl() { return String("http://") + PC_HOST + ":" + PC_PORT + "
 static String executeUrl() { return String("http://") + PC_HOST + ":" + PC_PORT + "/execute"; }
 static String healthUrl() { return String("http://") + PC_HOST + ":" + PC_PORT + "/health"; }
 
-// /plan with agent_mode can take 20–60s (MiMo/Qwen); default HTTPClient timeout is too short.
-static constexpr uint32_t HTTP_TIMEOUT_PLAN_MS = 120000;
-static constexpr uint32_t HTTP_TIMEOUT_EXECUTE_MS = 15000;
-static constexpr uint32_t HTTP_TIMEOUT_HEALTH_MS = 10000;
+// HTTPClient::setTimeout() takes uint16_t on arduino-esp32 3.x; keep values <= 65535.
+// /plan with agent_mode can take 20-60s (MiMo/Qwen); default HTTPClient timeout is too short.
+static constexpr uint16_t HTTP_TIMEOUT_PLAN_MS = 60000;
+static constexpr uint16_t HTTP_TIMEOUT_EXECUTE_MS = 15000;
+static constexpr uint16_t HTTP_TIMEOUT_HEALTH_MS = 10000;
 
 static const char* httpErrorHint(int code) {
   switch (code) {
@@ -120,7 +128,7 @@ static bool g_hasProposal = false;
 static int g_commandIndex = 0;
 
 // ---------------------------------------------------------------------------
-// TCA9555 minimal driver (button route — no vendor library)
+// TCA9555 minimal driver (button route - no vendor library)
 // ---------------------------------------------------------------------------
 static bool tca9555Write(uint8_t reg, uint8_t val) {
   Wire.beginTransmission(TCA9555_ADDR);
@@ -180,7 +188,7 @@ static void setRgbState(RgbState state) {
 }
 
 // ---------------------------------------------------------------------------
-// User keys — button route: TCA9555 KEY1/2/3 + BOOT fallback
+// User keys - button route: TCA9555 KEY1/2/3 + BOOT fallback
 // ---------------------------------------------------------------------------
 static UserKey readUserKey() {
   uint32_t now = millis();
@@ -262,7 +270,7 @@ static bool checkHealth() {
   http.setTimeout(HTTP_TIMEOUT_HEALTH_MS);
   int code = http.GET();
   if (code != 200) {
-    Serial.printf("[/health] HTTP %d — %s\n", code, httpErrorHint(code));
+    Serial.printf("[/health] HTTP %d - %s\n", code, httpErrorHint(code));
   } else {
     Serial.printf("[/health] HTTP %d\n", code);
   }
@@ -295,7 +303,7 @@ static bool requestPlan(const char* prompt) {
   int code = http.POST(payload);
 
   if (code != 200) {
-    Serial.printf("[/plan] HTTP %d — %s\n", code, httpErrorHint(code));
+    Serial.printf("[/plan] HTTP %d - %s\n", code, httpErrorHint(code));
     http.end();
     setRgbState(RGB_OFFLINE);
     return false;
@@ -357,7 +365,7 @@ static bool confirmAndExecute() {
   int code = http.POST(payload);
 
   if (code != 200) {
-    Serial.printf("[/execute] HTTP %d — %s\n", code, httpErrorHint(code));
+    Serial.printf("[/execute] HTTP %d - %s\n", code, httpErrorHint(code));
     http.end();
     setRgbState(RGB_OFFLINE);
     return false;
@@ -390,6 +398,108 @@ static bool confirmAndExecute() {
 }
 
 // ---------------------------------------------------------------------------
+// Serial test trigger - lets automation exercise the hardware HTTP path
+// ---------------------------------------------------------------------------
+static void printSerialTestHelp() {
+  Serial.println("[serial] test commands: homecue:plan [0|1|2], homecue:execute, homecue:reject, homecue:health");
+}
+
+static bool parseSerialCommandIndex(String value, int& outIndex) {
+  value.trim();
+  if (value.length() != 1) return false;
+
+  char digit = value.charAt(0);
+  if (digit < '0' || digit > '9') return false;
+
+  int parsed = digit - '0';
+  if (parsed < 0 || parsed >= COMMAND_COUNT) return false;
+
+  outIndex = parsed;
+  return true;
+}
+
+static void handleSerialTestLine(String line) {
+  line.trim();
+  if (line.length() == 0) return;
+
+  if (line == "homecue:help") {
+    printSerialTestHelp();
+    return;
+  }
+
+  if (line == "homecue:health") {
+    Serial.println("[serial] HEALTH");
+    checkHealth();
+    return;
+  }
+
+  if (line.startsWith("homecue:plan")) {
+    String requested = line.substring(strlen("homecue:plan"));
+    requested.trim();
+
+    if (requested.length() > 0) {
+      int requestedIndex = 0;
+      if (!parseSerialCommandIndex(requested, requestedIndex)) {
+        Serial.printf("[serial] unknown command index: %s\n", requested.c_str());
+        printSerialTestHelp();
+        return;
+      }
+      g_commandIndex = requestedIndex;
+    }
+
+    Serial.printf("[serial] PLAN -> %s\n", COMMAND_WORDS[g_commandIndex].label);
+    setRgbState(RGB_LISTENING);
+    requestPlan(COMMAND_WORDS[g_commandIndex].prompt);
+    return;
+  }
+
+  if (line == "homecue:next") {
+    g_commandIndex = (g_commandIndex + 1) % COMMAND_COUNT;
+    Serial.printf("[serial] NEXT -> %s\n", COMMAND_WORDS[g_commandIndex].label);
+    return;
+  }
+
+  if (line == "homecue:execute" || line == "homecue:confirm") {
+    Serial.println("[serial] CONFIRM");
+    confirmAndExecute();
+    return;
+  }
+
+  if (line == "homecue:reject") {
+    Serial.println("[serial] REJECT - discarding proposal");
+    g_hasProposal = false;
+    g_proposedActions.clear();
+    setRgbState(RGB_REJECTED);
+    return;
+  }
+
+  Serial.printf("[serial] ignored command: %s\n", line.c_str());
+  printSerialTestHelp();
+}
+
+static void pollSerialTestCommand() {
+  while (Serial.available() > 0) {
+    char ch = (char)Serial.read();
+    if (ch == '\r') {
+      continue;
+    }
+    if (ch == '\n') {
+      handleSerialTestLine(g_serialLine);
+      g_serialLine = "";
+      continue;
+    }
+
+    if (g_serialLine.length() >= 96) {
+      Serial.println("[serial] command too long; clearing buffer");
+      g_serialLine = "";
+      continue;
+    }
+
+    g_serialLine += ch;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Arduino entry points
 // ---------------------------------------------------------------------------
 void setup() {
@@ -397,11 +507,12 @@ void setup() {
   delay(300);
   Serial.println("\n[HomeCue Edge] ESP32-S3-AUDIO-Board firmware booting...");
   Serial.println("[mode] button-route MVP (no ESP-SR; voice disabled)");
+  printSerialTestHelp();
 
   pinMode(PIN_BOOT, INPUT_PULLUP);
 
   g_tca9555Ok = initTca9555();
-  Serial.printf("[keys] TCA9555 %s — KEY1=plan KEY2=confirm KEY3=reject BOOT=plan-fallback\n",
+  Serial.printf("[keys] TCA9555 %s - KEY1=plan KEY2=confirm KEY3=reject BOOT=plan-fallback\n",
                 g_tca9555Ok ? "OK" : "not detected (BOOT only)");
 
   // TODO[VENDOR]: RGB ring (GPIO38 WS2812 or TCA9555), ES7210 I2S, ESP-SR voice.
@@ -413,6 +524,9 @@ void setup() {
 }
 
 void loop() {
+  // 0) Automation test trigger over USB serial.
+  pollSerialTestCommand();
+
   // 1) Voice trigger (or fall back to the NEXT key cycling command words).
   int cmd = pollVoiceCommand();
   if (cmd >= 0 && cmd < COMMAND_COUNT) {
