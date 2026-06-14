@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Builds
+dist/
+build/
+.vite/
+
+# Local config
+.env
+.env.*
+!.env.example
+
+# Firmware secrets (Wi-Fi creds, PC IP) - never commit
+firmware/**/secrets.h
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local generated output
+assets/

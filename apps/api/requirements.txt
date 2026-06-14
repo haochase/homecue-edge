@@ -1,0 +1,11 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+python-dotenv==1.0.1
+httpx==0.28.1
+pytest==8.4.2
+
+# Optional: enables POST /voice free-form speech transcription (ESP32 stretch goal).
+# Not a hard dependency - when absent /voice returns 501. To enable, install:
+#   faster-whisper==1.1.0
