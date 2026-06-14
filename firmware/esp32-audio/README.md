@@ -462,10 +462,10 @@ npm run dev
 | MultiNet id | 你说的命令词（english） | 映射到 | 发送到 `/plan` 的 prompt 摘要 |
 | --- | --- | --- | --- |
 | 0 | "I am home" | `COMMAND_WORDS[0]` I'm home | 刚回家很累，舒适房间 + 放松观影 |
-| 1 | "good night" | `COMMAND_WORDS[1]` Sleep mode | 睡眠模式，柔和灯光 + 温和提醒 |
+| 1 | "sleep mode" | `COMMAND_WORDS[1]` Sleep mode | 睡眠模式，柔和灯光 + 温和提醒 |
 | 2 | "movie time" | `COMMAND_WORDS[2]` Movie time | 观影夜：暖光、影院模式、环境音 |
 
-> `esp32-audio.ino` 里的 `SR_COMMANDS` 第三列是音素/G2P 串，针对 english multinet 模型。**当前是占位符**（如 `"Ay AM hb cmd"`），上板前必须用 esp-sr 的 multinet 命令词工具，针对你实际烧入的模型重新生成并替换，否则识别会失准。命令词文字与 `COMMAND_WORDS` 标签可以不同（如 "good night" → "Sleep mode"），只要 id 落在 `0..COMMAND_COUNT-1` 即可。
+> `esp32-audio.ino` 里的 `SR_COMMANDS` 第三列是音素/G2P 串（如 `"IY AM HhOWM"`），针对 english multinet 模型，**当前为占位符**。上板前必须用 esp-sr 的 multinet 命令词工具针对你实际烧入的模型重新生成并替换，否则识别会失准。命令词文字与 `COMMAND_WORDS` 标签可以不同，只要 `sr_cmd_t` 的 id 落在 `0..COMMAND_COUNT-1` 即可。
 
 ### 4C.5 与按键 / 串口兜底的关系
 
