@@ -413,6 +413,80 @@ npm run dev
 
 ---
 
+## 4C. 语音命令词路线（可选，ESP-SR）
+
+> **定位：** 在已跑通的「按键 + 串口」路线之上，叠加一条 **离线命令词** 触发 `/plan`（`execute=false`）的路线。  
+> **默认关闭**：固件顶部 `#define ENABLE_ESP_SR 0`。默认编译 **不依赖** ESP-SR 库、**不需要** 模型分区，CI 与按键路线完全不受影响。  
+> **铁律：** 命令词识别**只提议，绝不执行**。真正执行仍必须按 **CONFIRM 键** 或发串口 `homecue:execute`（人在环不变）。  
+> **风险提示：** 你此前实测厂商 demo 唤醒词「hi esp」在这块板子上**无响应、串口无刷屏**。因此本路线可靠性**未经真机证实**，把它当作锦上添花；**按键 + 串口是永久兜底**，任何时候语音不灵都能照常联调。
+
+### 4C.1 工作原理
+
+```
+唤醒词（英文模型默认 "hi esp"）→ 固定命令词（如 "I am home"）
+  → MultiNet command id → 映射到 COMMAND_WORDS 下标 0..2
+  → requestPlan(... execute=false ...)   【与按键/串口完全相同的闭环】
+  → RGB 转绿「就绪」，PC 网页显示 plan + trace
+  → CONFIRM 键 / homecue:execute → 真正执行
+```
+
+代码隔离方式（见 `esp32-audio.ino`）：
+
+- 编译开关 `#define ENABLE_ESP_SR 0`（默认）。所有 ESP-SR 头文件 `#include "ESP_I2S.h"` / `#include "ESP_SR.h"` 与实现都在 `#if ENABLE_ESP_SR ... #endif` 块内。
+- `pollVoiceCommand()` 在开关关闭时 `return -1`（路线 1「voice placeholder is inert」契约保持），开启时调用 `espSrPollCommand()`。
+- RGB 状态机复用现有 `LISTENING / THINKING / READY`，不新增枚举。
+
+### 4C.2 开启前提（仅当你要试语音时）
+
+| 项 | 说明 |
+| --- | --- |
+| arduino-esp32 | **3.x**（自带 `ESP_SR` 与 `ESP_I2S` 封装库；2.x 没有，需走 ESP-IDF 组件） |
+| ESP-SR 模型 | `srmodels.bin`（wakenet9 "hi esp" + multinet5 english），随分区烧入 |
+| 分区方案 | **ESP SR 16M (3MB APP/7MB SPIFFS/2.9MB MODEL)** — 与第 4 节厂商语音例程同一类分区，**不是** 按键路线那张 `16M Flash (3MB APP/9.9MB FATFS)` |
+| ES7210 初始化 | 双麦 ADC 需经 I2C 配置增益/TDM 槽（`esp32-audio.ino` 内 `espSrBegin()` 的 `TODO[VENDOR]`，从厂商例程抄） |
+
+> 模型来源：用厂商 ESP-SR 例程的 `srmodels.bin`，或 arduino-esp32 `ESP_SR` 示例随附的模型/分区脚本。模型语言必须是 **english**（与命令词一致）。
+
+### 4C.3 如何开启
+
+1. 安装库：Arduino 库管理器装 `ESP_SR`（Espressif）与其依赖；arduino-esp32 3.x 通常已自带 `ESP_I2S`。
+2. 改开关：`esp32-audio.ino` 顶部把 `#define ENABLE_ESP_SR 0` 改为 `1`（也可在 IDE 编译参数里 `-DENABLE_ESP_SR=1`，避免改源码）。
+3. 选分区：**工具 → Partition Scheme → ESP SR 16M (3MB APP/7MB SPIFFS/2.9MB MODEL)**。
+4. 烧模型：按厂商/arduino-esp32 ESP-SR 流程把 `srmodels.bin` 写入模型分区（通常随 sketch 上传或单独 `esptool` 写）。
+5. 烧录后串口应出现：`[mode] button-route + ESP-SR voice command route (propose only)` 与 `[esp-sr] ready - say the wake word, then a command word`。
+
+### 4C.4 命令词表（默认）
+
+唤醒词：**english 模型默认（通常 "hi esp"）**，由模型决定，可按 wiki 换 wakenet 模型。
+
+| MultiNet id | 你说的命令词（english） | 映射到 | 发送到 `/plan` 的 prompt 摘要 |
+| --- | --- | --- | --- |
+| 0 | "I am home" | `COMMAND_WORDS[0]` I'm home | 刚回家很累，舒适房间 + 放松观影 |
+| 1 | "good night" | `COMMAND_WORDS[1]` Sleep mode | 睡眠模式，柔和灯光 + 温和提醒 |
+| 2 | "movie time" | `COMMAND_WORDS[2]` Movie time | 观影夜：暖光、影院模式、环境音 |
+
+> `esp32-audio.ino` 里的 `SR_COMMANDS` 第三列是音素/G2P 串，针对 english multinet 模型。**当前是占位符**（如 `"Ay AM hb cmd"`），上板前必须用 esp-sr 的 multinet 命令词工具，针对你实际烧入的模型重新生成并替换，否则识别会失准。命令词文字与 `COMMAND_WORDS` 标签可以不同（如 "good night" → "Sleep mode"），只要 id 落在 `0..COMMAND_COUNT-1` 即可。
+
+### 4C.5 与按键 / 串口兜底的关系
+
+- 语音、按键、串口三条路**汇入同一个** `requestPlan(... execute=false ...)`，下游 `/plan → 确认 → /execute` 完全一致。
+- 语音**只触发提议**；执行永远要 CONFIRM 键或 `homecue:execute`。
+- 语音任何时候不灵，立刻改用 **NEXT/BOOT 键** 或串口 `homecue:plan [0|1|2]`，演示与联调不中断。
+- 关掉 `ENABLE_ESP_SR` 即回到纯按键 MVP，编译与 CI 不变。
+
+### 4C.6 排错清单（含「hi esp 无响应」实测风险）
+
+| 现象 | 排查 / 处理 |
+| --- | --- |
+| 串口无 `[esp-sr] ready` | 开关没开（仍是 0）、库未装、或分区不含模型；先确认编译时进了 `#if ENABLE_ESP_SR` |
+| `[esp-sr] model init FAILED` | `srmodels.bin` 未烧入或分区方案选错；改 **ESP SR 16M** 分区并重烧模型 |
+| `[esp-sr] I2S init FAILED` | ES7210 未初始化 / 引脚不对；补 `espSrBegin()` 里 `TODO[VENDOR]` 的 ES7210 I2C 初始化（从厂商例程抄），核对 MCLK=12/BCLK=13/WS=14/DIN=15 |
+| 唤醒词「hi esp」无反应（**你的实测风险**） | ① 麦克风增益：ES7210 增益寄存器调高、贴近正面说；② 模型语言：确认是 english wakenet/multinet 且与命令词一致；③ 唤醒灵敏度：用 wiki/esp-sr 的灵敏度档位调高；④ 换唤醒模型或重烧 `srmodels.bin`；⑤ **兜底**：直接用 NEXT/BOOT 键或串口 `homecue:plan` 触发，不依赖语音 |
+| 唤醒成功但命令词识别不到 | 命令词音素串与模型不匹配（用 multinet g2p 重生成）；命令窗口太短就紧接着说；降低环境噪音 |
+| 唤醒/命令乱触发 | 调低灵敏度；远离噪声源；必要时回退到按键路线 |
+
+---
+
 ## 5. 第二步：启动 PC 后端
 
 > 板子通过 WiFi 访问你 PC 上的 FastAPI。**必须**绑定 `0.0.0.0`，不能只绑 `127.0.0.1`。
