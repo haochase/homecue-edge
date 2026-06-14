@@ -255,15 +255,14 @@ static UserKey readUserKey() {
 // is still required to run anything, so the human-in-the-loop guarantee holds.
 #if ENABLE_ESP_SR
 // MultiNet command phrases -> COMMAND_WORDS index (the leading id IS the index).
-// The third column is the MultiNet (english) phoneme/G2P string. The values
-// below are PLACEHOLDERS: regenerate them for your installed model with the
-// esp-sr multinet g2p tool and replace before relying on recognition. The wake
-// word (e.g. "hi esp") comes from the WakeNet model chosen in the ESP-SR build /
-// sdkconfig, NOT from this table.
+// The third column is the MultiNet (english) phoneme/G2P string generated with
+// the esp-sr gen_sr_commands.py tool for the installed arduino-esp32 core. The
+// wake word (e.g. "hi esp") comes from the WakeNet model chosen in the ESP-SR
+// build / sdkconfig, NOT from this table.
 static const sr_cmd_t SR_COMMANDS[] = {
-  {0, "I am home",  "IY AM HhOWM"},      // -> COMMAND_WORDS[0] "I'm home"
-  {1, "sleep mode", "SLIYP MOWD"},       // -> COMMAND_WORDS[1] "Sleep mode"
-  {2, "movie time", "MUWVIY TAYM"},      // -> COMMAND_WORDS[2] "Movie time"
+  {0, "I am home",  "i aM hbM"},         // -> COMMAND_WORDS[0] "I'm home"
+  {1, "sleep mode", "SLmP MbD"},         // -> COMMAND_WORDS[1] "Sleep mode"
+  {2, "movie time", "MoVm TiM"},         // -> COMMAND_WORDS[2] "Movie time"
 };
 static const int SR_COMMAND_COUNT = sizeof(SR_COMMANDS) / sizeof(SR_COMMANDS[0]);
 
@@ -277,6 +276,10 @@ static void onSrEvent(sr_event_t event, int command_id, int phrase_id) {
     case SR_EVENT_WAKEWORD:
       Serial.println("[esp-sr] wake word detected - say a command word");
       break;
+    case SR_EVENT_WAKEWORD_CHANNEL:
+      Serial.printf("[esp-sr] wake word channel %d verified - listening for command\n", command_id);
+      ESP_SR.setMode(SR_MODE_COMMAND);
+      break;
     case SR_EVENT_COMMAND:
       if (command_id >= 0 && command_id < COMMAND_COUNT) {
         // Propose only: just stage the index, loop() calls /plan (execute=false).
@@ -284,9 +287,11 @@ static void onSrEvent(sr_event_t event, int command_id, int phrase_id) {
       } else {
         Serial.printf("[esp-sr] unmapped command id %d - ignored\n", command_id);
       }
+      ESP_SR.setMode(SR_MODE_WAKEWORD);
       break;
     case SR_EVENT_TIMEOUT:
       Serial.println("[esp-sr] command window timeout - say wake word again");
+      ESP_SR.setMode(SR_MODE_WAKEWORD);
       break;
     default:
       break;
