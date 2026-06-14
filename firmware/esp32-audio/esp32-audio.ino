@@ -64,18 +64,17 @@
 // firmware contract check, a normal compile, and the button + serial fallback
 // routes are all unaffected. Enable with -DENABLE_ESP_SR=1 (or flip the value
 // here) once the models/library are installed. See README.md section
-// "Voice command route (optional)".
+// "4C. Voice command route (optional, ESP-SR)".
 #ifndef ENABLE_ESP_SR
 #define ENABLE_ESP_SR 0
 #endif
 
 #if ENABLE_ESP_SR
-// These headers ship with the arduino-esp32 ESP-SR library; they are pulled in
-// ONLY when the voice route is explicitly enabled so the default build stays
+// These headers ship with the arduino-esp32 3.x ESP-SR library; they are pulled
+// in ONLY when the voice route is explicitly enabled so the default build stays
 // dependency-free. Header names may differ slightly between core versions.
-#include <ESP_I2S.h>
-#include <ESP_SR.h>
-#include <esp32-hal-sr.h>
+#include "ESP_I2S.h"
+#include "ESP_SR.h"
 #endif
 
 // ---------------------------------------------------------------------------
@@ -258,17 +257,17 @@ static UserKey readUserKey() {
 // MultiNet command phrases -> COMMAND_WORDS index (the leading id IS the index).
 // The third column is the MultiNet (english) phoneme/G2P string. The values
 // below are PLACEHOLDERS: regenerate them for your installed model with the
-// multinet command-word tool and replace before relying on recognition. The
-// wake word (e.g. "hi esp") comes from the WakeNet model chosen in the ESP-SR
-// build / sdkconfig, NOT from this table.
+// esp-sr multinet g2p tool and replace before relying on recognition. The wake
+// word (e.g. "hi esp") comes from the WakeNet model chosen in the ESP-SR build /
+// sdkconfig, NOT from this table.
 static const sr_cmd_t SR_COMMANDS[] = {
-  {0, "I am home",  "Ay AM hb cmd"},  // -> COMMAND_WORDS[0] "I'm home"
-  {1, "good night", "gUD nN cmd"},    // -> COMMAND_WORDS[1] "Sleep mode"
-  {2, "movie time", "mb cmd"},        // -> COMMAND_WORDS[2] "Movie time"
+  {0, "I am home",  "IY AM HhOWM"},      // -> COMMAND_WORDS[0] "I'm home"
+  {1, "sleep mode", "SLIYP MOWD"},       // -> COMMAND_WORDS[1] "Sleep mode"
+  {2, "movie time", "MUWVIY TAYM"},      // -> COMMAND_WORDS[2] "Movie time"
 };
 static const int SR_COMMAND_COUNT = sizeof(SR_COMMANDS) / sizeof(SR_COMMANDS[0]);
 
-// Set by the ESP-SR task callback, drained by pollVoiceCommand() in loop().
+// Set by the ESP-SR task callback, drained by espSrPollCommand() in loop().
 static volatile int g_srPendingCommand = -1;
 static I2SClass g_srI2s;
 
@@ -276,18 +275,18 @@ static void onSrEvent(sr_event_t event, int command_id, int phrase_id) {
   (void)phrase_id;
   switch (event) {
     case SR_EVENT_WAKEWORD:
-      Serial.println("[voice] wake word detected - say a command word");
+      Serial.println("[esp-sr] wake word detected - say a command word");
       break;
     case SR_EVENT_COMMAND:
       if (command_id >= 0 && command_id < COMMAND_COUNT) {
         // Propose only: just stage the index, loop() calls /plan (execute=false).
         g_srPendingCommand = command_id;
       } else {
-        Serial.printf("[voice] unmapped command id %d - ignored\n", command_id);
+        Serial.printf("[esp-sr] unmapped command id %d - ignored\n", command_id);
       }
       break;
     case SR_EVENT_TIMEOUT:
-      Serial.println("[voice] command window timeout - say wake word again");
+      Serial.println("[esp-sr] command window timeout - say wake word again");
       break;
     default:
       break;
@@ -296,22 +295,35 @@ static void onSrEvent(sr_event_t event, int command_id, int phrase_id) {
 
 // Bring up ES7210 dual-mic I2S + ESP-SR. Returns false so the caller can keep
 // the keys/serial fallback alive if the mic or models are unavailable.
-static bool srInit() {
-  // ES7210 dual-mic I2S pins: MCLK=12, SCLK=13, LRCK=14, ASDOUT=15. The ES7210
-  // ADC usually also needs I2C register init from the Waveshare vendor example;
-  // wire that in setup() before srInit() if the codec ships powered down.
+static bool espSrBegin() {
+  // ES7210 dual-mic I2S pins: MCLK=12, BCLK=13, WS=14, DIN=15. The ES7210 ADC
+  // usually also needs I2C register init (gain / TDM slots) from the Waveshare
+  // vendor example.
+  // TODO[VENDOR]: copy the ES7210 I2C init from the Waveshare ESP-SR example and
+  // run it here before i2s.begin() if your board ships the codec powered down.
   g_srI2s.setPins(/*BCLK*/ 13, /*WS*/ 14, /*DOUT*/ -1, /*DIN*/ 15, /*MCLK*/ 12);
   if (!g_srI2s.begin(I2S_MODE_STD, 16000, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO)) {
-    Serial.println("[voice] I2S init FAILED - keeping keys/serial fallback");
+    Serial.println("[esp-sr] I2S init FAILED - keeping keys/serial fallback");
     return false;
   }
   ESP_SR.onEvent(onSrEvent);
   if (!ESP_SR.begin(g_srI2s, SR_COMMANDS, SR_COMMAND_COUNT, SR_CHANNELS_STEREO, SR_MODE_WAKEWORD)) {
-    Serial.println("[voice] ESP-SR init FAILED - keeping keys/serial fallback");
+    Serial.println("[esp-sr] model init FAILED - keeping keys/serial fallback");
     return false;
   }
-  Serial.println("[voice] ESP-SR ready - say wake word, then a command word");
+  Serial.println("[esp-sr] ready - say the wake word, then a command word");
   return true;
+}
+
+// Drain the latest staged command-word index (set by the ESP-SR task callback).
+// Returns a COMMAND_WORDS index, or -1 when nothing was recognized this tick.
+static int espSrPollCommand() {
+  int cmd = g_srPendingCommand;
+  if (cmd >= 0) {
+    g_srPendingCommand = -1;
+    return cmd;
+  }
+  return -1;
 }
 #endif  // ENABLE_ESP_SR
 
@@ -319,22 +331,18 @@ static bool srInit() {
 // Voice trigger (TODO[VENDOR]: ESP-SR WakeNet wake + MultiNet command id)
 // ---------------------------------------------------------------------------
 // Return a command-word index [0..COMMAND_COUNT-1] when the recognizer fires,
-// or -1 when nothing was recognized this loop iteration.
+// or -1 when nothing was recognized this loop iteration. This is the single
+// boundary between the (optional) voice route and the always-on button route.
 static int pollVoiceCommand() {
 #if ENABLE_ESP_SR
-  // ESP-SR runs in its own task and posts results via onSrEvent(); drain the
-  // latest staged command-word index here. Still propose-only (see loop()).
-  int cmd = g_srPendingCommand;
-  if (cmd >= 0) {
-    g_srPendingCommand = -1;
-    return cmd;
-  }
-  return -1;
+  // Voice enabled: ESP-SR runs in its own task and posts results via onSrEvent();
+  // espSrPollCommand() returns the staged index. Still propose-only (see loop()).
+  return espSrPollCommand();
 #else
   // Button-route MVP: voice disabled, zero ESP-SR dependency. Enable the ESP-SR
-  // route by building with -DENABLE_ESP_SR=1 (see README), or wire the Waveshare
-  // vendor WakeNet/MultiNet recognizer here and map its command id to a
-  // COMMAND_WORDS index. TODO[VENDOR]
+  // route by building with -DENABLE_ESP_SR=1 (see README 4C), or wire the
+  // Waveshare vendor WakeNet/MultiNet recognizer here and map its command id to
+  // a COMMAND_WORDS index. TODO[VENDOR]
   return -1;
 #endif
 }
@@ -612,9 +620,9 @@ void setup() {
   delay(300);
   Serial.println("\n[HomeCue Edge] ESP32-S3-AUDIO-Board firmware booting...");
 #if ENABLE_ESP_SR
-  // Keep the "button-route MVP" marker so the permanent key/serial fallback
-  // contract (and serial-log check) still holds; voice is additive, not a swap.
-  Serial.println("[mode] button-route MVP + ESP-SR voice route (propose-only)");
+  // Keep the "button-route" marker so the permanent key/serial fallback contract
+  // (and the serial-log check) still holds; voice is additive, not a swap.
+  Serial.println("[mode] button-route + ESP-SR voice command route (propose only)");
 #else
   Serial.println("[mode] button-route MVP (no ESP-SR; voice disabled)");
 #endif
@@ -629,8 +637,8 @@ void setup() {
   // TODO[VENDOR]: RGB ring (GPIO38 WS2812 or TCA9555), ES7210 I2S, ESP-SR voice.
 
 #if ENABLE_ESP_SR
-  if (!srInit()) {
-    Serial.println("[voice] voice route unavailable - use KEY1/BOOT or serial commands");
+  if (!espSrBegin()) {
+    Serial.println("[esp-sr] voice route unavailable - use KEY1/BOOT or serial commands");
   }
 #endif
 
