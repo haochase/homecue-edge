@@ -103,7 +103,8 @@ blank-like screenshot evidence.
 
 From the repository root, use the full loop wrapper to start the API and Vite
 dev server when needed, run the desktop loop, and write
-`assets/demo/full-loop-report.md`:
+`assets/demo/full-loop-report.md` plus the machine-readable
+`assets/demo/full-loop-report.json`:
 
 ```powershell
 .\scripts\check-full-loop.ps1
@@ -126,4 +127,7 @@ evidence file with the same run id and the report gate verifies they match.
 Desktop Chromium and installed Windows Chrome are also compared for core UI,
 privacy, layout, runtime-health, screenshot, and execution-sync parity. The
 evidence section records each JSON and screenshot file with byte size and a
-short SHA-256 digest.
+short SHA-256 digest. The JSON summary is generated from the same validated
+evidence and exposes top-level `success`, `runId`, browser parity, per-loop
+status, runtime-health counts, screenshot summaries, and validation errors for
+automation that should not parse Markdown.

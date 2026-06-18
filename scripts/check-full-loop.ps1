@@ -5,7 +5,8 @@ param(
   [switch]$IncludeChrome,
   [switch]$SkipDesktop,
   [int]$StartupTimeoutSeconds = 60,
-  [string]$ReportPath = ""
+  [string]$ReportPath = "",
+  [string]$SummaryPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,6 +23,13 @@ if (-not $ReportPath) {
 }
 elseif (-not [System.IO.Path]::IsPathRooted($ReportPath)) {
   $ReportPath = Join-Path $Root $ReportPath
+}
+
+if (-not $SummaryPath) {
+  $SummaryPath = Join-Path $Root "assets\demo\full-loop-report.json"
+}
+elseif (-not [System.IO.Path]::IsPathRooted($SummaryPath)) {
+  $SummaryPath = Join-Path $Root $SummaryPath
 }
 
 function Test-HttpOk {
@@ -227,6 +235,7 @@ try {
   else {
     $ReportArgs += "__chrome_not_run__.json"
   }
+  $ReportArgs += $SummaryPath
 
   npm run report:loop -- @ReportArgs
   if ($LASTEXITCODE -ne 0) {

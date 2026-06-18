@@ -10,6 +10,7 @@ const outputFile = process.argv[2] ?? path.join(repoRoot, 'assets', 'demo', 'ful
 const desktopFile = process.argv[3] ?? path.join(repoRoot, 'assets', 'demo', 'desktop-loop.json')
 const phoneFile = process.argv[4] ?? path.join(repoRoot, 'assets', 'demo', 'phone-loop.json')
 const chromeFile = process.argv[6] ?? path.join(repoRoot, 'assets', 'demo', 'chrome-loop.json')
+const summaryFile = process.argv[7] ?? defaultSummaryFile(outputFile)
 
 const desktop = await readJsonIfExists(desktopFile)
 const phone = await readJsonIfExists(phoneFile)
@@ -18,11 +19,13 @@ const browserParity = validateBrowserParity(desktop, chrome)
 const requiredEvidence = validateEvidence({ desktop, phone, chrome })
 const screenshots = collectScreenshots([desktop, chrome])
 const manifest = await buildEvidenceManifest({ desktop, phone, chrome, screenshots })
+const generatedAt = new Date().toISOString()
+const summary = buildSummary({ generatedAt, desktop, phone, chrome, browserParity, requiredEvidence, manifest })
 
 const report = [
   '# Home AI Companion Loop Report',
   '',
-  `Generated: ${new Date().toISOString()}`,
+  `Generated: ${generatedAt}`,
   '',
   '## Summary',
   '',
@@ -60,8 +63,11 @@ const report = [
 ].join('\n')
 
 await mkdir(path.dirname(outputFile), { recursive: true })
+await mkdir(path.dirname(summaryFile), { recursive: true })
 await writeFile(outputFile, report, 'utf8')
+await writeFile(summaryFile, `${JSON.stringify(summary, null, 2)}\n`, 'utf8')
 console.log(`Full loop report: ${outputFile}`)
+console.log(`Full loop summary: ${summaryFile}`)
 if (!requiredEvidence.success) {
   console.error(`Full loop report evidence validation failed:\n${requiredEvidence.errors.map((item) => `- ${item}`).join('\n')}`)
   process.exit(1)
@@ -73,6 +79,200 @@ async function readJsonIfExists(file) {
   } catch (error) {
     if (error?.code === 'ENOENT') return null
     throw error
+  }
+}
+
+function defaultSummaryFile(file) {
+  const parsed = path.parse(file)
+  const baseName = parsed.ext.toLowerCase() === '.md' ? parsed.name : parsed.base
+  return path.join(parsed.dir, `${baseName}.json`)
+}
+
+function buildSummary({ generatedAt, desktop, phone, chrome, browserParity, requiredEvidence, manifest }) {
+  return {
+    generatedAt,
+    success: requiredEvidence.success,
+    runId: requiredEvidence.runId,
+    appUrl: desktop?.appUrl ?? chrome?.appUrl ?? phone?.appUrl ?? null,
+    apiBase: desktop?.apiBase ?? chrome?.apiBase ?? phone?.apiBase ?? null,
+    loops: {
+      desktop: summarizeDesktopLoop(desktop),
+      windowsChrome: summarizeDesktopLoop(chrome),
+      phone: summarizePhoneLoop(phone),
+    },
+    browserParity,
+    evidence: {
+      validationErrors: requiredEvidence.errors,
+      files: manifest,
+    },
+  }
+}
+
+function summarizeDesktopLoop(value) {
+  if (!value) {
+    return { run: false, success: null }
+  }
+
+  const checks = value.checks ?? {}
+  return {
+    run: true,
+    success: value.success === true,
+    runId: value.runId ?? null,
+    browserName: value.browserName ?? null,
+    pageUrl: value.pageUrl ?? null,
+    title: checks.localizedUi?.title ?? null,
+    browserEnvironment: summarizeBrowserEnvironment(checks.browserEnvironment),
+    responsiveLayout: summarizeResponsiveLayout(checks.responsiveLayout),
+    runtimeHealth: summarizeRuntimeHealth(checks.runtimeHealth),
+    screenshotEvidence: summarizeScreenshotEvidence(checks.screenshotEvidence),
+    scenePromptHandoff: summarizePromptHandoff(checks.scenePromptHandoff),
+    proposeOnly: {
+      status: checks.proposeOnly?.status ?? null,
+      latestSource: checks.proposeOnly?.latestSource ?? null,
+      latestExecuted: checks.proposeOnly?.latestExecuted ?? null,
+    },
+    webConfirmExecute: {
+      latestSource: checks.webConfirmExecute?.latestSource ?? null,
+      latestSequence: checks.webConfirmExecute?.latestSequence ?? null,
+      acceptedRows: checks.webConfirmExecute?.acceptedRows ?? null,
+    },
+    offlineFallback: {
+      latestSource: checks.offlineFallback?.latestSource ?? null,
+      latestSequence: checks.offlineFallback?.latestSequence ?? null,
+      executionCount: checks.offlineFallback?.executionCount ?? null,
+    },
+    externalExecutionSync: {
+      latestSource: checks.externalExecutionSync?.latestSource ?? null,
+      latestSequence: checks.externalExecutionSync?.latestSequence ?? null,
+      acceptedActionCount: checks.externalExecutionSync?.acceptedActionCount ?? null,
+    },
+  }
+}
+
+function summarizePhoneLoop(value) {
+  if (!value) {
+    return { run: false, success: null }
+  }
+
+  const checks = value.checks ?? {}
+  const speechSupport = checks.speechInput?.support ?? {}
+  return {
+    run: true,
+    success: value.success === true,
+    runId: value.runId ?? null,
+    pageUrl: value.pageUrl ?? null,
+    title: checks.localizedUi?.title ?? null,
+    frontCamera: {
+      ready: checks.frontCamera?.ready ?? null,
+      facingMode: checks.frontCamera?.facingMode ?? null,
+      width: checks.frontCamera?.width ?? null,
+      height: checks.frontCamera?.height ?? null,
+      status: checks.frontCamera?.status ?? null,
+    },
+    speechInput: {
+      available: Boolean(speechSupport.SpeechRecognition || speechSupport.webkitSpeechRecognition),
+      skipped: checks.speechInput?.skipped === true,
+      status: checks.speechInput?.listeningState?.status ?? null,
+    },
+    scene: {
+      frameSize: checks.scene?.frameSize ?? null,
+      rawImageRetained: checks.scene?.rawImageRetained ?? null,
+      rawImageNotRetained: checks.scene?.rawImageNotRetained ?? null,
+    },
+    scenePromptHandoff: summarizePromptHandoff(checks.scenePromptHandoff),
+    externalExecution: {
+      latestSource: checks.externalExecution?.latestSource ?? null,
+      latestSequence: checks.externalExecution?.latestSequence ?? null,
+      acceptedActionCount: checks.externalExecution?.acceptedActionCount ?? null,
+    },
+    runtimeHealth: summarizeRuntimeHealth(checks.runtimeHealth),
+  }
+}
+
+function summarizePromptHandoff(value) {
+  if (!value) {
+    return {
+      ready: false,
+      proposeOnly: null,
+      promptPresent: false,
+      scene: null,
+      rawImageRetained: null,
+      rawImageEchoed: null,
+    }
+  }
+
+  return {
+    ready: Boolean(value.proposeOnly && value.prompt),
+    proposeOnly: value.proposeOnly ?? null,
+    promptPresent: Boolean(value.prompt),
+    scene: value.scene ?? null,
+    rawImageRetained: value.rawImageRetained ?? null,
+    rawImageEchoed: value.rawImageEchoed ?? null,
+  }
+}
+
+function summarizeResponsiveLayout(value) {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.map((item) => ({
+    label: item.label ?? null,
+    width: item.width ?? null,
+    height: item.height ?? null,
+    overflowX: item.overflowX ?? null,
+    overflowingButtonCount: item.overflowingButtons?.length ?? 0,
+  }))
+}
+
+function summarizeBrowserEnvironment(value) {
+  if (!value) {
+    return null
+  }
+
+  return {
+    browserName: value.browserName ?? null,
+    userAgent: value.userAgent ?? null,
+    language: value.language ?? null,
+    viewport: value.viewport ?? null,
+    getUserMedia: value.getUserMedia ?? null,
+    speechRecognition: value.speechRecognition ?? null,
+    headed: value.headed ?? null,
+    executablePath: value.executablePath ?? null,
+    channel: value.channel ?? null,
+  }
+}
+
+function summarizeRuntimeHealth(value) {
+  if (!value) {
+    return null
+  }
+
+  const details = value.details ?? value
+  const counts = details.counts ?? {}
+  const issueCount =
+    details.issueCount ??
+    Object.values(counts).reduce((total, count) => total + (typeof count === 'number' ? count : 0), 0)
+
+  return {
+    success: value.success !== false && details.success !== false && issueCount === 0,
+    issueCount,
+    counts,
+  }
+}
+
+function summarizeScreenshotEvidence(value) {
+  if (!value) {
+    return null
+  }
+
+  return {
+    success: value.success !== false,
+    count: value.count ?? null,
+    minWidth: value.minWidth ?? null,
+    minHeight: value.minHeight ?? null,
+    minBytes: value.minBytes ?? null,
+    minImageDataBytes: value.minImageDataBytes ?? null,
   }
 }
 

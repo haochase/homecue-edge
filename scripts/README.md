@@ -27,7 +27,8 @@ Starts the FastAPI edge gateway on `http://127.0.0.1:8723` and the Vite web cons
 ```
 
 Starts the API and Vite dev server when they are not already listening, runs the
-desktop browser loop, then writes `assets/demo/full-loop-report.md`. Add
+desktop browser loop, then writes `assets/demo/full-loop-report.md` and the
+machine-readable `assets/demo/full-loop-report.json` summary. Add
 `-IncludeChrome` to verify an isolated Windows Chrome profile, and add
 `-IncludePhone` to run the Android Chrome phone loop after the desktop loop when
 an unlocked USB-debugging phone is connected. Before browser checks, the wrapper
@@ -48,13 +49,18 @@ phone loop cannot be hidden by a generated Markdown summary. When `-SkipDesktop`
 or optional phone/Chrome checks are omitted, the wrapper passes an explicit
 `__*_not_run__.json` sentinel so old evidence from a previous run is not reused.
 Relative `-ReportPath` values are resolved from the repository root.
+Relative `-ReportPath` and `-SummaryPath` values are resolved from the
+repository root.
 Each full-loop run also stamps desktop, phone, and Chrome JSON evidence with a
 shared run id; the report gate fails when required evidence files do not share
 that id. When both desktop Chromium and installed Windows Chrome are included,
 the report gate also checks browser parity for core UI, privacy, layout, runtime
 health, screenshot, and execution-sync results. The report's evidence manifest
 lists each JSON and screenshot artifact with byte size and a short SHA-256 digest
-so local proof files can be tied back to the generated report.
+so local proof files can be tied back to the generated report. The JSON summary
+uses the same validated evidence and includes top-level `success`, `runId`,
+browser parity, per-loop status, runtime-health counts, screenshot summaries,
+and validation errors for downstream automation.
 
 ```powershell
 .\scripts\check-chrome-loop.ps1
