@@ -147,6 +147,15 @@ The script configures ADB reverse ports and Android Chrome DevTools, then checks
 Chinese UI text, speech-input readiness, front-camera preference, scene capture,
 and the ESP32-style `/execute` synchronization path.
 
+For a computer-side browser check without phone hardware:
+
+```powershell
+.\scripts\check-desktop-loop.ps1
+```
+
+This launches desktop Chromium and verifies the Chinese UI, propose/confirm
+flow, offline fallback, and ESP32-style execution synchronization.
+
 ## Contributing & Security
 
 This repository is public and holds technical content only. Before committing,

@@ -76,3 +76,17 @@ speech input control, checks that the camera stream prefers the front camera,
 captures one frame for `/vision/scene`, creates a propose-only routine, then
 simulates an ESP32 serial confirmation through `/execute`. Evidence is written
 to the ignored `assets/demo/phone-loop.json` file.
+
+## Desktop Browser Loop
+
+Use the desktop loop when the API plus Vite dev server are running and you want
+to verify the computer-side browser workflow without phone hardware:
+
+```powershell
+..\..\scripts\check-desktop-loop.ps1
+```
+
+The test launches Playwright Chromium, verifies the Chinese UI, runs
+propose-only planning, confirms the routine from the web UI, checks offline
+fallback, and simulates an ESP32 serial confirmation through `/execute`.
+Evidence is written to the ignored `assets/demo/desktop-loop.json` file.
