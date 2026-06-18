@@ -36,7 +36,9 @@ verifies the running API can classify the default Chinese home-scene hint throug
 it restarts that process and fails if the refreshed API still does not satisfy
 the contract. Desktop and Windows Chrome loops write per-step screenshots to
 ignored `assets/demo/*-screens/` folders and the report uses only the screenshot
-paths recorded in the current JSON evidence.
+paths recorded in the current JSON evidence. Browser loops also fail on
+unexpected console errors, page exceptions, failed requests, or HTTP 4xx/5xx
+responses, and the report summarizes those runtime-health counts.
 
 ```powershell
 .\scripts\check-chrome-loop.ps1

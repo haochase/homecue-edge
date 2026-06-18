@@ -10,6 +10,7 @@ import {
   postJson,
   setProposeOnly,
 } from './demo-flow.mjs'
+import { assertRuntimeHealth, createRuntimeHealthCollector } from './runtime-health.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
@@ -35,6 +36,7 @@ const evidence = {
 
 let browser
 let context
+let runtimeHealth
 
 try {
   await postJson(`${apiBase}/devices/reset`, undefined)
@@ -46,6 +48,7 @@ try {
   })
   browser = context.browser()
   const page = context.pages()[0] ?? await context.newPage()
+  runtimeHealth = createRuntimeHealthCollector(page)
 
   await page.goto(buildDemoUrl(appUrl, apiBase), { waitUntil: 'networkidle' })
   await page.waitForSelector('.context-grid', { timeout: 10000 })
@@ -64,11 +67,15 @@ try {
   await captureScreenshot(page, '05-offline-fallback.png')
   await runCheck('externalExecutionSync', () => verifyExternalExecutionSync(page))
   await captureScreenshot(page, '06-external-sync.png')
+  await runCheck('runtimeHealth', () => assertRuntimeHealth(runtimeHealth))
 
   evidence.success = true
   evidence.finishedAt = new Date().toISOString()
   await writeEvidence(outputFile, evidence)
 } catch (error) {
+  if (runtimeHealth && !evidence.checks.runtimeHealth) {
+    evidence.checks.runtimeHealth = runtimeHealth.snapshot()
+  }
   evidence.error = error instanceof Error ? error.message : String(error)
   evidence.finishedAt = new Date().toISOString()
   await writeEvidence(outputFile, evidence)
@@ -83,9 +90,11 @@ async function runCheck(name, task) {
     evidence.checks[name] = result
     return result
   } catch (error) {
+    const details = error && typeof error === 'object' && 'details' in error ? error.details : undefined
     evidence.checks[name] = {
       success: false,
       error: error instanceof Error ? error.message : String(error),
+      ...(details ? { details } : {}),
     }
     throw error
   }

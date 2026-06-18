@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { buildDemoUrl, pause } from './demo-flow.mjs'
+import { assertRuntimeHealth, createRuntimeHealthCollector } from './runtime-health.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
@@ -39,6 +40,7 @@ const evidence = {
 
 let browser
 let page
+let runtimeHealth
 
 try {
   await resetDevices(apiBase)
@@ -51,6 +53,7 @@ try {
 
   const targetUrl = buildDemoUrl(appUrl, apiBase)
   page = await getPhonePage(context, targetUrl)
+  runtimeHealth = createRuntimeHealthCollector(page)
   await page.goto(targetUrl, { waitUntil: 'networkidle' })
   await page.waitForSelector('.context-grid', { timeout: 15000 })
   evidence.pageUrl = page.url()
@@ -61,11 +64,15 @@ try {
   await runCheck('scenePromptHandoff', () => verifyScenePromptHandoff(page))
   await runCheck('speechInput', () => verifySpeechInput(page, requireSpeech))
   await runCheck('externalExecution', () => verifyExternalExecution(page, apiBase))
+  await runCheck('runtimeHealth', () => assertRuntimeHealth(runtimeHealth))
 
   evidence.success = true
   evidence.finishedAt = new Date().toISOString()
   await writeEvidence(outputFile, evidence)
 } catch (error) {
+  if (runtimeHealth && !evidence.checks.runtimeHealth) {
+    evidence.checks.runtimeHealth = runtimeHealth.snapshot()
+  }
   evidence.error = error instanceof Error ? error.message : String(error)
   evidence.finishedAt = new Date().toISOString()
   await writeEvidence(outputFile, evidence)
@@ -85,9 +92,11 @@ async function runCheck(name, task) {
     evidence.checks[name] = result
     return result
   } catch (error) {
+    const details = error && typeof error === 'object' && 'details' in error ? error.details : undefined
     evidence.checks[name] = {
       success: false,
       error: error instanceof Error ? error.message : String(error),
+      ...(details ? { details } : {}),
     }
     throw error
   }

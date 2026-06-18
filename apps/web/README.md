@@ -95,7 +95,8 @@ serial confirmation through `/execute`. Evidence is written to the ignored
 `assets/demo/desktop-loop.json` file, with current-step screenshots in the
 ignored `assets/demo/playwright-chromium-screens/` directory. The desktop loop
 also sends a sentinel image payload directly to `/vision/scene` and fails if the
-API returns that payload or marks it retained.
+API returns that payload or marks it retained. It also fails on unexpected
+console errors, page exceptions, failed requests, or HTTP 4xx/5xx responses.
 
 ## Full Loop
 
@@ -113,4 +114,5 @@ loop after the desktop loop. The wrapper checks the running API's Chinese
 `/vision/scene` contract first, and restarts an older managed uvicorn process if
 that contract is stale. The generated Markdown report reads screenshot paths
 from the desktop and Windows Chrome loop JSON files, so each report points at
-the screenshots from the current run.
+the screenshots from the current run. The report also summarizes browser
+runtime-health counts for the desktop, Windows Chrome, and Android Chrome loops.

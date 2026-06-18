@@ -78,6 +78,7 @@ function formatDesktop(value) {
   return [
     `- Title: ${checks.localizedUi?.title ?? 'unknown'}`,
     `- Responsive layout: ${formatResponsiveLayout(checks.responsiveLayout)}`,
+    `- Runtime health: ${formatRuntimeHealth(checks.runtimeHealth)}`,
     `- Scene prompt handoff: ${formatPromptHandoff(checks.scenePromptHandoff)}`,
     `- Raw image retained: ${formatBoolean(checks.scenePromptHandoff?.rawImageRetained)}`,
     `- Raw image echoed: ${formatBoolean(checks.scenePromptHandoff?.rawImageEchoed)}`,
@@ -102,6 +103,7 @@ function formatPhone(value) {
     `- Front camera: ${camera.ready ? 'ready' : 'not ready'} (${camera.facingMode ?? 'unknown'}, ${camera.width ?? '?'}x${camera.height ?? '?'})`,
     `- Speech recognition: ${speech.support?.webkitSpeechRecognition || speech.support?.SpeechRecognition ? 'available' : 'unavailable'}`,
     `- Speech status: ${speech.listeningState?.status ?? 'unknown'}`,
+    `- Runtime health: ${formatRuntimeHealth(checks.runtimeHealth)}`,
     `- Scene frame: ${checks.scene?.frameSize ?? 'not captured'}`,
     `- Scene prompt handoff: ${formatPromptHandoff(checks.scenePromptHandoff)}`,
     `- Raw image retained: ${formatBoolean(checks.scene?.rawImageRetained)}`,
@@ -119,6 +121,27 @@ function formatResponsiveLayout(value) {
   if (!Array.isArray(value)) return 'not checked'
   const labels = value.map((item) => `${item.label}:${item.overflowX}px`)
   return labels.length ? labels.join(', ') : 'unknown'
+}
+
+function formatRuntimeHealth(value) {
+  if (!value) return 'not checked'
+  const details = value.details ?? value
+  const counts = details.counts ?? {}
+  const issueCount =
+    details.issueCount ??
+    Object.values(counts).reduce((total, count) => total + (typeof count === 'number' ? count : 0), 0)
+  const summary = [
+    `console:${counts.consoleErrors ?? 0}`,
+    `page:${counts.pageErrors ?? 0}`,
+    `request:${counts.requestFailures ?? 0}`,
+    `http:${counts.httpErrors ?? 0}`,
+  ].join(', ')
+
+  if (value.success === false || details.success === false || issueCount > 0) {
+    return `fail (${summary})`
+  }
+
+  return `clean (${summary})`
 }
 
 function formatBoolean(value) {
