@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,6 +14,14 @@ from app.vision import analyze_scene
 
 app = FastAPI(title="HomeCue Edge API", version="0.1.0")
 device_store = DeviceStore()
+execution_sequence = 0
+latest_execution_state = {
+    "sequence": execution_sequence,
+    "source": "none",
+    "executed": False,
+    "execution": [],
+    "devices": deepcopy(device_store.all()),
+}
 
 app.add_middleware(
     CORSMiddleware,
@@ -54,6 +64,25 @@ def vision_scene(request: VisionSceneRequest) -> dict:
     return analyze_scene(request).model_dump()
 
 
+def record_execution_state(execution: list[dict], source: str, executed: bool) -> dict:
+    global execution_sequence, latest_execution_state
+
+    execution_sequence += 1
+    latest_execution_state = {
+        "sequence": execution_sequence,
+        "source": source,
+        "executed": executed,
+        "execution": deepcopy(execution),
+        "devices": deepcopy(device_store.all()),
+    }
+    return latest_execution_state
+
+
+@app.get("/execution/latest")
+def get_latest_execution() -> dict:
+    return deepcopy(latest_execution_state)
+
+
 @app.post("/plan")
 async def plan(request: PlanRequest) -> dict:
     routine, trace = await build_plan_with_trace(
@@ -75,6 +104,7 @@ async def plan(request: PlanRequest) -> dict:
         for action in routine.actions:
             result = device_store.apply_action(action.model_dump())
             execution.append(result.to_dict())
+        record_execution_state(execution, "plan", bool(execution))
 
     return {
         "context": BASE_CONTEXT,
@@ -96,9 +126,18 @@ def execute(request: ExecuteRequest) -> dict:
         result = device_store.apply_action(action.model_dump())
         execution.append(result.to_dict())
 
+    state = record_execution_state(
+        execution,
+        request.source[:40] or "external",
+        any(item["accepted"] for item in execution),
+    )
+
     return {
         "execution": execution,
         "devices": device_store.all(),
+        "source": state["source"],
+        "sequence": state["sequence"],
+        "executed": state["executed"],
     }
 
 
@@ -145,4 +184,6 @@ async def voice(request: Request) -> dict:
 
 @app.post("/devices/reset")
 def reset_devices() -> dict:
-    return device_store.reset()
+    devices = device_store.reset()
+    record_execution_state([], "reset", False)
+    return devices

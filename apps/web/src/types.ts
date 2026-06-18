@@ -84,6 +84,17 @@ export type PlanResponse = {
 export type ExecuteResponse = {
   execution: ExecutionResult[]
   devices: DeviceState
+  source?: string
+  sequence?: number
+  executed?: boolean
+}
+
+export type ExecutionSyncState = {
+  execution: ExecutionResult[]
+  devices: DeviceState
+  source: string
+  sequence: number
+  executed: boolean
 }
 
 export type InitialState = {

@@ -339,7 +339,7 @@ def test_execute_endpoint_runs_confirmed_actions():
 
     response = client.post(
         "/execute",
-        json={"actions": [{"device": "light", "command": "set_scene", "value": "warm"}]},
+        json={"actions": [{"device": "light", "command": "set_scene", "value": "warm"}], "source": "web"},
     )
 
     assert response.status_code == 200
@@ -347,6 +347,13 @@ def test_execute_endpoint_runs_confirmed_actions():
     assert payload["execution"][0]["accepted"] is True
     assert payload["devices"]["light"]["state"] == "on"
     assert payload["devices"]["light"]["scene"] == "warm"
+    assert payload["source"] == "web"
+    assert payload["executed"] is True
+
+    latest = client.get("/execution/latest").json()
+    assert latest["sequence"] == payload["sequence"]
+    assert latest["source"] == "web"
+    assert latest["execution"][0]["device"] == "light"
 
 
 def test_execute_endpoint_rejects_disallowed_action():
@@ -364,6 +371,19 @@ def test_execute_endpoint_rejects_disallowed_action():
     assert result["reason"] == "action not allowed by edge policy"
     # Guard prevented the unsafe change.
     assert payload["devices"]["ac"]["temperature"] == 24
+
+
+def test_reset_clears_latest_execution_status():
+    client.post("/execute", json={"actions": [{"device": "light", "command": "set_scene", "value": "warm"}]})
+
+    response = client.post("/devices/reset")
+    assert response.status_code == 200
+
+    latest = client.get("/execution/latest").json()
+    assert latest["source"] == "reset"
+    assert latest["executed"] is False
+    assert latest["execution"] == []
+    assert latest["devices"]["light"]["state"] == "off"
 
 
 def test_vision_scene_returns_privacy_safe_prompt():

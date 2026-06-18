@@ -573,6 +573,14 @@ button:disabled {
   color: #8a6a1f;
 }
 
+.sync-source {
+  margin: -4px 0 12px;
+  color: #687268;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
 .execution-row strong,
 .execution-row small {
   display: block;

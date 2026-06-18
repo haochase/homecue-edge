@@ -1,5 +1,14 @@
 import { buildStaticPlan, executeStaticActions, getDefaultDevices, getStaticContext } from './staticDemo'
-import type { DeviceAction, DeviceState, ExecuteResponse, InitialState, NetworkMode, PlanResponse, VisionSceneResponse } from './types'
+import type {
+  DeviceAction,
+  DeviceState,
+  ExecuteResponse,
+  ExecutionSyncState,
+  InitialState,
+  NetworkMode,
+  PlanResponse,
+  VisionSceneResponse,
+} from './types'
 
 const searchParams = new URLSearchParams(window.location.search)
 const urlApiBase = searchParams.get('apiBase')
@@ -82,7 +91,11 @@ export async function requestDeviceReset(): Promise<DeviceState> {
   return response.json()
 }
 
-export async function requestExecuteActions(actions: DeviceAction[], devices: DeviceState): Promise<ExecuteResponse> {
+export async function requestExecuteActions(
+  actions: DeviceAction[],
+  devices: DeviceState,
+  source = 'web',
+): Promise<ExecuteResponse> {
   if (demoRuntime.isStatic) {
     return executeStaticActions(actions, Object.keys(devices).length ? devices : getDefaultDevices())
   }
@@ -90,11 +103,30 @@ export async function requestExecuteActions(actions: DeviceAction[], devices: De
   const response = await fetch(`${apiBase}/execute`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ actions }),
+    body: JSON.stringify({ actions, source }),
   })
 
   if (!response.ok) {
     throw new Error('Execute request failed')
+  }
+
+  return response.json()
+}
+
+export async function requestLatestExecution(): Promise<ExecutionSyncState> {
+  if (demoRuntime.isStatic) {
+    return {
+      sequence: 0,
+      source: 'static',
+      executed: false,
+      execution: [],
+      devices: getDefaultDevices(),
+    }
+  }
+
+  const response = await fetch(`${apiBase}/execution/latest`)
+  if (!response.ok) {
+    throw new Error('Latest execution fetch failed')
   }
 
   return response.json()

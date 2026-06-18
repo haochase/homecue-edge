@@ -51,7 +51,9 @@ homecue-edge/
   read-only precheck; `/execute` runs a user-confirmed subset. This enables
   human-in-the-loop confirmation.
 - **Web console (`apps/web`)**: React UI for prompt input, network mode, agent
-  trace, propose-only flow, and a device simulator that polls `/devices`.
+  trace, propose-only flow, and a device simulator that polls `/devices` plus
+  `/execution/latest` so phone UI reflects ESP32 or other hardware
+  confirmations.
 - **Firmware (`firmware/esp32-audio`)**: ESP32-S3 terminal: voice/button input
   proposes a plan, RGB shows state, physical keys confirm or reject before
   execution.

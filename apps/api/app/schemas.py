@@ -22,6 +22,9 @@ class DeviceAction(BaseModel):
 class ExecuteRequest(BaseModel):
     # The human-in-the-loop confirmed subset of actions to actually run.
     actions: list[DeviceAction] = Field(default_factory=list)
+    # Optional caller label for cross-device sync. Older ESP32 firmware can omit
+    # it and still use the same /execute contract.
+    source: str = "external"
 
 
 class VisionSceneRequest(BaseModel):
