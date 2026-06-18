@@ -55,6 +55,7 @@ try {
   evidence.pageUrl = page.url()
   await captureScreenshot(page, '01-control-console.png')
 
+  await runCheck('browserEnvironment', () => verifyBrowserEnvironment(page))
   await runCheck('localizedUi', () => verifyLocalizedUi(page))
   await runCheck('responsiveLayout', () => verifyResponsiveLayout(page))
   await runCheck('scenePromptHandoff', () => verifyScenePromptHandoff(page))
@@ -114,6 +115,48 @@ async function verifyLocalizedUi(page) {
     title: await page.locator('h1').innerText(),
     runButton: await page.getByRole('button', { name: labels.runPlan }).innerText(),
     resetButtonCount: await page.getByRole('button', { name: labels.resetHome }).count(),
+  }
+}
+
+async function verifyBrowserEnvironment(page) {
+  const environment = await page.evaluate(() => ({
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    language: navigator.language,
+    languages: Array.from(navigator.languages ?? []),
+    webdriver: navigator.webdriver,
+    mediaDevices: Boolean(navigator.mediaDevices),
+    getUserMedia: Boolean(navigator.mediaDevices?.getUserMedia),
+    speechRecognition: Boolean(window.SpeechRecognition || window.webkitSpeechRecognition),
+    locationOrigin: window.location.origin,
+    viewport: {
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      devicePixelRatio: window.devicePixelRatio,
+    },
+  }))
+  const contextInfo = {
+    browserName,
+    executablePath: process.env.DESKTOP_LOOP_EXECUTABLE_PATH ? 'custom' : 'bundled',
+    channel: process.env.DESKTOP_LOOP_CHANNEL ?? null,
+    headed: process.env.DESKTOP_LOOP_HEADED === 'true',
+  }
+
+  if (!environment.userAgent.includes('Chrome') && !environment.userAgent.includes('Chromium')) {
+    throw new Error(`Unexpected browser userAgent: ${environment.userAgent}`)
+  }
+
+  if (!environment.mediaDevices) {
+    throw new Error('Browser did not expose navigator.mediaDevices.')
+  }
+
+  if (environment.viewport.innerWidth < 1000 || environment.viewport.innerHeight < 700) {
+    throw new Error(`Unexpected initial desktop viewport: ${JSON.stringify(environment.viewport)}`)
+  }
+
+  return {
+    ...contextInfo,
+    ...environment,
   }
 }
 

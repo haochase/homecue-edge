@@ -117,4 +117,6 @@ that contract is stale. The generated Markdown report reads screenshot paths
 from the desktop and Windows Chrome loop JSON files, so each report points at
 the screenshots from the current run. The report also summarizes browser
 runtime-health counts and desktop screenshot evidence for the desktop, Windows
-Chrome, and Android Chrome loops.
+Chrome, and Android Chrome loops. Desktop and Windows Chrome sections include a
+browser environment fingerprint with user-agent family, viewport, pixel ratio,
+and media/speech API availability.

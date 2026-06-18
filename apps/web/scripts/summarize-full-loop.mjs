@@ -77,6 +77,7 @@ function formatDesktop(value) {
   const checks = value.checks ?? {}
   return [
     `- Title: ${checks.localizedUi?.title ?? 'unknown'}`,
+    `- Browser environment: ${formatBrowserEnvironment(checks.browserEnvironment)}`,
     `- Responsive layout: ${formatResponsiveLayout(checks.responsiveLayout)}`,
     `- Runtime health: ${formatRuntimeHealth(checks.runtimeHealth)}`,
     `- Screenshot evidence: ${formatScreenshotEvidence(checks.screenshotEvidence)}`,
@@ -122,6 +123,25 @@ function formatResponsiveLayout(value) {
   if (!Array.isArray(value)) return 'not checked'
   const labels = value.map((item) => `${item.label}:${item.overflowX}px`)
   return labels.length ? labels.join(', ') : 'unknown'
+}
+
+function formatBrowserEnvironment(value) {
+  if (!value) return 'not checked'
+  if (value.success === false) return `fail (${value.error ?? 'unknown error'})`
+
+  const viewport = value.viewport ?? {}
+  const browserFamily = value.userAgent?.includes('Edg/')
+    ? 'Edge'
+    : value.userAgent?.includes('Chrome/')
+      ? 'Chrome'
+      : value.userAgent?.includes('Chromium/')
+        ? 'Chromium'
+        : 'unknown'
+  const mode = value.executablePath === 'custom' ? 'installed' : 'bundled'
+  const media = value.getUserMedia ? 'media:on' : 'media:off'
+  const speech = value.speechRecognition ? 'speech:on' : 'speech:off'
+
+  return `${value.browserName ?? browserFamily} (${browserFamily}, ${mode}, ${viewport.innerWidth ?? '?'}x${viewport.innerHeight ?? '?'}, dpr ${viewport.devicePixelRatio ?? '?'}, ${media}, ${speech})`
 }
 
 function formatRuntimeHealth(value) {
