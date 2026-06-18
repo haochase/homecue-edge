@@ -90,3 +90,14 @@ The test launches Playwright Chromium, verifies the Chinese UI, runs
 propose-only planning, confirms the routine from the web UI, checks offline
 fallback, and simulates an ESP32 serial confirmation through `/execute`.
 Evidence is written to the ignored `assets/demo/desktop-loop.json` file.
+
+## Full Loop
+
+From the repository root, use the full loop wrapper to start the API and Vite
+dev server when needed, then run the desktop loop:
+
+```powershell
+.\scripts\check-full-loop.ps1
+```
+
+Add `-IncludePhone` to run the Android phone loop after the desktop loop.

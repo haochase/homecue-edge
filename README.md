@@ -156,6 +156,16 @@ For a computer-side browser check without phone hardware:
 This launches desktop Chromium and verifies the Chinese UI, propose/confirm
 flow, offline fallback, and ESP32-style execution synchronization.
 
+To minimize manual setup, run the full loop wrapper. It starts the API and Vite
+dev server if they are not already running, then runs the desktop loop:
+
+```powershell
+.\scripts\check-full-loop.ps1
+```
+
+Add `-IncludePhone` when an unlocked Android phone is connected by USB and
+Chrome debugging is available.
+
 ## Contributing & Security
 
 This repository is public and holds technical content only. Before committing,
