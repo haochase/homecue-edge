@@ -30,10 +30,53 @@ const networkLabels: Record<NetworkMode, string> = {
   offline: '离线',
 }
 
+type BrowserSpeechAlternative = {
+  transcript?: string
+}
+
+type BrowserSpeechResult = {
+  0?: BrowserSpeechAlternative
+}
+
+type BrowserSpeechResults = {
+  length: number
+  [index: number]: BrowserSpeechResult
+}
+
+type BrowserSpeechEvent = Event & {
+  results: BrowserSpeechResults
+}
+
+type BrowserSpeechErrorEvent = Event & {
+  error?: string
+}
+
+type BrowserSpeechRecognition = {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  abort: () => void
+  start: () => void
+  stop: () => void
+  onend: (() => void) | null
+  onerror: ((event: BrowserSpeechErrorEvent) => void) | null
+  onresult: ((event: BrowserSpeechEvent) => void) | null
+}
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition
+
+declare global {
+  interface Window {
+    SpeechRecognition?: BrowserSpeechRecognitionConstructor
+    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor
+  }
+}
+
 function App() {
   const cameraPreviewRef = useRef<HTMLVideoElement | null>(null)
   const cameraStreamRef = useRef<MediaStream | null>(null)
   const executionSequenceRef = useRef(0)
+  const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null)
   const [prompt, setPrompt] = useState(initialPrompt)
   const [networkMode, setNetworkMode] = useState<NetworkMode>('online')
   const [agentMode, setAgentMode] = useState(false)
@@ -56,6 +99,9 @@ function App() {
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraStatus, setCameraStatus] = useState('摄像头待机')
   const [cameraError, setCameraError] = useState('')
+  const [isListening, setIsListening] = useState(false)
+  const [voiceStatus, setVoiceStatus] = useState('语音待机')
+  const [voiceError, setVoiceError] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -114,6 +160,7 @@ function App() {
   useEffect(() => {
     return () => {
       cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
+      speechRecognitionRef.current?.abort()
     }
   }, [])
 
@@ -205,6 +252,57 @@ function App() {
     if (!scene) return
     setPrompt(buildScenePrompt(scene, sceneHint))
     setProposeOnly(true)
+  }
+
+  function startVoiceInput() {
+    const SpeechRecognition = window.SpeechRecognition ?? window.webkitSpeechRecognition
+
+    if (!SpeechRecognition) {
+      setVoiceStatus('语音不可用')
+      setVoiceError('当前浏览器不支持 Web Speech API，请使用 Android Chrome 或继续文字输入。')
+      return
+    }
+
+    speechRecognitionRef.current?.abort()
+    const recognition = new SpeechRecognition()
+    speechRecognitionRef.current = recognition
+    recognition.lang = 'zh-CN'
+    recognition.continuous = false
+    recognition.interimResults = false
+
+    recognition.onresult = (event) => {
+      const transcript = extractTranscript(event.results)
+
+      if (transcript) {
+        setPrompt((value) => `${value.trim()}${value.trim() ? '\n' : ''}语音输入：${transcript}`)
+        setVoiceStatus('语音已写入请求')
+      } else {
+        setVoiceStatus('未识别到内容')
+      }
+    }
+
+    recognition.onerror = (event) => {
+      setVoiceStatus('语音输入失败')
+      setVoiceError(`语音识别失败：${translateSpeechError(event.error)}`)
+      setIsListening(false)
+    }
+
+    recognition.onend = () => {
+      speechRecognitionRef.current = null
+      setIsListening(false)
+    }
+
+    setVoiceError('')
+    setVoiceStatus('正在听...')
+    setIsListening(true)
+    recognition.start()
+  }
+
+  function stopVoiceInput() {
+    speechRecognitionRef.current?.stop()
+    speechRecognitionRef.current = null
+    setIsListening(false)
+    setVoiceStatus('语音已停止')
   }
 
   async function startCamera() {
@@ -302,6 +400,17 @@ function App() {
             <h2>晚间回家流程</h2>
           </div>
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
+          <div className="voice-input-row">
+            <button
+              type="button"
+              className={isListening ? 'voice-listening' : ''}
+              onClick={isListening ? stopVoiceInput : startVoiceInput}
+            >
+              {isListening ? '停止语音' : '语音输入'}
+            </button>
+            <span>{voiceStatus}</span>
+          </div>
+          {voiceError && <p className="voice-error">{voiceError}</p>}
           <div className="segmented-control" aria-label="网络模式">
             {(['online', 'weak', 'offline'] as NetworkMode[]).map((mode) => (
               <button
@@ -671,6 +780,31 @@ function formatPrivacySummary(summary: VisionSceneResponse['privacy_summary']) {
 
 function formatImageSize(base64: string) {
   return `${Math.max(1, Math.round((base64.length * 3) / 4 / 1024))} KB`
+}
+
+function extractTranscript(results: BrowserSpeechResults) {
+  const transcripts: string[] = []
+
+  for (let index = 0; index < results.length; index += 1) {
+    const transcript = results[index]?.[0]?.transcript?.trim()
+    if (transcript) transcripts.push(transcript)
+  }
+
+  return transcripts.join('，')
+}
+
+function translateSpeechError(error: string | undefined) {
+  const labels: Record<string, string> = {
+    aborted: '已中断',
+    'audio-capture': '无法获取麦克风',
+    'bad-grammar': '语法配置错误',
+    language_not_supported: '语言不支持',
+    network: '网络异常',
+    'no-speech': '没有检测到语音',
+    'not-allowed': '麦克风权限被拒绝',
+    'service-not-allowed': '语音服务不可用',
+  }
+  return labels[error ?? ''] ?? error ?? '未知错误'
 }
 
 function formatRuntimeLabel() {

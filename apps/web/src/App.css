@@ -201,6 +201,34 @@ textarea {
   font-weight: 800;
 }
 
+.voice-input-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 1.3fr);
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.voice-input-row span {
+  color: #687268;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.voice-listening {
+  border-color: rgba(150, 60, 41, 0.42);
+  background: #963c29;
+  color: #fffdf7;
+}
+
+.voice-error {
+  margin: 8px 0 0;
+  color: #963c29;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 textarea:focus,
 button:focus-visible {
   outline: 3px solid rgba(39, 120, 121, 0.26);
@@ -628,6 +656,7 @@ button:disabled {
 
   .context-grid,
   .device-grid,
+  .voice-input-row,
   .actions {
     grid-template-columns: 1fr;
   }
