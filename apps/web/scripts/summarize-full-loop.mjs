@@ -77,6 +77,7 @@ function formatDesktop(value) {
   const checks = value.checks ?? {}
   return [
     `- Title: ${checks.localizedUi?.title ?? 'unknown'}`,
+    `- Responsive layout: ${formatResponsiveLayout(checks.responsiveLayout)}`,
     `- Scene prompt handoff: ${formatPromptHandoff(checks.scenePromptHandoff)}`,
     `- Raw image retained: ${formatBoolean(checks.scenePromptHandoff?.rawImageRetained)}`,
     `- Raw image echoed: ${formatBoolean(checks.scenePromptHandoff?.rawImageEchoed)}`,
@@ -112,6 +113,12 @@ function formatPhone(value) {
 function formatPromptHandoff(value) {
   if (!value) return 'not checked'
   return value.proposeOnly && value.prompt ? 'ready' : 'incomplete'
+}
+
+function formatResponsiveLayout(value) {
+  if (!Array.isArray(value)) return 'not checked'
+  const labels = value.map((item) => `${item.label}:${item.overflowX}px`)
+  return labels.length ? labels.join(', ') : 'unknown'
 }
 
 function formatBoolean(value) {

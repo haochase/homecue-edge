@@ -53,6 +53,7 @@ try {
   await captureScreenshot(page, '01-control-console.png')
 
   await runCheck('localizedUi', () => verifyLocalizedUi(page))
+  await runCheck('responsiveLayout', () => verifyResponsiveLayout(page))
   await runCheck('scenePromptHandoff', () => verifyScenePromptHandoff(page))
   await captureScreenshot(page, '02-scene-prompt-handoff.png')
   await runCheck('proposeOnly', () => verifyProposeOnly(page))
@@ -104,6 +105,55 @@ async function verifyLocalizedUi(page) {
     runButton: await page.getByRole('button', { name: labels.runPlan }).innerText(),
     resetButtonCount: await page.getByRole('button', { name: labels.resetHome }).count(),
   }
+}
+
+async function verifyResponsiveLayout(page) {
+  const viewports = [
+    { width: 390, height: 900, label: 'mobile' },
+    { width: 768, height: 1000, label: 'tablet' },
+    { width: 1440, height: 1000, label: 'desktop' },
+  ]
+  const results = []
+
+  for (const viewport of viewports) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height })
+    await page.waitForTimeout(250)
+    const result = await page.evaluate((currentViewport) => {
+      const documentElement = document.documentElement
+      const overflowX = documentElement.scrollWidth - documentElement.clientWidth
+      const requiredSelectors = ['.workspace', '.prompt-panel', '.scene-panel', '.plan-panel', '.lower-grid']
+      const missingSelectors = requiredSelectors.filter((selector) => !document.querySelector(selector))
+      const overflowingButtons = Array.from(document.querySelectorAll('button'))
+        .map((button) => {
+          const rect = button.getBoundingClientRect()
+          return {
+            text: button.textContent?.trim() ?? '',
+            width: Math.round(rect.width),
+            scrollWidth: button.scrollWidth,
+            clientWidth: button.clientWidth,
+          }
+        })
+        .filter((button) => button.scrollWidth > button.clientWidth + 1)
+
+      return {
+        ...currentViewport,
+        clientWidth: documentElement.clientWidth,
+        scrollWidth: documentElement.scrollWidth,
+        overflowX,
+        missingSelectors,
+        overflowingButtons,
+      }
+    }, viewport)
+
+    if (result.overflowX > 1 || result.missingSelectors.length || result.overflowingButtons.length) {
+      throw new Error(`Responsive layout failed: ${JSON.stringify(result)}`)
+    }
+
+    results.push(result)
+  }
+
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  return results
 }
 
 async function verifyScenePromptHandoff(page) {
