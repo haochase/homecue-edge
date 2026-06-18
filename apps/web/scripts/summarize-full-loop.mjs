@@ -9,9 +9,11 @@ const outputFile = process.argv[2] ?? path.join(repoRoot, 'assets', 'demo', 'ful
 const desktopFile = process.argv[3] ?? path.join(repoRoot, 'assets', 'demo', 'desktop-loop.json')
 const phoneFile = process.argv[4] ?? path.join(repoRoot, 'assets', 'demo', 'phone-loop.json')
 const screenshotDir = process.argv[5] ?? path.join(repoRoot, 'assets', 'demo', 'desktop-screens')
+const chromeFile = process.argv[6] ?? path.join(repoRoot, 'assets', 'demo', 'chrome-loop.json')
 
 const desktop = await readJsonIfExists(desktopFile)
 const phone = await readJsonIfExists(phoneFile)
+const chrome = await readJsonIfExists(chromeFile)
 const screenshots = await listKnownScreenshots(screenshotDir)
 
 const report = [
@@ -22,6 +24,7 @@ const report = [
   '## Summary',
   '',
   `- Desktop loop: ${formatStatus(desktop?.success)}`,
+  `- Windows Chrome loop: ${chrome ? formatStatus(chrome.success) : 'not run'}`,
   `- Phone loop: ${phone ? formatStatus(phone.success) : 'not run'}`,
   `- App URL: ${desktop?.appUrl ?? phone?.appUrl ?? 'unknown'}`,
   `- API base: ${desktop?.apiBase ?? phone?.apiBase ?? 'unknown'}`,
@@ -30,6 +33,10 @@ const report = [
   '',
   ...formatDesktop(desktop),
   '',
+  '## Windows Chrome',
+  '',
+  ...formatDesktop(chrome),
+  '',
   '## Android Chrome Phone',
   '',
   ...formatPhone(phone),
@@ -37,12 +44,13 @@ const report = [
   '## Evidence Files',
   '',
   `- Desktop JSON: ${relativePath(desktopFile)}`,
+  `- Windows Chrome JSON: ${chrome ? relativePath(chromeFile) : 'not run'}`,
   `- Phone JSON: ${phone ? relativePath(phoneFile) : 'not run'}`,
   ...screenshots.map((item) => `- Screenshot: ${item}`),
   '',
   '## Demo Talking Points',
   '',
-  '- The loop verifies a multimodal assistant path across desktop web, Android Chrome, edge API, and simulated room-terminal execution.',
+  '- The loop verifies a multimodal assistant path across desktop web, Windows Chrome, Android Chrome, edge API, and simulated room-terminal execution.',
   '- The phone proof covers front-camera preference, Web Speech readiness, visual scene capture, and guarded execution sync.',
   '- The desktop proof covers propose-only planning, web confirmation, offline fallback, and ESP32-style external confirmation sync.',
   '- The report is generated from local ignored evidence artifacts, keeping the public repository free of private screenshots and runtime logs.',

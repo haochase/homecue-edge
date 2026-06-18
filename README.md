@@ -167,6 +167,9 @@ Markdown report to `assets/demo/full-loop-report.md`:
 Add `-IncludePhone` when an unlocked Android phone is connected by USB and
 Chrome debugging is available.
 
+Add `-IncludeChrome` to also verify the loop in installed Windows Chrome with an
+isolated temporary profile.
+
 ## Contributing & Security
 
 This repository is public and holds technical content only. Before committing,

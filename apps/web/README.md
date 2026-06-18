@@ -101,4 +101,6 @@ dev server when needed, run the desktop loop, and write
 .\scripts\check-full-loop.ps1
 ```
 
-Add `-IncludePhone` to run the Android phone loop after the desktop loop.
+Add `-IncludeChrome` to run the same desktop loop in installed Windows Chrome
+with an isolated temporary profile. Add `-IncludePhone` to run the Android phone
+loop after the desktop loop.

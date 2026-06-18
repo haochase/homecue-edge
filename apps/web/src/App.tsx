@@ -30,6 +30,32 @@ const networkLabels: Record<NetworkMode, string> = {
   offline: '离线',
 }
 
+const preferredCameraConstraints: MediaStreamConstraints[] = [
+  {
+    audio: false,
+    video: {
+      facingMode: { exact: 'user' },
+      height: { ideal: 720 },
+      width: { ideal: 1280 },
+    },
+  },
+  {
+    audio: false,
+    video: {
+      facingMode: { ideal: 'user' },
+      height: { ideal: 720 },
+      width: { ideal: 1280 },
+    },
+  },
+  {
+    audio: false,
+    video: {
+      height: { ideal: 720 },
+      width: { ideal: 1280 },
+    },
+  },
+]
+
 type BrowserSpeechAlternative = {
   transcript?: string
 }
@@ -313,16 +339,11 @@ function App() {
     }
 
     setCameraError('')
+    setCameraStatus('正在打开前置摄像头...')
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: 'user' },
-          height: { ideal: 720 },
-          width: { ideal: 1280 },
-        },
-      })
+      const stream = await openPreferredCamera()
+      const facingMode = getStreamFacingMode(stream)
 
       cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
       cameraStreamRef.current = stream
@@ -333,7 +354,7 @@ function App() {
       }
 
       setCameraActive(true)
-      setCameraStatus('前置摄像头已就绪')
+      setCameraStatus(formatCameraReadyStatus(facingMode))
     } catch {
       setCameraActive(false)
       setCameraStatus('摄像头受阻')
@@ -490,7 +511,7 @@ function App() {
           </div>
           <div className="camera-controls">
             <button type="button" onClick={startCamera}>
-              打开前置
+              打开前置摄像头
             </button>
             <button type="button" onClick={captureSceneFrame} disabled={!cameraActive}>
               截取画面
@@ -791,6 +812,30 @@ function extractTranscript(results: BrowserSpeechResults) {
   }
 
   return transcripts.join('，')
+}
+
+async function openPreferredCamera() {
+  let firstError: unknown
+
+  for (const constraints of preferredCameraConstraints) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints)
+    } catch (error) {
+      firstError ??= error
+    }
+  }
+
+  throw firstError ?? new Error('摄像头不可用')
+}
+
+function getStreamFacingMode(stream: MediaStream) {
+  return stream.getVideoTracks()[0]?.getSettings().facingMode
+}
+
+function formatCameraReadyStatus(facingMode: string | undefined) {
+  if (facingMode === 'user') return '前置摄像头已就绪'
+  if (facingMode) return `摄像头已就绪（设备返回：${facingMode}）`
+  return '摄像头已就绪（已优先请求前置）'
 }
 
 function translateSpeechError(error: string | undefined) {

@@ -2,6 +2,7 @@ param(
   [string]$AppUrl = "http://127.0.0.1:5173",
   [string]$ApiBase = "http://127.0.0.1:8723",
   [switch]$IncludePhone,
+  [switch]$IncludeChrome,
   [switch]$SkipDesktop,
   [int]$StartupTimeoutSeconds = 60,
   [string]$ReportPath = ""
@@ -110,6 +111,10 @@ if ($IncludePhone) {
   powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\check-phone-loop.ps1" -AppUrl $AppUrl -ApiBase $ApiBase
 }
 
+if ($IncludeChrome) {
+  powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\check-chrome-loop.ps1" -AppUrl $AppUrl -ApiBase $ApiBase
+}
+
 Push-Location $WebDir
 try {
   $ReportArgs = @($ReportPath, (Join-Path $Root "assets\demo\desktop-loop.json"))
@@ -118,6 +123,13 @@ try {
   }
   else {
     $ReportArgs += "__phone_not_run__.json"
+  }
+  $ReportArgs += (Join-Path $Root "assets\demo\desktop-screens")
+  if ($IncludeChrome) {
+    $ReportArgs += (Join-Path $Root "assets\demo\chrome-loop.json")
+  }
+  else {
+    $ReportArgs += "__chrome_not_run__.json"
   }
 
   npm run report:loop -- @ReportArgs

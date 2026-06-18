@@ -23,12 +23,21 @@ Starts the FastAPI edge gateway on `http://127.0.0.1:8723` and the Vite web cons
 ```powershell
 .\scripts\check-full-loop.ps1
 .\scripts\check-full-loop.ps1 -IncludePhone
+.\scripts\check-full-loop.ps1 -IncludeChrome -IncludePhone
 ```
 
 Starts the API and Vite dev server when they are not already listening, runs the
 desktop browser loop, then writes `assets/demo/full-loop-report.md`. Add
+`-IncludeChrome` to verify an isolated Windows Chrome profile, and add
 `-IncludePhone` to run the Android Chrome phone loop after the desktop loop when
 an unlocked USB-debugging phone is connected.
+
+```powershell
+.\scripts\check-chrome-loop.ps1
+```
+
+Runs the desktop browser loop against the installed Windows Chrome executable
+with an isolated temporary profile under `assets/tmp`.
 
 ```powershell
 .\scripts\verify-qwen.ps1

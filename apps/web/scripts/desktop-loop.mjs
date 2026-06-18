@@ -17,25 +17,32 @@ const repoRoot = path.resolve(scriptDir, '..', '..', '..')
 const outputFile = process.argv[2] ?? path.join(repoRoot, 'assets', 'demo', 'desktop-loop.json')
 const appUrl = process.argv[3] ?? 'http://127.0.0.1:5173'
 const apiBase = process.argv[4] ?? 'http://127.0.0.1:8723'
+const browserName = process.env.DESKTOP_LOOP_BROWSER_NAME ?? 'playwright-chromium'
+const launchOptions = buildLaunchOptions()
+const userDataDir = process.env.DESKTOP_LOOP_USER_DATA_DIR ?? path.join(repoRoot, 'assets', 'tmp', `desktop-loop-${Date.now()}`)
 
 const evidence = {
   success: false,
   startedAt: new Date().toISOString(),
   appUrl,
   apiBase,
+  browserName,
   checks: {},
 }
 
 let browser
+let context
 
 try {
   await postJson(`${apiBase}/devices/reset`, undefined)
 
-  browser = await chromium.launch()
-  const page = await browser.newPage({
+  context = await chromium.launchPersistentContext(userDataDir, {
+    ...launchOptions,
     viewport: { width: 1440, height: 1000 },
     deviceScaleFactor: 1,
   })
+  browser = context.browser()
+  const page = context.pages()[0] ?? await context.newPage()
 
   await page.goto(buildDemoUrl(appUrl, apiBase), { waitUntil: 'networkidle' })
   await page.waitForSelector('.context-grid', { timeout: 10000 })
@@ -56,7 +63,7 @@ try {
   await writeEvidence(outputFile, evidence)
   throw error
 } finally {
-  await browser?.close()
+  await context?.close()
 }
 
 async function runCheck(name, task) {
@@ -216,4 +223,22 @@ async function verifyExternalExecutionSync(page) {
 async function writeEvidence(file, value) {
   await mkdir(path.dirname(file), { recursive: true })
   await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+}
+
+function buildLaunchOptions() {
+  const options = {}
+
+  if (process.env.DESKTOP_LOOP_HEADED === 'true') {
+    options.headless = false
+  }
+
+  if (process.env.DESKTOP_LOOP_CHANNEL) {
+    options.channel = process.env.DESKTOP_LOOP_CHANNEL
+  }
+
+  if (process.env.DESKTOP_LOOP_EXECUTABLE_PATH) {
+    options.executablePath = process.env.DESKTOP_LOOP_EXECUTABLE_PATH
+  }
+
+  return options
 }

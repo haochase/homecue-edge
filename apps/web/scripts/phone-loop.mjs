@@ -17,7 +17,7 @@ const labels = {
   title: '\u5bb6\u5ead AI \u7ba1\u5bb6',
   voiceInput: '\u8bed\u97f3\u8f93\u5165',
   stopVoice: '\u505c\u6b62\u8bed\u97f3',
-  openFrontCamera: '\u6253\u5f00\u524d\u7f6e',
+  openFrontCamera: '\u6253\u5f00\u524d\u7f6e\u6444\u50cf\u5934',
   captureFrame: '\u622a\u53d6\u753b\u9762',
   analyzeScene: '\u5206\u6790\u573a\u666f',
   proposeOnly: '\u53ea\u751f\u6210\u5efa\u8bae',
