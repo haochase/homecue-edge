@@ -15,6 +15,7 @@ $ApiDir = Join-Path $Root "apps\api"
 $WebDir = Join-Path $Root "apps\web"
 $ApiPort = [System.Uri]$ApiBase | Select-Object -ExpandProperty Port
 $WebPort = [System.Uri]$AppUrl | Select-Object -ExpandProperty Port
+$FullLoopRunId = "full-loop-{0:yyyyMMdd-HHmmss}-{1}" -f (Get-Date), ([guid]::NewGuid().ToString("N").Substring(0, 8))
 
 if (-not $ReportPath) {
   $ReportPath = Join-Path $Root "assets\demo\full-loop-report.md"
@@ -177,6 +178,9 @@ function Ensure-Web {
 Ensure-Api
 Ensure-Web
 
+$env:FULL_LOOP_RUN_ID = $FullLoopRunId
+Write-Host "Full loop run id: $FullLoopRunId"
+
 if (-not $SkipDesktop) {
   Invoke-CheckedScript "desktop loop" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$PSScriptRoot\check-desktop-loop.ps1", "-AppUrl", $AppUrl, "-ApiBase", $ApiBase)
 }
@@ -219,6 +223,7 @@ try {
   }
 }
 finally {
+  Remove-Item Env:\FULL_LOOP_RUN_ID -ErrorAction SilentlyContinue
   Pop-Location
 }
 

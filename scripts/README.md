@@ -48,6 +48,9 @@ phone loop cannot be hidden by a generated Markdown summary. When `-SkipDesktop`
 or optional phone/Chrome checks are omitted, the wrapper passes an explicit
 `__*_not_run__.json` sentinel so old evidence from a previous run is not reused.
 Relative `-ReportPath` values are resolved from the repository root.
+Each full-loop run also stamps desktop, phone, and Chrome JSON evidence with a
+shared run id; the report gate fails when required evidence files do not share
+that id.
 
 ```powershell
 .\scripts\check-chrome-loop.ps1

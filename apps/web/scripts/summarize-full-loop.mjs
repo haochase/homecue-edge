@@ -26,6 +26,7 @@ const report = [
   `- Desktop loop: ${formatStatus(desktop?.success)}`,
   `- Windows Chrome loop: ${chrome ? formatStatus(chrome.success) : 'not run'}`,
   `- Phone loop: ${phone ? formatStatus(phone.success) : 'not run'}`,
+  `- Run ID: ${requiredEvidence.runId ?? 'not set'}`,
   `- App URL: ${desktop?.appUrl ?? phone?.appUrl ?? 'unknown'}`,
   `- API base: ${desktop?.apiBase ?? phone?.apiBase ?? 'unknown'}`,
   '',
@@ -99,20 +100,38 @@ function formatDesktop(value) {
 
 function validateEvidence({ desktop, phone, chrome }) {
   const errors = []
+  const requiredItems = []
 
   if (isRequiredFile(desktopFile)) {
     validateDesktopEvidence('Desktop', desktop, errors)
+    requiredItems.push(['Desktop', desktop])
   }
   if (isRequiredFile(phoneFile)) {
     validatePhoneEvidence(phone, errors)
+    requiredItems.push(['Phone', phone])
   }
   if (isRequiredFile(chromeFile)) {
     validateDesktopEvidence('Windows Chrome', chrome, errors)
+    requiredItems.push(['Windows Chrome', chrome])
+  }
+
+  const runIds = requiredItems
+    .map(([label, value]) => [label, value?.runId])
+    .filter(([, runId]) => typeof runId === 'string' && runId.length > 0)
+  const missingRunIds = requiredItems.filter(([, value]) => !value?.runId).map(([label]) => label)
+  const uniqueRunIds = Array.from(new Set(runIds.map(([, runId]) => runId)))
+
+  if (missingRunIds.length) {
+    errors.push(`Missing run id in evidence: ${missingRunIds.join(', ')}.`)
+  }
+  if (uniqueRunIds.length > 1) {
+    errors.push(`Evidence run ids do not match: ${runIds.map(([label, runId]) => `${label}=${runId}`).join(', ')}.`)
   }
 
   return {
     success: errors.length === 0,
     errors,
+    runId: uniqueRunIds[0] ?? null,
   }
 }
 

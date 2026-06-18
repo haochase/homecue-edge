@@ -26,6 +26,7 @@ const screenshotDir =
 
 const evidence = {
   success: false,
+  runId: process.env.FULL_LOOP_RUN_ID ?? null,
   startedAt: new Date().toISOString(),
   appUrl,
   apiBase,

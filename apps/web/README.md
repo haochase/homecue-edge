@@ -121,4 +121,5 @@ Chrome, and Android Chrome loops. Desktop and Windows Chrome sections include a
 browser environment fingerprint with user-agent family, viewport, pixel ratio,
 and media/speech API availability. The report command also fails if any
 requested loop evidence is missing, marked unsuccessful, or lacks the required
-checks.
+checks. When the full-loop wrapper runs multiple targets, it stamps each JSON
+evidence file with the same run id and the report gate verifies they match.
