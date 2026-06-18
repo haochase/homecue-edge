@@ -60,7 +60,9 @@ lists each JSON and screenshot artifact with byte size and a short SHA-256 diges
 so local proof files can be tied back to the generated report. The JSON summary
 uses the same validated evidence and includes top-level `success`, `runId`,
 browser parity, per-loop status, runtime-health counts, screenshot summaries,
-and validation errors for downstream automation.
+and validation errors for downstream automation. After writing the summary, the
+wrapper runs `npm run summary:check` with matching phone/Chrome requirements so
+schema or contract drift fails the full-loop gate immediately.
 
 ```powershell
 .\scripts\check-chrome-loop.ps1

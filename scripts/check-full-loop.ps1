@@ -241,6 +241,19 @@ try {
   if ($LASTEXITCODE -ne 0) {
     throw "report:loop failed."
   }
+
+  $SummaryCheckArgs = @($SummaryPath)
+  if ($IncludePhone) {
+    $SummaryCheckArgs += "--require-phone"
+  }
+  if ($IncludeChrome) {
+    $SummaryCheckArgs += "--require-chrome"
+  }
+
+  npm run summary:check -- @SummaryCheckArgs
+  if ($LASTEXITCODE -ne 0) {
+    throw "summary:check failed."
+  }
 }
 finally {
   Remove-Item Env:\FULL_LOOP_RUN_ID -ErrorAction SilentlyContinue

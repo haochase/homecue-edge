@@ -10,7 +10,8 @@
     "desktop:loop": "node scripts/desktop-loop.mjs",
     "phone:loop": "node scripts/phone-loop.mjs",
     "preview": "vite preview",
-    "report:loop": "node scripts/summarize-full-loop.mjs"
+    "report:loop": "node scripts/summarize-full-loop.mjs",
+    "summary:check": "node scripts/validate-full-loop-summary.mjs"
   },
   "dependencies": {
     "react": "^19.2.6",

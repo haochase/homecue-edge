@@ -1,0 +1,240 @@
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const repoRoot = path.resolve(scriptDir, '..', '..', '..')
+const summaryFile = process.argv[2] ?? path.join(repoRoot, 'assets', 'demo', 'full-loop-report.json')
+const options = parseOptions(process.argv.slice(3))
+const summary = JSON.parse(await readFile(summaryFile, 'utf8'))
+const errors = validateSummary(summary, options)
+
+if (errors.length) {
+  console.error(`Full loop summary validation failed: ${summaryFile}`)
+  for (const error of errors) {
+    console.error(`- ${error}`)
+  }
+  process.exit(1)
+}
+
+console.log(`Full loop summary validation passed: ${summaryFile}`)
+
+function parseOptions(args) {
+  return {
+    requirePhone: args.includes('--require-phone'),
+    requireChrome: args.includes('--require-chrome'),
+  }
+}
+
+function validateSummary(value, { requirePhone, requireChrome }) {
+  const errors = []
+
+  if (!value || typeof value !== 'object') {
+    return ['Summary root must be an object.']
+  }
+
+  assertString(errors, value.generatedAt, 'generatedAt')
+  assertBoolean(errors, value.success, 'success')
+  if (value.success !== true) {
+    errors.push('summary success must be true.')
+  }
+  assertString(errors, value.runId, 'runId')
+  assertString(errors, value.appUrl, 'appUrl')
+  assertString(errors, value.apiBase, 'apiBase')
+  assertArray(errors, value.evidence?.files, 'evidence.files')
+  assertArray(errors, value.evidence?.validationErrors, 'evidence.validationErrors')
+
+  if (Array.isArray(value.evidence?.validationErrors) && value.evidence.validationErrors.length) {
+    errors.push(`summary contains validation errors: ${value.evidence.validationErrors.join('; ')}`)
+  }
+
+  validateDesktopLoop(errors, value.loops?.desktop, 'loops.desktop', { required: true, expectedRunId: value.runId })
+  validateDesktopLoop(errors, value.loops?.windowsChrome, 'loops.windowsChrome', {
+    required: requireChrome,
+    expectedRunId: value.runId,
+  })
+  validatePhoneLoop(errors, value.loops?.phone, 'loops.phone', { required: requirePhone, expectedRunId: value.runId })
+  validateBrowserParity(errors, value.browserParity, { required: requireChrome })
+  validateEvidenceManifest(errors, value.evidence?.files, { requirePhone, requireChrome })
+
+  return errors
+}
+
+function validateDesktopLoop(errors, loop, label, { required, expectedRunId }) {
+  if (!loop || typeof loop !== 'object') {
+    if (required) errors.push(`${label} is missing.`)
+    return
+  }
+
+  if (!loop.run) {
+    if (required) errors.push(`${label}.run must be true.`)
+    return
+  }
+
+  if (loop.success !== true) errors.push(`${label}.success must be true.`)
+  if (loop.runId !== expectedRunId) errors.push(`${label}.runId does not match summary runId.`)
+  assertString(errors, loop.title, `${label}.title`)
+  assertString(errors, loop.browserName, `${label}.browserName`)
+  assertString(errors, loop.pageUrl, `${label}.pageUrl`)
+
+  validateRuntimeHealth(errors, loop.runtimeHealth, `${label}.runtimeHealth`)
+  validateResponsiveLayout(errors, loop.responsiveLayout, `${label}.responsiveLayout`)
+  validateScreenshotEvidence(errors, loop.screenshotEvidence, `${label}.screenshotEvidence`)
+
+  if (loop.scenePromptHandoff?.ready !== true) errors.push(`${label}.scenePromptHandoff.ready must be true.`)
+  if (loop.scenePromptHandoff?.rawImageRetained !== false) {
+    errors.push(`${label}.scenePromptHandoff.rawImageRetained must be false.`)
+  }
+  if (loop.scenePromptHandoff?.rawImageEchoed !== false) {
+    errors.push(`${label}.scenePromptHandoff.rawImageEchoed must be false.`)
+  }
+
+  if (loop.proposeOnly?.latestExecuted !== false) errors.push(`${label}.proposeOnly.latestExecuted must be false.`)
+  if (loop.webConfirmExecute?.latestSource !== 'web') errors.push(`${label}.webConfirmExecute.latestSource must be web.`)
+  if (loop.offlineFallback?.latestSource !== 'plan') errors.push(`${label}.offlineFallback.latestSource must be plan.`)
+  if (loop.externalExecutionSync?.latestSource !== 'esp32-serial') {
+    errors.push(`${label}.externalExecutionSync.latestSource must be esp32-serial.`)
+  }
+  if (!positiveNumber(loop.externalExecutionSync?.acceptedActionCount)) {
+    errors.push(`${label}.externalExecutionSync.acceptedActionCount must be positive.`)
+  }
+}
+
+function validatePhoneLoop(errors, loop, label, { required, expectedRunId }) {
+  if (!loop || typeof loop !== 'object') {
+    if (required) errors.push(`${label} is missing.`)
+    return
+  }
+
+  if (!loop.run) {
+    if (required) errors.push(`${label}.run must be true.`)
+    return
+  }
+
+  if (loop.success !== true) errors.push(`${label}.success must be true.`)
+  if (loop.runId !== expectedRunId) errors.push(`${label}.runId does not match summary runId.`)
+  assertString(errors, loop.title, `${label}.title`)
+  assertString(errors, loop.pageUrl, `${label}.pageUrl`)
+  validateRuntimeHealth(errors, loop.runtimeHealth, `${label}.runtimeHealth`)
+
+  if (loop.frontCamera?.ready !== true) errors.push(`${label}.frontCamera.ready must be true.`)
+  if (loop.frontCamera?.facingMode !== 'user') errors.push(`${label}.frontCamera.facingMode must be user.`)
+  if (!positiveNumber(loop.frontCamera?.width) || !positiveNumber(loop.frontCamera?.height)) {
+    errors.push(`${label}.frontCamera dimensions must be positive.`)
+  }
+  if (loop.speechInput?.available !== true) errors.push(`${label}.speechInput.available must be true.`)
+  if (loop.scene?.rawImageNotRetained !== true) errors.push(`${label}.scene.rawImageNotRetained must be true.`)
+  if (loop.scene?.rawImageRetained !== false) errors.push(`${label}.scene.rawImageRetained must be false.`)
+  if (loop.scenePromptHandoff?.ready !== true) errors.push(`${label}.scenePromptHandoff.ready must be true.`)
+  if (loop.externalExecution?.latestSource !== 'esp32-serial') {
+    errors.push(`${label}.externalExecution.latestSource must be esp32-serial.`)
+  }
+  if (!positiveNumber(loop.externalExecution?.acceptedActionCount)) {
+    errors.push(`${label}.externalExecution.acceptedActionCount must be positive.`)
+  }
+}
+
+function validateBrowserParity(errors, parity, { required }) {
+  if (!parity || typeof parity !== 'object') {
+    if (required) errors.push('browserParity is missing.')
+    return
+  }
+
+  if (required) {
+    if (parity.checked !== true) errors.push('browserParity.checked must be true.')
+    if (parity.success !== true) errors.push('browserParity.success must be true.')
+  }
+  assertArray(errors, parity.errors, 'browserParity.errors')
+  if (Array.isArray(parity.errors) && parity.errors.length) {
+    errors.push(`browserParity errors must be empty: ${parity.errors.join('; ')}`)
+  }
+}
+
+function validateEvidenceManifest(errors, files, { requirePhone, requireChrome }) {
+  if (!Array.isArray(files)) return
+
+  const presentFiles = files.filter((entry) => entry?.present)
+  if (!presentFiles.length) errors.push('evidence.files must contain present entries.')
+
+  for (const entry of presentFiles) {
+    assertString(errors, entry.label, 'evidence.files[].label')
+    assertString(errors, entry.file, `evidence entry ${entry.label ?? 'unknown'} file`)
+    if (!positiveNumber(entry.bytes)) errors.push(`evidence entry ${entry.file ?? entry.label} bytes must be positive.`)
+    if (typeof entry.sha256 !== 'string' || !/^[a-f0-9]{12}$/u.test(entry.sha256)) {
+      errors.push(`evidence entry ${entry.file ?? entry.label} sha256 must be a 12-char hex digest.`)
+    }
+  }
+
+  requireManifestLabel(errors, files, 'Desktop JSON')
+  if (requireChrome) requireManifestLabel(errors, files, 'Windows Chrome JSON')
+  if (requirePhone) requireManifestLabel(errors, files, 'Phone JSON')
+}
+
+function requireManifestLabel(errors, files, label) {
+  const entry = files.find((item) => item?.label === label)
+  if (!entry?.present) {
+    errors.push(`evidence manifest missing present ${label}.`)
+  }
+}
+
+function validateRuntimeHealth(errors, value, label) {
+  if (!value || typeof value !== 'object') {
+    errors.push(`${label} is missing.`)
+    return
+  }
+
+  if (value.success !== true) errors.push(`${label}.success must be true.`)
+  if (value.issueCount !== 0) errors.push(`${label}.issueCount must be 0.`)
+}
+
+function validateResponsiveLayout(errors, value, label) {
+  if (!Array.isArray(value) || value.length < 3) {
+    errors.push(`${label} must include mobile, tablet, and desktop results.`)
+    return
+  }
+
+  for (const item of value) {
+    if (item.overflowX !== 0) errors.push(`${label}.${item.label ?? 'unknown'}.overflowX must be 0.`)
+    if (item.overflowingButtonCount !== 0) {
+      errors.push(`${label}.${item.label ?? 'unknown'}.overflowingButtonCount must be 0.`)
+    }
+  }
+}
+
+function validateScreenshotEvidence(errors, value, label) {
+  if (!value || typeof value !== 'object') {
+    errors.push(`${label} is missing.`)
+    return
+  }
+
+  if (value.success !== true) errors.push(`${label}.success must be true.`)
+  if (value.count !== 6) errors.push(`${label}.count must be 6.`)
+  if (!positiveNumber(value.minWidth) || !positiveNumber(value.minHeight)) {
+    errors.push(`${label} min dimensions must be positive.`)
+  }
+  if (!positiveNumber(value.minBytes) || !positiveNumber(value.minImageDataBytes)) {
+    errors.push(`${label} byte counts must be positive.`)
+  }
+}
+
+function assertString(errors, value, label) {
+  if (typeof value !== 'string' || value.length === 0) {
+    errors.push(`${label} must be a non-empty string.`)
+  }
+}
+
+function assertBoolean(errors, value, label) {
+  if (typeof value !== 'boolean') {
+    errors.push(`${label} must be a boolean.`)
+  }
+}
+
+function assertArray(errors, value, label) {
+  if (!Array.isArray(value)) {
+    errors.push(`${label} must be an array.`)
+  }
+}
+
+function positiveNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+}
