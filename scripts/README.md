@@ -48,9 +48,11 @@ screenshot-evidence counts. Desktop and Windows Chrome evidence also records
 browser environment details such as user agent family, viewport, pixel ratio,
 and media/speech API availability. Windows Chrome evidence also includes
 sanitized executable identity fields from Windows version metadata, without
-recording the local absolute executable path. The report step validates the
-required JSON evidence before exiting successfully, so a missing or failed
-desktop, Chrome, or phone loop cannot be hidden by a generated Markdown summary.
+recording the local absolute executable path, and the summary compares the
+runtime Chrome user-agent major version with the executable product major
+version. The report step validates the required JSON evidence before exiting
+successfully, so a missing or failed desktop, Chrome, or phone loop cannot be
+hidden by a generated Markdown summary.
 When `-SkipDesktop`
 or optional phone/Chrome checks are omitted, the wrapper passes an explicit
 `__*_not_run__.json` sentinel so old evidence from a previous run is not reused.

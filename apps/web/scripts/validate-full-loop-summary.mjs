@@ -529,6 +529,18 @@ async function validateRawDesktopEvidence(
   )
   compareValue(
     errors,
+    chromeMajorVersion(checks.browserEnvironment?.userAgent),
+    loop.browserEnvironment?.runtimeMajorVersion ?? null,
+    `${label}.browserEnvironment.runtimeMajorVersion raw evidence`,
+  )
+  compareValue(
+    errors,
+    chromeMajorVersion(checks.browserEnvironment?.executableProductVersion),
+    loop.browserEnvironment?.executableMajorVersion ?? null,
+    `${label}.browserEnvironment.executableMajorVersion raw evidence`,
+  )
+  compareValue(
+    errors,
     checks.browserEnvironment?.getUserMedia ?? null,
     loop.browserEnvironment?.getUserMedia ?? null,
     `${label}.browserEnvironment.getUserMedia raw evidence`,
@@ -955,6 +967,12 @@ function validateBrowserEnvironment(
   if (typeof value.userAgent !== 'string' || !/Chrome|Chromium/u.test(value.userAgent)) {
     errors.push(`${label}.userAgent must identify Chrome or Chromium.`)
   }
+  if (value.runtimeMajorVersion !== chromeMajorVersion(value.userAgent)) {
+    errors.push(`${label}.runtimeMajorVersion must match the Chrome userAgent major version.`)
+  }
+  if (value.executableMajorVersion !== chromeMajorVersion(value.executableProductVersion)) {
+    errors.push(`${label}.executableMajorVersion must match the executable product major version.`)
+  }
   if (expectedInstalledChromeIdentity) {
     validateInstalledChromeExecutableIdentity(errors, value, label)
   }
@@ -984,6 +1002,16 @@ function validateInstalledChromeExecutableIdentity(errors, value, label) {
   if (typeof value.executableProductVersion !== 'string' || !/^\d+\./u.test(value.executableProductVersion)) {
     errors.push(`${label}.executableProductVersion must start with a numeric Chrome version.`)
   }
+  if (value.runtimeMajorVersion !== value.executableMajorVersion) {
+    errors.push(`${label}.runtimeMajorVersion must match executableMajorVersion.`)
+  }
+}
+
+function chromeMajorVersion(value) {
+  if (typeof value !== 'string') return null
+
+  const match = value.match(/(?:HeadlessChrome|Chrome|Chromium)\/(\d+)\./u) ?? value.match(/^(\d+)\./u)
+  return match ? Number(match[1]) : null
 }
 
 function validateTextIntegrity(errors, value, label) {

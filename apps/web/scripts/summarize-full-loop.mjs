@@ -254,6 +254,8 @@ function summarizeBrowserEnvironment(value) {
     executableProductName: value.executableProductName ?? null,
     executableCompanyName: value.executableCompanyName ?? null,
     executableProductVersion: value.executableProductVersion ?? null,
+    runtimeMajorVersion: chromeMajorVersion(value.userAgent),
+    executableMajorVersion: chromeMajorVersion(value.executableProductVersion),
     channel: value.channel ?? null,
   }
 }
@@ -690,6 +692,13 @@ function formatBrowserEnvironment(value) {
   return `${value.browserName ?? browserFamily} (${browserFamily}, ${mode}${
     executable ? `, ${executable}` : ''
   }, ${viewport.innerWidth ?? '?'}x${viewport.innerHeight ?? '?'}, dpr ${viewport.devicePixelRatio ?? '?'}, ${media}, ${speech})`
+}
+
+function chromeMajorVersion(value) {
+  if (typeof value !== 'string') return null
+
+  const match = value.match(/(?:HeadlessChrome|Chrome|Chromium)\/(\d+)\./u) ?? value.match(/^(\d+)\./u)
+  return match ? Number(match[1]) : null
 }
 
 function formatParity(value) {
