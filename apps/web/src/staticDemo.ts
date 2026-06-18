@@ -12,15 +12,15 @@ import type {
 
 const staticContext: HomeContext = {
   home: {
-    room: 'living room',
+    room: '客厅',
     time: '19:35',
-    weather: 'light rain, 18C',
-    occupancy: 'user just arrived home',
+    weather: '小雨，18C',
+    occupancy: '用户刚回到家',
   },
   user: {
-    mood: 'tired',
-    preference: 'warm lighting, quiet movie nights, simple meals',
-    privacy_policy: 'raw calendar and sensor data stay local; only summaries are sent to cloud reasoning',
+    mood: '疲惫',
+    preference: '暖色灯光、安静观影、简单餐食',
+    privacy_policy: '原始日程和传感器数据留在本地，只把摘要发送给模型推理',
   },
   schedule: [
     { time: '21:30', title: '项目复盘' },
@@ -29,11 +29,11 @@ const staticContext: HomeContext = {
 }
 
 const defaultDevices: DeviceState = {
-  light: { label: 'Living room light', state: 'off', scene: 'default' },
-  ac: { label: 'Air conditioner', state: 'off', temperature: 24 },
-  projector: { label: 'Projector', state: 'off', mode: 'standby' },
-  speaker: { label: 'Speaker', state: 'off', playlist: 'none' },
-  reminder: { label: 'Reminder', state: 'empty', message: '' },
+  light: { label: '客厅灯', state: 'off', scene: 'default' },
+  ac: { label: '空调', state: 'off', temperature: 24 },
+  projector: { label: '投影仪', state: 'off', mode: 'standby' },
+  speaker: { label: '音箱', state: 'off', playlist: 'none' },
+  reminder: { label: '提醒', state: 'empty', message: '' },
 }
 
 const allowedActions = {
@@ -97,8 +97,8 @@ function buildStaticTrace(prompt: string): TraceStep[] {
       name: 'get_home_context',
       args: {},
       result: {
-        home: { room: 'living room', time: '19:35', weather: 'light rain, 18C', occupancy: 'user just arrived home' },
-        user: { mood: 'tired', preference: 'warm lighting, quiet movie nights, simple meals' },
+        home: { room: '客厅', time: '19:35', weather: '小雨，18C', occupancy: '用户刚回到家' },
+        user: { mood: '疲惫', preference: '暖色灯光、安静观影、简单餐食' },
         schedule_summary: '今晚还有 2 个事项；下一项是 21:30 项目复盘',
         privacy_note: '原始本地数据不会上传，这里只传递边缘侧摘要。',
       },
@@ -152,17 +152,17 @@ function buildStaticTrace(prompt: string): TraceStep[] {
 
 function buildMockPlan(prompt: string, networkMode: NetworkMode, useAgent = false): Routine {
   const reasoning = [
-    'User sounds tired, so the routine should reduce decisions and keep the room calm.',
-    'Rainy weather and evening time suggest warm light, mild temperature, and quiet media.',
-    'A later project review means reminders should be gentle and not interrupt rest.',
+    '用户看起来疲惫，流程应减少决策并保持房间安静。',
+    '雨天和晚间更适合暖光、舒适温度和安静媒体。',
+    '稍晚还有项目回顾，提醒应轻量且不打断休息。',
   ]
 
   if (useAgent) {
-    reasoning.unshift('Agent inspected context and device states, then pre-validated actions via the edge guard.')
+    reasoning.unshift('智能体已检查上下文和设备状态，并通过边缘守卫预校验动作。')
   }
 
   if (networkMode === 'weak') {
-    reasoning.unshift('Weak-network mode uses cached local context and compact cloud reasoning.')
+    reasoning.unshift('弱网模式使用本地缓存上下文和紧凑云端推理。')
   }
 
   const mode = networkMode === 'weak'
@@ -173,8 +173,8 @@ function buildMockPlan(prompt: string, networkMode: NetworkMode, useAgent = fals
 
   return {
     mode,
-    summary: 'Prepare a low-effort evening routine that helps the user settle in at home.',
-    privacy_summary: 'Only home state, mood label, weather, and schedule summaries are used for planning.',
+    summary: '准备一个低负担的晚间流程，帮助用户在家放松下来。',
+    privacy_summary: '规划只使用家庭状态、情绪标签、天气和日程摘要。',
     reasoning,
     actions: [
       { device: 'light', command: 'set_scene', value: 'warm' },
@@ -184,8 +184,8 @@ function buildMockPlan(prompt: string, networkMode: NetworkMode, useAgent = fals
       { device: 'reminder', command: 'set', value: '21:10 回顾项目笔记' },
     ],
     suggestions: [
-      { type: 'meal', title: 'Tomato egg noodles', detail: 'Fast, warm, and low effort.' },
-      { type: 'movie', title: 'Quiet sci-fi night', detail: 'Pick a familiar film to avoid decision fatigue.' },
+      { type: 'meal', title: '番茄鸡蛋面', detail: '快速、温热、低负担。' },
+      { type: 'movie', title: '安静科幻夜', detail: '选择熟悉的电影，减少决策负担。' },
     ],
     source_prompt: prompt,
     provider: useAgent ? 'static_agent' : 'static_mock',
@@ -195,15 +195,15 @@ function buildMockPlan(prompt: string, networkMode: NetworkMode, useAgent = fals
 function buildFallbackPlan(prompt: string): Routine {
   return {
     mode: 'offline_fallback',
-    summary: 'Cloud is unavailable, so HomeCue Edge runs a local comfort routine.',
-    privacy_summary: 'No cloud request is made in offline mode.',
-    reasoning: ['Offline mode uses a safe local rule set.', 'The routine keeps comfort actions simple and reversible.'],
+    summary: '云端不可用，边缘侧运行本地舒适流程。',
+    privacy_summary: '离线模式不会发起云端请求。',
+    reasoning: ['离线模式使用安全的本地规则集。', '流程保持动作简单且可逆。'],
     actions: [
       { device: 'light', command: 'set_scene', value: 'warm' },
       { device: 'ac', command: 'set_temperature', value: 26 },
-      { device: 'reminder', command: 'set', value: 'Cloud planning unavailable; basic home routine active.' },
+      { device: 'reminder', command: 'set', value: '云端规划不可用，已启用基础家庭流程。' },
     ],
-    suggestions: [{ type: 'meal', title: 'Simple warm dinner', detail: 'Use a low-effort pantry option.' }],
+    suggestions: [{ type: 'meal', title: '简单热晚餐', detail: '选择低负担的储备食材。' }],
     source_prompt: prompt,
     provider: 'static_fallback',
   }

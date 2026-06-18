@@ -42,6 +42,14 @@ const preferredCameraConstraints: MediaStreamConstraints[] = [
   {
     audio: false,
     video: {
+      facingMode: 'user',
+      height: { ideal: 720 },
+      width: { ideal: 1280 },
+    },
+  },
+  {
+    audio: false,
+    video: {
       facingMode: { ideal: 'user' },
       height: { ideal: 720 },
       width: { ideal: 1280 },
@@ -348,7 +356,7 @@ function App() {
     }
 
     setCameraError('')
-    setCameraStatus('正在查找前置摄像头...')
+    setCameraStatus('正在优先请求前置摄像头...')
 
     try {
       const camera = await openPreferredCamera()
@@ -915,10 +923,10 @@ function formatCameraReadyStatus(camera: CameraOpenResult) {
   }
 
   if (camera.facingMode) {
-    return `摄像头已就绪（设备返回：${translateCameraFacingMode(camera.facingMode)}，已优先请求前置）`
+    return `摄像头已就绪（设备返回：${translateCameraFacingMode(camera.facingMode)}，已按前置优先请求）`
   }
 
-  return '摄像头已就绪（已优先请求前置，浏览器未返回镜头标识）'
+  return '摄像头已就绪（已按前置优先请求，浏览器未返回镜头标识）'
 }
 
 function translateCameraFacingMode(facingMode: string) {
@@ -1049,6 +1057,7 @@ function translateMode(mode: string) {
 function translateValue(value: string) {
   const labels: Record<string, string> = {
     'living room': '客厅',
+    'user just arrived home': '用户刚回到家',
     'Living room light': '客厅灯',
     'Air conditioner': '空调',
     Projector: '投影仪',
