@@ -60,16 +60,22 @@ async function validateSummary(value, { requirePhone, requireChrome }) {
   validateDesktopLoop(errors, value.loops?.desktop, 'loops.desktop', {
     required: true,
     expectedRunId: value.runId,
+    generatedAt: value.generatedAt,
     expectedBrowserName: 'playwright-chromium',
     expectedExecutablePath: 'bundled',
   })
   validateDesktopLoop(errors, value.loops?.windowsChrome, 'loops.windowsChrome', {
     required: requireChrome,
     expectedRunId: value.runId,
+    generatedAt: value.generatedAt,
     expectedBrowserName: 'windows-chrome',
     expectedExecutablePath: 'custom',
   })
-  validatePhoneLoop(errors, value.loops?.phone, 'loops.phone', { required: requirePhone, expectedRunId: value.runId })
+  validatePhoneLoop(errors, value.loops?.phone, 'loops.phone', {
+    required: requirePhone,
+    expectedRunId: value.runId,
+    generatedAt: value.generatedAt,
+  })
   validateBrowserParity(errors, value.browserParity, { required: requireChrome })
   validateBrowserParityAgainstLoops(errors, value, { required: requireChrome })
   await validateEvidenceManifest(errors, value.evidence?.files, { requirePhone, requireChrome })
@@ -78,7 +84,12 @@ async function validateSummary(value, { requirePhone, requireChrome }) {
   return errors
 }
 
-function validateDesktopLoop(errors, loop, label, { required, expectedRunId, expectedBrowserName, expectedExecutablePath }) {
+function validateDesktopLoop(
+  errors,
+  loop,
+  label,
+  { required, expectedRunId, generatedAt, expectedBrowserName, expectedExecutablePath },
+) {
   if (!loop || typeof loop !== 'object') {
     if (required) errors.push(`${label} is missing.`)
     return
@@ -94,6 +105,7 @@ function validateDesktopLoop(errors, loop, label, { required, expectedRunId, exp
   assertString(errors, loop.title, `${label}.title`)
   assertString(errors, loop.browserName, `${label}.browserName`)
   assertString(errors, loop.pageUrl, `${label}.pageUrl`)
+  validateLoopTiming(errors, loop, label, generatedAt)
 
   if (expectedBrowserName && loop.browserName !== expectedBrowserName) {
     errors.push(`${label}.browserName must be ${expectedBrowserName}.`)
@@ -128,7 +140,7 @@ function validateDesktopLoop(errors, loop, label, { required, expectedRunId, exp
   }
 }
 
-function validatePhoneLoop(errors, loop, label, { required, expectedRunId }) {
+function validatePhoneLoop(errors, loop, label, { required, expectedRunId, generatedAt }) {
   if (!loop || typeof loop !== 'object') {
     if (required) errors.push(`${label} is missing.`)
     return
@@ -143,6 +155,7 @@ function validatePhoneLoop(errors, loop, label, { required, expectedRunId }) {
   if (loop.runId !== expectedRunId) errors.push(`${label}.runId does not match summary runId.`)
   assertString(errors, loop.title, `${label}.title`)
   assertString(errors, loop.pageUrl, `${label}.pageUrl`)
+  validateLoopTiming(errors, loop, label, generatedAt)
   validateRuntimeHealth(errors, loop.runtimeHealth, `${label}.runtimeHealth`)
 
   if (loop.frontCamera?.ready !== true) errors.push(`${label}.frontCamera.ready must be true.`)
@@ -382,6 +395,8 @@ async function validateRawDesktopEvidence(errors, loop, manifestEntry, screensho
 
   compareValue(errors, raw.success === true, loop.success, `${label}.success raw evidence`)
   compareValue(errors, raw.runId ?? null, loop.runId ?? null, `${label}.runId raw evidence`)
+  compareValue(errors, raw.startedAt ?? null, loop.startedAt ?? null, `${label}.startedAt raw evidence`)
+  compareValue(errors, raw.finishedAt ?? null, loop.finishedAt ?? null, `${label}.finishedAt raw evidence`)
   compareValue(errors, raw.browserName ?? null, loop.browserName ?? null, `${label}.browserName raw evidence`)
   compareValue(errors, raw.pageUrl ?? null, loop.pageUrl ?? null, `${label}.pageUrl raw evidence`)
 
@@ -538,6 +553,8 @@ async function validateRawPhoneEvidence(errors, loop, manifestEntry, label) {
 
   compareValue(errors, raw.success === true, loop.success, `${label}.success raw evidence`)
   compareValue(errors, raw.runId ?? null, loop.runId ?? null, `${label}.runId raw evidence`)
+  compareValue(errors, raw.startedAt ?? null, loop.startedAt ?? null, `${label}.startedAt raw evidence`)
+  compareValue(errors, raw.finishedAt ?? null, loop.finishedAt ?? null, `${label}.finishedAt raw evidence`)
   compareValue(errors, raw.pageUrl ?? null, loop.pageUrl ?? null, `${label}.pageUrl raw evidence`)
 
   const checks = raw.checks ?? {}
@@ -649,6 +666,32 @@ function validateRuntimeHealth(errors, value, label) {
 
   if (value.success !== true) errors.push(`${label}.success must be true.`)
   if (value.issueCount !== 0) errors.push(`${label}.issueCount must be 0.`)
+}
+
+function validateLoopTiming(errors, loop, label, generatedAt) {
+  assertString(errors, loop.startedAt, `${label}.startedAt`)
+  assertString(errors, loop.finishedAt, `${label}.finishedAt`)
+
+  const startedMs = timestampMs(loop.startedAt)
+  const finishedMs = timestampMs(loop.finishedAt)
+  const generatedMs = timestampMs(generatedAt)
+
+  if (!Number.isFinite(startedMs)) errors.push(`${label}.startedAt must be a valid timestamp.`)
+  if (!Number.isFinite(finishedMs)) errors.push(`${label}.finishedAt must be a valid timestamp.`)
+  if (!Number.isFinite(generatedMs)) errors.push('generatedAt must be a valid timestamp.')
+
+  if (Number.isFinite(startedMs) && Number.isFinite(finishedMs) && finishedMs < startedMs) {
+    errors.push(`${label}.finishedAt must not be earlier than startedAt.`)
+  }
+  if (Number.isFinite(finishedMs) && Number.isFinite(generatedMs) && generatedMs < finishedMs) {
+    errors.push(`generatedAt must not be earlier than ${label}.finishedAt.`)
+  }
+}
+
+function timestampMs(value) {
+  if (typeof value !== 'string' || value.length === 0) return Number.NaN
+  const time = Date.parse(value)
+  return Number.isFinite(time) ? time : Number.NaN
 }
 
 function validateBrowserEnvironment(errors, value, label, { expectedBrowserName, expectedExecutablePath }) {

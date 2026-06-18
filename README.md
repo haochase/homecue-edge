@@ -200,6 +200,8 @@ integrity / first-viewport visibility / responsive layout fields. The evidence
 manifest must also list every screenshot path declared by the raw browser JSON.
 When Windows Chrome is required, the validator recomputes desktop/Chrome parity
 from the summarized loop fields rather than trusting the reported parity flag.
+It also checks each loop's started/finished timestamps against the raw evidence
+and requires the report generation time to be no earlier than completed loops.
 
 ## Contributing & Security
 

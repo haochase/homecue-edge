@@ -118,6 +118,8 @@ function summarizeDesktopLoop(value) {
     run: true,
     success: value.success === true,
     runId: value.runId ?? null,
+    startedAt: value.startedAt ?? null,
+    finishedAt: value.finishedAt ?? null,
     browserName: value.browserName ?? null,
     pageUrl: value.pageUrl ?? null,
     title: checks.localizedUi?.title ?? null,
@@ -162,6 +164,8 @@ function summarizePhoneLoop(value) {
     run: true,
     success: value.success === true,
     runId: value.runId ?? null,
+    startedAt: value.startedAt ?? null,
+    finishedAt: value.finishedAt ?? null,
     pageUrl: value.pageUrl ?? null,
     title: checks.localizedUi?.title ?? null,
     frontCamera: {
