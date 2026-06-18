@@ -199,7 +199,8 @@ Chrome, and phone JSON evidence, including screenshot hashes and Chinese text
 integrity / first-viewport visibility / responsive layout fields. The evidence
 manifest must also list every screenshot path declared by the raw browser JSON.
 Screenshot byte counts and digests recorded inside raw browser JSON must also
-match the final evidence manifest.
+match the final evidence manifest. Desktop Chromium and Windows Chrome
+screenshots must come from their own browser-specific evidence directories.
 When Windows Chrome is required, the validator recomputes desktop/Chrome parity
 from the summarized loop fields rather than trusting the reported parity flag.
 It also checks each loop's started/finished timestamps against the raw evidence

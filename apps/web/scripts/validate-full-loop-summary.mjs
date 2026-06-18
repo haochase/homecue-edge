@@ -362,24 +362,37 @@ function requireManifestLabel(errors, files, label) {
 async function validateRawEvidence(errors, summary, { requirePhone, requireChrome }) {
   const manifest = manifestByLabel(summary.evidence?.files)
   const screenshots = manifestByLabel(summary.evidence?.files, 'Screenshot')
-  await validateRawDesktopEvidence(
+  const rawDesktop = await validateRawDesktopEvidence(
     errors,
     summary.loops?.desktop,
     manifest.get('Desktop JSON'),
     screenshots,
     'loops.desktop',
-    { appUrl: summary.appUrl, apiBase: summary.apiBase },
+    {
+      appUrl: summary.appUrl,
+      apiBase: summary.apiBase,
+      expectedScreenshotDir: 'assets/demo/playwright-chromium-screens/',
+    },
   )
 
+  let rawChrome = null
   if (requireChrome || summary.loops?.windowsChrome?.run) {
-    await validateRawDesktopEvidence(
+    rawChrome = await validateRawDesktopEvidence(
       errors,
       summary.loops?.windowsChrome,
       manifest.get('Windows Chrome JSON'),
       screenshots,
       'loops.windowsChrome',
-      { appUrl: summary.appUrl, apiBase: summary.apiBase },
+      {
+        appUrl: summary.appUrl,
+        apiBase: summary.apiBase,
+        expectedScreenshotDir: 'assets/demo/windows-chrome-screens/',
+      },
     )
+  }
+
+  if (requireChrome || summary.loops?.windowsChrome?.run) {
+    validateIndependentBrowserScreenshots(errors, rawDesktop, rawChrome)
   }
 
   if (requirePhone || summary.loops?.phone?.run) {
@@ -406,11 +419,18 @@ function manifestByLabel(files, labelFilter = null) {
   return map
 }
 
-async function validateRawDesktopEvidence(errors, loop, manifestEntry, screenshotEntries, label, { appUrl, apiBase }) {
-  if (!manifestEntry?.present || !loop?.run) return
+async function validateRawDesktopEvidence(
+  errors,
+  loop,
+  manifestEntry,
+  screenshotEntries,
+  label,
+  { appUrl, apiBase, expectedScreenshotDir },
+) {
+  if (!manifestEntry?.present || !loop?.run) return null
 
   const raw = await readManifestJson(errors, manifestEntry, label)
-  if (!raw) return
+  if (!raw) return null
 
   compareValue(errors, raw.success === true, loop.success, `${label}.success raw evidence`)
   compareValue(errors, raw.runId ?? null, loop.runId ?? null, `${label}.runId raw evidence`)
@@ -507,7 +527,14 @@ async function validateRawDesktopEvidence(errors, loop, manifestEntry, screensho
     loop.screenshotEvidence?.count ?? null,
     `${label}.screenshots length raw evidence`,
   )
-  validateRawScreenshotsInManifest(errors, raw.screenshots, checks.screenshotEvidence?.files, screenshotEntries, label)
+  validateRawScreenshotsInManifest(
+    errors,
+    raw.screenshots,
+    checks.screenshotEvidence?.files,
+    screenshotEntries,
+    label,
+    { expectedScreenshotDir },
+  )
   compareValue(
     errors,
     checks.scenePromptHandoff?.rawImageRetained ?? null,
@@ -550,9 +577,29 @@ async function validateRawDesktopEvidence(errors, loop, manifestEntry, screensho
     loop.externalExecutionSync?.acceptedActionCount ?? null,
     `${label}.externalExecutionSync.acceptedActionCount raw evidence`,
   )
+
+  return raw
 }
 
-function validateRawScreenshotsInManifest(errors, screenshots, rawScreenshotFiles, screenshotEntries, label) {
+function validateIndependentBrowserScreenshots(errors, desktop, chrome) {
+  if (!Array.isArray(desktop?.screenshots) || !Array.isArray(chrome?.screenshots)) return
+
+  const chromeScreenshots = new Set(chrome.screenshots)
+  const sharedScreenshots = desktop.screenshots.filter((screenshot) => chromeScreenshots.has(screenshot))
+
+  if (sharedScreenshots.length) {
+    errors.push(`desktop and Windows Chrome screenshots must be independent: ${sharedScreenshots.join(', ')}.`)
+  }
+}
+
+function validateRawScreenshotsInManifest(
+  errors,
+  screenshots,
+  rawScreenshotFiles,
+  screenshotEntries,
+  label,
+  { expectedScreenshotDir },
+) {
   if (!Array.isArray(screenshots)) {
     errors.push(`${label}.screenshots raw evidence must be an array.`)
     return
@@ -560,9 +607,17 @@ function validateRawScreenshotsInManifest(errors, screenshots, rawScreenshotFile
 
   const manifestEntriesByFile = new Map(screenshotEntries.map((entry) => [entry.file, entry]))
   const missingFiles = screenshots.filter((screenshot) => !manifestEntriesByFile.has(screenshot))
+  const wrongDirectoryFiles = expectedScreenshotDir
+    ? screenshots.filter((screenshot) => !screenshot.startsWith(expectedScreenshotDir))
+    : []
 
   if (missingFiles.length) {
     errors.push(`${label}.screenshots missing from evidence manifest: ${missingFiles.join(', ')}.`)
+  }
+  if (wrongDirectoryFiles.length) {
+    errors.push(
+      `${label}.screenshots must use ${expectedScreenshotDir}: ${wrongDirectoryFiles.join(', ')}.`,
+    )
   }
 
   if (!Array.isArray(rawScreenshotFiles)) {
