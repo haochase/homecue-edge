@@ -1,5 +1,5 @@
-import { buildStaticPlan, getDefaultDevices, getStaticContext } from './staticDemo'
-import type { DeviceState, InitialState, NetworkMode, PlanResponse, VisionSceneResponse } from './types'
+import { buildStaticPlan, executeStaticActions, getDefaultDevices, getStaticContext } from './staticDemo'
+import type { DeviceAction, DeviceState, ExecuteResponse, InitialState, NetworkMode, PlanResponse, VisionSceneResponse } from './types'
 
 const searchParams = new URLSearchParams(window.location.search)
 const urlApiBase = searchParams.get('apiBase')
@@ -77,6 +77,24 @@ export async function requestDeviceReset(): Promise<DeviceState> {
 
   if (!response.ok) {
     throw new Error('Device reset failed')
+  }
+
+  return response.json()
+}
+
+export async function requestExecuteActions(actions: DeviceAction[], devices: DeviceState): Promise<ExecuteResponse> {
+  if (demoRuntime.isStatic) {
+    return executeStaticActions(actions, Object.keys(devices).length ? devices : getDefaultDevices())
+  }
+
+  const response = await fetch(`${apiBase}/execute`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actions }),
+  })
+
+  if (!response.ok) {
+    throw new Error('Execute request failed')
   }
 
   return response.json()

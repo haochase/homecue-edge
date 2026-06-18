@@ -1,7 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
-import { demoRuntime, fetchDevices, loadInitialState, requestDeviceReset, requestPlan, requestVisionScene } from './apiClient'
-import type { DeviceState, NetworkMode, PlanResponse, PrecheckResult, Routine, TraceStep, VisionSceneResponse } from './types'
+import {
+  demoRuntime,
+  fetchDevices,
+  loadInitialState,
+  requestDeviceReset,
+  requestExecuteActions,
+  requestPlan,
+  requestVisionScene,
+} from './apiClient'
+import type {
+  DeviceAction,
+  DeviceState,
+  NetworkMode,
+  PlanResponse,
+  PrecheckResult,
+  Routine,
+  TraceStep,
+  VisionSceneResponse,
+} from './types'
 
 const initialPrompt =
   'I just got home and feel tired. Make the room comfortable, suggest something simple for dinner, and set up a relaxing movie mode.'
@@ -26,6 +43,7 @@ function App() {
   const [showTrace, setShowTrace] = useState(true)
   const [isPlanning, setIsPlanning] = useState(false)
   const [isReadingScene, setIsReadingScene] = useState(false)
+  const [isExecuting, setIsExecuting] = useState(false)
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraStatus, setCameraStatus] = useState('Camera standby')
   const [cameraError, setCameraError] = useState('')
@@ -94,6 +112,24 @@ function App() {
       setTrace([])
     } catch {
       setError('Could not reset the selected device runtime.')
+    }
+  }
+
+  async function confirmActions() {
+    if (!routine) return
+
+    setIsExecuting(true)
+    setError('')
+
+    try {
+      const data = await requestExecuteActions(getConfirmableActions(routine.actions, precheck), devices)
+      setExecution(data.execution)
+      setDevices(data.devices)
+      setExecuted(data.execution.some((item) => item.accepted))
+    } catch {
+      setError('Could not execute the confirmed home actions.')
+    } finally {
+      setIsExecuting(false)
     }
   }
 
@@ -358,6 +394,21 @@ function App() {
                   <li key={item}>{item}</li>
                 ))}
               </ol>
+              {!executed && (
+                <div className="actions plan-actions">
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={confirmActions}
+                    disabled={isExecuting || getConfirmableActions(routine.actions, precheck).length === 0}
+                  >
+                    {isExecuting ? 'Executing...' : 'Confirm actions'}
+                  </button>
+                  <button type="button" onClick={resetDevices} disabled={isExecuting}>
+                    Reset home
+                  </button>
+                </div>
+              )}
             </>
           ) : (
             <p className="muted">Run the agent to generate a structured home routine.</p>
@@ -519,6 +570,20 @@ function summarizeArgs(args: Record<string, unknown> | undefined): string {
     return `proposes ${actions.length} action(s): ${actions.map((a) => `${a.device}.${a.command}`).join(', ')}`
   }
   return JSON.stringify(args).slice(0, 160)
+}
+
+function getConfirmableActions(actions: DeviceAction[], precheck: PrecheckResult[]) {
+  if (!precheck.length) return actions
+
+  return actions.filter((action) =>
+    precheck.some(
+      (item) =>
+        item.accepted &&
+        item.device === action.device &&
+        item.command === action.command &&
+        item.value === action.value,
+    ),
+  )
 }
 
 function InfoBlock({ title, value }: { title: string; value: string }) {

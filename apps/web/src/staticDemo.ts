@@ -1,4 +1,14 @@
-import type { DeviceState, ExecutionResult, HomeContext, NetworkMode, PlanResponse, Routine, TraceStep } from './types'
+import type {
+  DeviceAction,
+  DeviceState,
+  ExecuteResponse,
+  ExecutionResult,
+  HomeContext,
+  NetworkMode,
+  PlanResponse,
+  Routine,
+  TraceStep,
+} from './types'
 
 const staticContext: HomeContext = {
   home: {
@@ -70,6 +80,13 @@ export function buildStaticPlan(
     devices,
     trace: useAgent ? buildStaticTrace(prompt) : [],
   }
+}
+
+export function executeStaticActions(actions: DeviceAction[], currentDevices: DeviceState): ExecuteResponse {
+  const devices = clone(currentDevices)
+  const execution = actions.map((action) => applyAction(devices, action))
+
+  return { execution, devices }
 }
 
 function buildStaticTrace(prompt: string): TraceStep[] {
@@ -192,10 +209,7 @@ function buildFallbackPlan(prompt: string): Routine {
   }
 }
 
-function applyAction(
-  devices: DeviceState,
-  action: { device: string; command: string; value: string | number | boolean },
-): ExecutionResult {
+function applyAction(devices: DeviceState, action: DeviceAction): ExecutionResult {
   const { device, command, value } = action
 
   if (!(device in devices)) {

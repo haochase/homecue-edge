@@ -18,10 +18,16 @@ export type Routine = {
   summary: string
   privacy_summary: string
   reasoning: string[]
-  actions: Array<{ device: string; command: string; value: string | number | boolean }>
+  actions: DeviceAction[]
   suggestions: Array<{ type: string; title: string; detail: string }>
   source_prompt: string
   provider: string
+}
+
+export type DeviceAction = {
+  device: string
+  command: string
+  value: string | number | boolean
 }
 
 export type HomeContext = {
@@ -73,6 +79,11 @@ export type PlanResponse = {
   executed?: boolean
   devices: DeviceState
   trace?: TraceStep[]
+}
+
+export type ExecuteResponse = {
+  execution: ExecutionResult[]
+  devices: DeviceState
 }
 
 export type InitialState = {

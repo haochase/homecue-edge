@@ -254,6 +254,10 @@ button:disabled {
   margin: 12px 0;
 }
 
+.plan-actions {
+  margin-top: 16px;
+}
+
 .error {
   margin: 12px 0 0;
   color: #963c29;
