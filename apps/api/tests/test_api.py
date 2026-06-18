@@ -413,6 +413,26 @@ def test_vision_scene_understands_chinese_home_hint():
     assert "calm" in payload["suggested_prompt"]
 
 
+def test_vision_scene_does_not_return_raw_image_payload():
+    image_payload = "data-that-looks-like-a-frame"
+    response = client.post(
+        "/vision/scene",
+        json={
+            "room": "living room",
+            "camera": "phone",
+            "text_hint": "晚上有点累，坐在客厅沙发上，室内光线偏暗",
+            "image_base64": image_payload,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["privacy_summary"]["raw_image_retained"] is False
+    assert "image frame provided" in payload["observations"]
+    assert image_payload not in str(payload)
+    assert "image_base64" not in payload
+
+
 def test_voice_returns_501_when_transcription_disabled():
     response = client.post("/voice", content=b"not-a-real-wav")
 

@@ -195,9 +195,30 @@ async function verifySceneSummary(page) {
   await tapButton(page, labels.analyzeScene)
   await page.waitForSelector('.scene-result', { timeout: 10000 })
 
+  const sceneState = await page.evaluate(() => {
+    const rows = Array.from(document.querySelectorAll('.scene-result .source-row'))
+    const scene = rows[0]?.querySelector('strong')?.textContent?.trim() ?? ''
+    const privacyText = document.querySelector('.scene-result .privacy')?.textContent?.trim() ?? ''
+    const observations = Array.from(document.querySelectorAll('.scene-observations li')).map((item) =>
+      item.textContent?.trim(),
+    )
+    return {
+      scene,
+      privacyText,
+      observations,
+      rawImageRetained: privacyText.includes('保留原始图像：是'),
+      rawImageNotRetained: privacyText.includes('保留原始图像：否'),
+    }
+  })
+
+  if (!sceneState.rawImageNotRetained || sceneState.rawImageRetained) {
+    throw new Error(`Scene privacy state did not prove raw image non-retention: ${JSON.stringify(sceneState)}`)
+  }
+
   return {
     frameSize,
     sceneText: await page.locator('.scene-result').innerText(),
+    ...sceneState,
   }
 }
 

@@ -78,6 +78,8 @@ function formatDesktop(value) {
   return [
     `- Title: ${checks.localizedUi?.title ?? 'unknown'}`,
     `- Scene prompt handoff: ${formatPromptHandoff(checks.scenePromptHandoff)}`,
+    `- Raw image retained: ${formatBoolean(checks.scenePromptHandoff?.rawImageRetained)}`,
+    `- Raw image echoed: ${formatBoolean(checks.scenePromptHandoff?.rawImageEchoed)}`,
     `- Propose-only status: ${checks.proposeOnly?.status ?? 'unknown'}`,
     `- Web confirmation source: ${checks.webConfirmExecute?.latestSource ?? 'unknown'}`,
     `- Offline fallback source: ${checks.offlineFallback?.latestSource ?? 'unknown'}`,
@@ -101,6 +103,7 @@ function formatPhone(value) {
     `- Speech status: ${speech.listeningState?.status ?? 'unknown'}`,
     `- Scene frame: ${checks.scene?.frameSize ?? 'not captured'}`,
     `- Scene prompt handoff: ${formatPromptHandoff(checks.scenePromptHandoff)}`,
+    `- Raw image retained: ${formatBoolean(checks.scene?.rawImageRetained)}`,
     `- External sync source: ${checks.externalExecution?.latestSource ?? 'unknown'}`,
     `- External accepted actions: ${checks.externalExecution?.acceptedActionCount ?? 'unknown'}`,
   ]
@@ -109,6 +112,12 @@ function formatPhone(value) {
 function formatPromptHandoff(value) {
   if (!value) return 'not checked'
   return value.proposeOnly && value.prompt ? 'ready' : 'incomplete'
+}
+
+function formatBoolean(value) {
+  if (value === true) return 'yes'
+  if (value === false) return 'no'
+  return 'unknown'
 }
 
 function formatStatus(success) {

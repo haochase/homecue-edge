@@ -131,9 +131,29 @@ async function verifyScenePromptHandoff(page) {
     }, null, { timeout: 8000 })
     .then((handle) => handle.jsonValue())
 
+  const sceneResponse = await postJson(`${apiBase}/vision/scene`, {
+    room: 'living room',
+    camera: 'desktop',
+    text_hint: '晚上有点累，坐在客厅沙发上，室内光线偏暗',
+    image_base64: 'desktop-loop-frame-sentinel',
+  })
+
+  if (sceneResponse.privacy_summary?.raw_image_retained !== false) {
+    throw new Error('Vision response did not mark raw_image_retained=false.')
+  }
+
+  const rawImageEchoed = JSON.stringify(sceneResponse).includes('desktop-loop-frame-sentinel')
+  if (rawImageEchoed) {
+    throw new Error('Vision response echoed the raw image payload.')
+  }
+
   return {
     prompt: promptState.prompt,
     proposeOnly: promptState.proposeOnly,
+    scene: sceneResponse.scene,
+    rawImageRetained: sceneResponse.privacy_summary?.raw_image_retained,
+    rawImageEchoed,
+    observations: sceneResponse.observations,
   }
 }
 

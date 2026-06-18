@@ -76,7 +76,8 @@ speech input control, checks that the camera stream prefers the front camera,
 captures one frame for `/vision/scene`, writes the returned suggested prompt
 into the planning request, creates a propose-only routine, then simulates an
 ESP32 serial confirmation through `/execute`. Evidence is written to the
-ignored `assets/demo/phone-loop.json` file.
+ignored `assets/demo/phone-loop.json` file, including the scene privacy state
+showing raw image non-retention.
 
 ## Desktop Browser Loop
 
@@ -92,7 +93,9 @@ the `/vision/scene` suggested-prompt handoff, propose-only planning, confirms
 the routine from the web UI, checks offline fallback, and simulates an ESP32
 serial confirmation through `/execute`. Evidence is written to the ignored
 `assets/demo/desktop-loop.json` file, with current-step screenshots in the
-ignored `assets/demo/playwright-chromium-screens/` directory.
+ignored `assets/demo/playwright-chromium-screens/` directory. The desktop loop
+also sends a sentinel image payload directly to `/vision/scene` and fails if the
+API returns that payload or marks it retained.
 
 ## Full Loop
 

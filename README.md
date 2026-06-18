@@ -89,7 +89,8 @@ Invoke-RestMethod http://127.0.0.1:8723/vision/scene `
 The response contains a privacy-safe `scene`, `observations`,
 `privacy_summary`, and `suggested_prompt`. The current implementation is
 `mock_home_vlm_adapter`; it is a stable adapter point for later local
-home-scene VLM inference.
+home-scene VLM inference. Regression checks assert that image payloads are not
+returned by the API and that loop evidence reports `raw_image_retained=false`.
 
 ## Local Development
 
@@ -146,7 +147,8 @@ can run the mobile multimodal loop with minimal manual steps:
 The script configures ADB reverse ports and Android Chrome DevTools, then checks
 Chinese UI text, speech-input readiness, front-camera preference, scene capture,
 the `/vision/scene` suggested-prompt handoff into propose-only planning, and
-the ESP32-style `/execute` synchronization path.
+the ESP32-style `/execute` synchronization path. Phone evidence also records
+that the scene privacy summary reports no raw image retention.
 
 For a computer-side browser check without phone hardware:
 
@@ -158,7 +160,8 @@ This launches desktop Chromium and verifies the Chinese UI, propose/confirm
 flow, scene suggested-prompt handoff, offline fallback, and ESP32-style
 execution synchronization. The desktop loop writes current-step screenshots
 next to its ignored JSON evidence so the Markdown report does not rely on stale
-screen captures.
+screen captures. Desktop and Windows Chrome checks also send a sentinel image
+payload and fail if `/vision/scene` echoes it back or marks it retained.
 
 To minimize manual setup, run the full loop wrapper. It starts the API and Vite
 dev server if they are not already running, runs the desktop loop, then writes a

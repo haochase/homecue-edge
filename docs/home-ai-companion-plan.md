@@ -53,8 +53,10 @@ P1 target after P0 is stable:
 - Replace the mock vision adapter with a local home-scene VLM service.
 - Add phone still-frame capture in the web console.
 - Feed the `/vision/scene.suggested_prompt` into `/plan` without raw image
-  retention.
-- Add regression tests that assert raw images are not persisted by default.
+  retention. The current loop verifies this path with phone, desktop Chromium,
+  and installed Windows Chrome.
+- Keep regression coverage that asserts raw image payloads are not returned or
+  retained by default.
 
 P2 target after a model/runtime choice is proven:
 
@@ -85,7 +87,7 @@ This branch adds:
 - `VisionSceneRequest`
 - `VisionSceneResponse`
 - `app.vision.analyze_scene()`
-- API tests for the privacy-safe scene response
+- API tests for the privacy-safe scene response and raw-image non-retention
 
 The current provider is `mock_home_vlm_adapter`. It is intentionally
 deterministic and dependency-free. A real adapter can later keep the same
