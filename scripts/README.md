@@ -38,7 +38,9 @@ the contract. Desktop and Windows Chrome loops write per-step screenshots to
 ignored `assets/demo/*-screens/` folders and the report uses only the screenshot
 paths recorded in the current JSON evidence. Browser loops also fail on
 unexpected console errors, page exceptions, failed requests, or HTTP 4xx/5xx
-responses, and the report summarizes those runtime-health counts.
+responses. They verify that each screenshot is a non-empty PNG with plausible
+dimensions and image data, and the report summarizes runtime-health and
+screenshot-evidence counts.
 
 ```powershell
 .\scripts\check-chrome-loop.ps1

@@ -79,6 +79,7 @@ function formatDesktop(value) {
     `- Title: ${checks.localizedUi?.title ?? 'unknown'}`,
     `- Responsive layout: ${formatResponsiveLayout(checks.responsiveLayout)}`,
     `- Runtime health: ${formatRuntimeHealth(checks.runtimeHealth)}`,
+    `- Screenshot evidence: ${formatScreenshotEvidence(checks.screenshotEvidence)}`,
     `- Scene prompt handoff: ${formatPromptHandoff(checks.scenePromptHandoff)}`,
     `- Raw image retained: ${formatBoolean(checks.scenePromptHandoff?.rawImageRetained)}`,
     `- Raw image echoed: ${formatBoolean(checks.scenePromptHandoff?.rawImageEchoed)}`,
@@ -142,6 +143,13 @@ function formatRuntimeHealth(value) {
   }
 
   return `clean (${summary})`
+}
+
+function formatScreenshotEvidence(value) {
+  if (!value) return 'not checked'
+  if (value.success === false) return `fail (${value.error ?? 'unknown error'})`
+
+  return `${value.count ?? 0} PNGs, min ${value.minWidth ?? '?'}x${value.minHeight ?? '?'}, ${value.minBytes ?? '?'} bytes`
 }
 
 function formatBoolean(value) {

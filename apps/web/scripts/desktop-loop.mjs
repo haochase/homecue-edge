@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -67,6 +67,7 @@ try {
   await captureScreenshot(page, '05-offline-fallback.png')
   await runCheck('externalExecutionSync', () => verifyExternalExecutionSync(page))
   await captureScreenshot(page, '06-external-sync.png')
+  await runCheck('screenshotEvidence', () => verifyScreenshotEvidence(evidence.screenshots))
   await runCheck('runtimeHealth', () => assertRuntimeHealth(runtimeHealth))
 
   evidence.success = true
@@ -350,6 +351,68 @@ async function captureScreenshot(page, filename) {
   const file = path.join(screenshotDir, filename)
   await page.screenshot({ path: file, fullPage: true })
   evidence.screenshots.push(relativePath(file))
+}
+
+async function verifyScreenshotEvidence(screenshots) {
+  const expectedCount = 6
+  if (screenshots.length !== expectedCount) {
+    throw new Error(`Expected ${expectedCount} screenshots, got ${screenshots.length}.`)
+  }
+
+  const results = []
+  for (const screenshot of screenshots) {
+    const absolutePath = path.resolve(repoRoot, screenshot)
+    const fileStat = await stat(absolutePath)
+    const metadata = parsePngMetadata(await readFile(absolutePath))
+    const result = {
+      path: screenshot,
+      bytes: fileStat.size,
+      ...metadata,
+    }
+
+    if (result.width < 390 || result.height < 300 || result.bytes < 5000 || result.imageDataBytes < 1000) {
+      throw new Error(`Screenshot evidence is too small or blank-like: ${JSON.stringify(result)}`)
+    }
+
+    results.push(result)
+  }
+
+  return {
+    count: results.length,
+    minWidth: Math.min(...results.map((item) => item.width)),
+    minHeight: Math.min(...results.map((item) => item.height)),
+    minBytes: Math.min(...results.map((item) => item.bytes)),
+    minImageDataBytes: Math.min(...results.map((item) => item.imageDataBytes)),
+    files: results,
+  }
+}
+
+function parsePngMetadata(buffer) {
+  const signature = buffer.subarray(0, 8).toString('hex')
+  if (signature !== '89504e470d0a1a0a') {
+    throw new Error('Screenshot is not a PNG file.')
+  }
+
+  const width = buffer.readUInt32BE(16)
+  const height = buffer.readUInt32BE(20)
+  let offset = 8
+  let imageDataBytes = 0
+
+  while (offset + 12 <= buffer.length) {
+    const length = buffer.readUInt32BE(offset)
+    const type = buffer.subarray(offset + 4, offset + 8).toString('ascii')
+    if (type === 'IDAT') {
+      imageDataBytes += length
+    }
+    offset += 12 + length
+    if (type === 'IEND') break
+  }
+
+  return {
+    width,
+    height,
+    imageDataBytes,
+  }
 }
 
 function relativePath(file) {
