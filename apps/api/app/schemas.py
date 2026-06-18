@@ -24,6 +24,23 @@ class ExecuteRequest(BaseModel):
     actions: list[DeviceAction] = Field(default_factory=list)
 
 
+class VisionSceneRequest(BaseModel):
+    room: str = "living room"
+    text_hint: str = ""
+    camera: Literal["phone", "esp32-cam", "desktop", "mock"] = "mock"
+    image_base64: str = ""
+
+
+class VisionSceneResponse(BaseModel):
+    provider: str
+    scene: str
+    confidence: float
+    observations: list[str] = Field(default_factory=list)
+    privacy_summary: dict = Field(default_factory=dict)
+    suggested_prompt: str
+    model_route: str
+
+
 class Suggestion(BaseModel):
     type: str
     title: str

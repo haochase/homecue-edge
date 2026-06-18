@@ -6,7 +6,8 @@ from app.context import BASE_CONTEXT
 from app.devices import DeviceStore
 from app.planner.service import build_plan_with_trace
 from app.planner.tools import validate_action
-from app.schemas import ExecuteRequest, PlanRequest
+from app.schemas import ExecuteRequest, PlanRequest, VisionSceneRequest
+from app.vision import analyze_scene
 
 
 app = FastAPI(title="HomeCue Edge API", version="0.1.0")
@@ -46,6 +47,11 @@ def get_context() -> dict:
 @app.get("/devices")
 def get_devices() -> dict:
     return device_store.all()
+
+
+@app.post("/vision/scene")
+def vision_scene(request: VisionSceneRequest) -> dict:
+    return analyze_scene(request).model_dump()
 
 
 @app.post("/plan")
