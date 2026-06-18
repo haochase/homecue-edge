@@ -157,7 +157,8 @@ This launches desktop Chromium and verifies the Chinese UI, propose/confirm
 flow, offline fallback, and ESP32-style execution synchronization.
 
 To minimize manual setup, run the full loop wrapper. It starts the API and Vite
-dev server if they are not already running, then runs the desktop loop:
+dev server if they are not already running, runs the desktop loop, then writes a
+Markdown report to `assets/demo/full-loop-report.md`:
 
 ```powershell
 .\scripts\check-full-loop.ps1

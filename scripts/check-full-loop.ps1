@@ -3,7 +3,8 @@ param(
   [string]$ApiBase = "http://127.0.0.1:8723",
   [switch]$IncludePhone,
   [switch]$SkipDesktop,
-  [int]$StartupTimeoutSeconds = 60
+  [int]$StartupTimeoutSeconds = 60,
+  [string]$ReportPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,6 +14,10 @@ $ApiDir = Join-Path $Root "apps\api"
 $WebDir = Join-Path $Root "apps\web"
 $ApiPort = [System.Uri]$ApiBase | Select-Object -ExpandProperty Port
 $WebPort = [System.Uri]$AppUrl | Select-Object -ExpandProperty Port
+
+if (-not $ReportPath) {
+  $ReportPath = Join-Path $Root "assets\demo\full-loop-report.md"
+}
 
 function Test-HttpOk {
   param([string]$Url)
@@ -103,6 +108,25 @@ if (-not $SkipDesktop) {
 
 if ($IncludePhone) {
   powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\check-phone-loop.ps1" -AppUrl $AppUrl -ApiBase $ApiBase
+}
+
+Push-Location $WebDir
+try {
+  $ReportArgs = @($ReportPath, (Join-Path $Root "assets\demo\desktop-loop.json"))
+  if ($IncludePhone) {
+    $ReportArgs += (Join-Path $Root "assets\demo\phone-loop.json")
+  }
+  else {
+    $ReportArgs += "__phone_not_run__.json"
+  }
+
+  npm run report:loop -- @ReportArgs
+  if ($LASTEXITCODE -ne 0) {
+    throw "report:loop failed."
+  }
+}
+finally {
+  Pop-Location
 }
 
 Write-Host "Full loop check complete."

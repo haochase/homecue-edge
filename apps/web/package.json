@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "desktop:loop": "node scripts/desktop-loop.mjs",
     "phone:loop": "node scripts/phone-loop.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "report:loop": "node scripts/summarize-full-loop.mjs"
   },
   "dependencies": {
     "react": "^19.2.6",

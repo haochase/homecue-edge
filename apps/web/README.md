@@ -94,7 +94,8 @@ Evidence is written to the ignored `assets/demo/desktop-loop.json` file.
 ## Full Loop
 
 From the repository root, use the full loop wrapper to start the API and Vite
-dev server when needed, then run the desktop loop:
+dev server when needed, run the desktop loop, and write
+`assets/demo/full-loop-report.md`:
 
 ```powershell
 .\scripts\check-full-loop.ps1
