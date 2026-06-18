@@ -134,6 +134,19 @@ This runs API dependency install, Python compile, API tests, and web lint/build.
 GitHub Actions runs the same API tests and web lint/build on pushes and pull
 requests via `.github/workflows/ci.yml`.
 
+## Phone Loop Check
+
+With the API and web dev server running, a USB-connected unlocked Android phone
+can run the mobile multimodal loop with minimal manual steps:
+
+```powershell
+.\scripts\check-phone-loop.ps1
+```
+
+The script configures ADB reverse ports and Android Chrome DevTools, then checks
+Chinese UI text, speech-input readiness, front-camera preference, scene capture,
+and the ESP32-style `/execute` synchronization path.
+
 ## Contributing & Security
 
 This repository is public and holds technical content only. Before committing,

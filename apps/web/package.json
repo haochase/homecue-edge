@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "phone:loop": "node scripts/phone-loop.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

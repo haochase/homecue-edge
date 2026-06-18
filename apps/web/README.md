@@ -53,3 +53,26 @@ npm run build
 ```
 
 The build output is written to `dist/`.
+
+## Android Phone Loop
+
+Use the phone loop when an Android phone is connected by USB and the API plus
+Vite dev server are already running on the host.
+
+```powershell
+..\..\scripts\check-phone-loop.ps1
+```
+
+The wrapper verifies an authorized ADB device, grants Chrome camera/microphone
+permissions when possible, maps phone localhost ports back to the host with
+`adb reverse`, exposes Android Chrome DevTools on `127.0.0.1:9222`, and runs:
+
+```powershell
+npm run phone:loop -- http://127.0.0.1:5173 http://127.0.0.1:8723 http://127.0.0.1:9222
+```
+
+The test opens the console on the phone, verifies the Chinese UI, starts the
+speech input control, checks that the camera stream prefers the front camera,
+captures one frame for `/vision/scene`, creates a propose-only routine, then
+simulates an ESP32 serial confirmation through `/execute`. Evidence is written
+to the ignored `assets/demo/phone-loop.json` file.
