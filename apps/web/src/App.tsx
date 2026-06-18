@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
-import { demoRuntime, fetchDevices, loadInitialState, requestDeviceReset, requestPlan } from './apiClient'
-import type { DeviceState, NetworkMode, PlanResponse, PrecheckResult, Routine, TraceStep } from './types'
+import { demoRuntime, fetchDevices, loadInitialState, requestDeviceReset, requestPlan, requestVisionScene } from './apiClient'
+import type { DeviceState, NetworkMode, PlanResponse, PrecheckResult, Routine, TraceStep, VisionSceneResponse } from './types'
 
 const initialPrompt =
   'I just got home and feel tired. Make the room comfortable, suggest something simple for dinner, and set up a relaxing movie mode.'
@@ -18,8 +18,11 @@ function App() {
   const [executed, setExecuted] = useState(true)
   const [devices, setDevices] = useState<DeviceState>({})
   const [trace, setTrace] = useState<TraceStep[]>([])
+  const [sceneHint, setSceneHint] = useState('tired on sofa at night, living room is dim')
+  const [scene, setScene] = useState<VisionSceneResponse | null>(null)
   const [showTrace, setShowTrace] = useState(true)
   const [isPlanning, setIsPlanning] = useState(false)
+  const [isReadingScene, setIsReadingScene] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -82,12 +85,32 @@ function App() {
     }
   }
 
+  async function readScene() {
+    setIsReadingScene(true)
+    setError('')
+
+    try {
+      const data = await requestVisionScene(sceneHint)
+      setScene(data)
+    } catch {
+      setError('Could not read the home scene. Check the API server or use static demo mode.')
+    } finally {
+      setIsReadingScene(false)
+    }
+  }
+
+  function useScenePrompt() {
+    if (!scene) return
+    setPrompt(scene.suggested_prompt)
+    setProposeOnly(true)
+  }
+
   return (
     <main className="app-shell">
       <section className="topbar">
         <div>
-          <p className="eyebrow">Qwen EdgeAgent prototype</p>
-          <h1>HomeCue Edge</h1>
+          <p className="eyebrow">Home-scene companion prototype</p>
+          <h1>Home AI Companion</h1>
         </div>
         <div className="status-cluster">
           <div className={`runtime-pill ${demoRuntime.isStatic ? 'static' : 'api'}`}>{demoRuntime.label}</div>
@@ -162,9 +185,50 @@ function App() {
           )}
         </div>
 
+        <div className="panel scene-panel">
+          <div className="panel-header">
+            <p className="eyebrow">Home scene</p>
+            <h2>Phone vision summary</h2>
+          </div>
+          <textarea
+            className="scene-input"
+            value={sceneHint}
+            onChange={(event) => setSceneHint(event.target.value)}
+            aria-label="Scene hint"
+          />
+          <div className="actions scene-actions">
+            <button type="button" className="primary" onClick={readScene} disabled={isReadingScene}>
+              {isReadingScene ? 'Reading...' : 'Read scene'}
+            </button>
+            <button type="button" onClick={useScenePrompt} disabled={!scene}>
+              Use prompt
+            </button>
+          </div>
+          {scene ? (
+            <div className="scene-result">
+              <div className="source-row">
+                <span>scene</span>
+                <strong>{scene.scene}</strong>
+              </div>
+              <div className="source-row">
+                <span>confidence</span>
+                <strong>{Math.round(scene.confidence * 100)}%</strong>
+              </div>
+              <p className="privacy">{formatPrivacySummary(scene.privacy_summary)}</p>
+              <ul className="scene-observations">
+                {scene.observations.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="muted">Summarize a room hint before sending it to planning.</p>
+          )}
+        </div>
+
         <div className="panel plan-panel">
           <div className="panel-header">
-            <p className="eyebrow">Qwen-compatible plan</p>
+            <p className="eyebrow">Guarded home plan</p>
             <h2>{routine ? routine.mode.replaceAll('_', ' ') : 'Ready'}</h2>
           </div>
           {routine && (
@@ -364,6 +428,12 @@ function formatDeviceDetail(device: DeviceState[string]) {
   if (device.playlist) return `playlist: ${device.playlist}`
   if (device.message) return device.message
   return 'ready'
+}
+
+function formatPrivacySummary(summary: VisionSceneResponse['privacy_summary']) {
+  return Object.entries(summary)
+    .map(([key, value]) => `${key}: ${String(value)}`)
+    .join(' / ')
 }
 
 export default App

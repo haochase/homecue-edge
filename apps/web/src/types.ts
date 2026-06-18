@@ -55,6 +55,16 @@ export type PrecheckResult = {
   reason: string
 }
 
+export type VisionSceneResponse = {
+  provider: string
+  scene: string
+  confidence: number
+  observations: string[]
+  privacy_summary: Record<string, string | number | boolean>
+  suggested_prompt: string
+  model_route: string
+}
+
 export type PlanResponse = {
   context: HomeContext
   routine: Routine

@@ -1,5 +1,5 @@
 import { buildStaticPlan, getDefaultDevices, getStaticContext } from './staticDemo'
-import type { DeviceState, InitialState, NetworkMode, PlanResponse } from './types'
+import type { DeviceState, InitialState, NetworkMode, PlanResponse, VisionSceneResponse } from './types'
 
 const searchParams = new URLSearchParams(window.location.search)
 const urlApiBase = searchParams.get('apiBase')
@@ -77,6 +77,40 @@ export async function requestDeviceReset(): Promise<DeviceState> {
 
   if (!response.ok) {
     throw new Error('Device reset failed')
+  }
+
+  return response.json()
+}
+
+export async function requestVisionScene(textHint: string, room = 'living room'): Promise<VisionSceneResponse> {
+  const fallback: VisionSceneResponse = {
+    provider: 'static_home_vlm_adapter',
+    scene: textHint.toLowerCase().includes('tired') ? 'low-energy evening arrival' : 'ordinary home context',
+    confidence: 0.6,
+    observations: ['input_camera=mock', `room=${room}`, 'static demo scene summary'],
+    privacy_summary: {
+      room,
+      raw_image_retained: false,
+      faces_identified: false,
+    },
+    suggested_prompt: textHint.trim()
+      ? `Use this scene summary for a reversible home routine: ${textHint.trim()}`
+      : 'Use the current room context and user preference summary to propose a reversible comfort routine.',
+    model_route: 'static home-scene VLM adapter',
+  }
+
+  if (demoRuntime.isStatic) {
+    return fallback
+  }
+
+  const response = await fetch(`${apiBase}/vision/scene`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ room, camera: 'phone', text_hint: textHint }),
+  })
+
+  if (!response.ok) {
+    throw new Error('Vision scene request failed')
   }
 
   return response.json()

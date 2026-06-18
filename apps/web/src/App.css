@@ -85,7 +85,7 @@
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(280px, 0.88fr) minmax(300px, 1fr) minmax(320px, 1.12fr);
+  grid-template-columns: minmax(260px, 0.9fr) minmax(260px, 1fr) minmax(260px, 0.95fr) minmax(300px, 1.1fr);
   gap: 14px;
 }
 
@@ -128,6 +128,10 @@ textarea {
   color: #25352f;
   padding: 14px;
   font: inherit;
+}
+
+.scene-input {
+  min-height: 96px;
 }
 
 textarea:focus,
@@ -177,6 +181,10 @@ button:disabled {
   display: grid;
   grid-template-columns: 1.2fr 0.8fr;
   gap: 10px;
+}
+
+.scene-actions {
+  margin: 12px 0;
 }
 
 .error {
@@ -404,6 +412,22 @@ button:disabled {
 
 .reasoning li + li {
   margin-top: 9px;
+}
+
+.scene-result {
+  display: grid;
+  gap: 10px;
+}
+
+.scene-observations {
+  margin: 0;
+  padding-left: 20px;
+  color: #40504b;
+  line-height: 1.45;
+}
+
+.scene-observations li + li {
+  margin-top: 5px;
 }
 
 .suggestion-list {
