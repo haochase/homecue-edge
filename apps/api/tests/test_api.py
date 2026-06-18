@@ -397,7 +397,7 @@ def test_vision_scene_returns_privacy_safe_prompt():
     assert payload["provider"] == "mock_home_vlm_adapter"
     assert payload["scene"] == "low-energy evening arrival"
     assert payload["privacy_summary"]["raw_image_retained"] is False
-    assert "calm" in payload["suggested_prompt"]
+    assert "安静" in payload["suggested_prompt"]
 
 
 def test_vision_scene_understands_chinese_home_hint():
@@ -410,7 +410,7 @@ def test_vision_scene_understands_chinese_home_hint():
     payload = response.json()
     assert payload["scene"] == "low-energy evening arrival"
     assert payload["privacy_summary"]["raw_image_retained"] is False
-    assert "calm" in payload["suggested_prompt"]
+    assert "低负担" in payload["suggested_prompt"]
 
 
 def test_vision_scene_does_not_return_raw_image_payload():

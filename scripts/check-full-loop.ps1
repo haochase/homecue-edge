@@ -77,13 +77,24 @@ function Test-PortListening {
 
 function Test-ApiVisionContract {
   $Body = '{"room":"living room","camera":"phone","text_hint":"\u665a\u4e0a\u6709\u70b9\u7d2f\uff0c\u5750\u5728\u5ba2\u5385\u6c99\u53d1\u4e0a\uff0c\u5ba4\u5185\u5149\u7ebf\u504f\u6697"}'
+  $Client = $null
 
   try {
-    $Result = Invoke-RestMethod "$ApiBase/vision/scene" -Method Post -ContentType "application/json; charset=utf-8" -Body $Body -TimeoutSec 5
-    return $Result.scene -eq "low-energy evening arrival" -and $Result.suggested_prompt -match "settling in after a tiring day"
+    $Client = New-Object System.Net.WebClient
+    $Client.Encoding = [System.Text.Encoding]::UTF8
+    $Client.Headers["Content-Type"] = "application/json; charset=utf-8"
+    $Text = $Client.UploadString("$ApiBase/vision/scene", "POST", $Body)
+    $Result = $Text | ConvertFrom-Json
+    $ExpectedPromptText = [string]::Concat([char]0x4f4e, [char]0x8d1f, [char]0x62c5)
+    return $Result.scene -eq "low-energy evening arrival" -and $Result.suggested_prompt.Contains($ExpectedPromptText)
   }
   catch {
     return $false
+  }
+  finally {
+    if ($Client) {
+      $Client.Dispose()
+    }
   }
 }
 

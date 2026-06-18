@@ -657,6 +657,7 @@ button:disabled {
   .context-grid,
   .device-grid,
   .voice-input-row,
+  .camera-controls,
   .actions {
     grid-template-columns: 1fr;
   }

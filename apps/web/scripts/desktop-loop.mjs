@@ -224,7 +224,7 @@ async function verifyScenePromptHandoff(page) {
       }
 
       const value = textarea.value.trim()
-      if (value.includes('User appears to be settling in after a tiring day') && proposeOnly.checked) {
+      if (value.includes('低负担') && proposeOnly.checked) {
         return {
           prompt: value,
           proposeOnly: proposeOnly.checked,

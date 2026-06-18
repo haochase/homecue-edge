@@ -56,6 +56,15 @@ const preferredCameraConstraints: MediaStreamConstraints[] = [
   },
 ]
 
+const frontCameraLabelPattern = /front|user|selfie|face|前置|前摄|自拍/i
+
+type CameraOpenResult = {
+  stream: MediaStream
+  preference: 'front-facing-mode' | 'front-device-label' | 'browser-preferred'
+  facingMode?: string
+  trackLabel?: string
+}
+
 type BrowserSpeechAlternative = {
   transcript?: string
 }
@@ -145,7 +154,7 @@ function App() {
         }
       })
       .catch(() => {
-        setError(`无法连接 ${demoRuntime.detail}。请启动 FastAPI 网关，或使用 ?demo=static 打开静态演示。`)
+        setError(`无法连接 ${demoRuntime.detail}。请启动本地网关服务，或在地址后追加 ?demo=static 打开静态演示。`)
       })
   }, [])
 
@@ -285,7 +294,7 @@ function App() {
 
     if (!SpeechRecognition) {
       setVoiceStatus('语音不可用')
-      setVoiceError('当前浏览器不支持 Web Speech API，请使用 Android Chrome 或继续文字输入。')
+      setVoiceError('当前浏览器不支持语音识别接口，请使用安卓 Chrome 或继续文字输入。')
       return
     }
 
@@ -339,11 +348,11 @@ function App() {
     }
 
     setCameraError('')
-    setCameraStatus('正在打开前置摄像头...')
+    setCameraStatus('正在优先打开前置摄像头...')
 
     try {
-      const stream = await openPreferredCamera()
-      const facingMode = getStreamFacingMode(stream)
+      const camera = await openPreferredCamera()
+      const { stream } = camera
 
       cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
       cameraStreamRef.current = stream
@@ -354,7 +363,7 @@ function App() {
       }
 
       setCameraActive(true)
-      setCameraStatus(formatCameraReadyStatus(facingMode))
+      setCameraStatus(formatCameraReadyStatus(camera))
     } catch {
       setCameraActive(false)
       setCameraStatus('摄像头受阻')
@@ -406,7 +415,7 @@ function App() {
       <section className="topbar">
         <div>
           <p className="eyebrow">家庭场景智能管家原型</p>
-          <h1>家庭 AI 管家</h1>
+          <h1>家庭智能管家</h1>
         </div>
         <div className="status-cluster">
           <div className={`runtime-pill ${demoRuntime.isStatic ? 'static' : 'api'}`}>{formatRuntimeLabel()}</div>
@@ -460,7 +469,7 @@ function App() {
               onChange={(event) => setProposeOnly(event.target.checked)}
             />
             <span>只生成建议</span>
-            <small>等待硬件键确认（execute=false）</small>
+            <small>等待硬件键确认，仅建议不执行</small>
           </label>
           <div className="actions">
             <button type="button" className="primary" onClick={runPlan} disabled={isPlanning}>
@@ -506,12 +515,12 @@ function App() {
           <div className={`camera-surface ${cameraActive ? 'active' : ''}`}>
             <video ref={cameraPreviewRef} className="camera-preview" autoPlay muted playsInline />
             {!cameraActive && (
-              <div className="camera-placeholder">{sceneImageBase64 ? '画面已截取' : '前置摄像头待机'}</div>
+              <div className="camera-placeholder">{sceneImageBase64 ? '画面已截取' : '优先前置摄像头待机'}</div>
             )}
           </div>
           <div className="camera-controls">
             <button type="button" onClick={startCamera}>
-              打开前置摄像头
+              优先打开前置摄像头
             </button>
             <button type="button" onClick={captureSceneFrame} disabled={!cameraActive}>
               截取画面
@@ -814,12 +823,13 @@ function extractTranscript(results: BrowserSpeechResults) {
   return transcripts.join('，')
 }
 
-async function openPreferredCamera() {
+async function openPreferredCamera(): Promise<CameraOpenResult> {
   let firstError: unknown
 
   for (const constraints of preferredCameraConstraints) {
     try {
-      return await navigator.mediaDevices.getUserMedia(constraints)
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      return await preferFrontCamera(stream)
     } catch (error) {
       firstError ??= error
     }
@@ -828,14 +838,89 @@ async function openPreferredCamera() {
   throw firstError ?? new Error('摄像头不可用')
 }
 
-function getStreamFacingMode(stream: MediaStream) {
-  return stream.getVideoTracks()[0]?.getSettings().facingMode
+async function preferFrontCamera(stream: MediaStream): Promise<CameraOpenResult> {
+  const current = describeCameraStream(stream)
+
+  if (current.facingMode === 'user') {
+    return { stream, preference: 'front-facing-mode', ...current }
+  }
+
+  if (isFrontCameraLabel(current.trackLabel)) {
+    return { stream, preference: 'front-device-label', ...current }
+  }
+
+  const labeledFrontCamera = await openLabeledFrontCamera(stream)
+  if (labeledFrontCamera) return labeledFrontCamera
+
+  return { stream, preference: 'browser-preferred', ...current }
 }
 
-function formatCameraReadyStatus(facingMode: string | undefined) {
-  if (facingMode === 'user') return '前置摄像头已就绪'
-  if (facingMode) return `摄像头已就绪（设备返回：${facingMode}）`
-  return '摄像头已就绪（已优先请求前置）'
+async function openLabeledFrontCamera(currentStream: MediaStream): Promise<CameraOpenResult | null> {
+  if (!navigator.mediaDevices.enumerateDevices) return null
+
+  const currentDeviceId = currentStream.getVideoTracks()[0]?.getSettings().deviceId
+  const devices = await navigator.mediaDevices.enumerateDevices()
+  const frontDevice = devices.find(
+    (device) =>
+      device.kind === 'videoinput' &&
+      device.deviceId &&
+      device.deviceId !== currentDeviceId &&
+      isFrontCameraLabel(device.label),
+  )
+
+  if (!frontDevice) return null
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        deviceId: { exact: frontDevice.deviceId },
+        height: { ideal: 720 },
+        width: { ideal: 1280 },
+      },
+    })
+
+    currentStream.getTracks().forEach((track) => track.stop())
+    return { stream, preference: 'front-device-label', ...describeCameraStream(stream) }
+  } catch {
+    return null
+  }
+}
+
+function describeCameraStream(stream: MediaStream) {
+  const track = stream.getVideoTracks()[0]
+
+  return {
+    facingMode: track?.getSettings().facingMode,
+    trackLabel: track?.label,
+  }
+}
+
+function isFrontCameraLabel(label: string | undefined) {
+  return Boolean(label && frontCameraLabelPattern.test(label))
+}
+
+function formatCameraReadyStatus(camera: CameraOpenResult) {
+  if (camera.preference === 'front-facing-mode' || camera.preference === 'front-device-label') {
+    return '前置摄像头已就绪'
+  }
+
+  if (camera.facingMode) {
+    return `摄像头已就绪（设备返回：${translateCameraFacingMode(camera.facingMode)}，已优先请求前置）`
+  }
+
+  return '摄像头已就绪（已优先请求前置，浏览器未返回镜头标识）'
+}
+
+function translateCameraFacingMode(facingMode: string) {
+  const labels: Record<string, string> = {
+    environment: '后置',
+    left: '左侧',
+    right: '右侧',
+    user: '前置',
+  }
+
+  return labels[facingMode] ?? facingMode
 }
 
 function translateSpeechError(error: string | undefined) {
@@ -853,7 +938,7 @@ function translateSpeechError(error: string | undefined) {
 }
 
 function formatRuntimeLabel() {
-  return demoRuntime.isStatic ? '静态演示' : '边缘 API'
+  return demoRuntime.isStatic ? '静态演示' : '边缘接口'
 }
 
 function formatActionName(device: string, command: string) {
@@ -906,6 +991,7 @@ function translateSource(source: string) {
     mock: '本地模拟',
     static_mock: '静态模拟',
     static_agent: '静态智能体',
+    static_fallback: '静态兜底',
     local_fallback: '本地兜底',
     qwen: '云端模型',
     plan: '计划接口',
@@ -973,6 +1059,7 @@ function translateValue(value: string) {
     'input_camera=phone': '输入摄像头：手机',
     'room=living room': '房间：客厅',
     'image frame provided': '已提供图像帧',
+    'static demo scene summary': '静态演示场景摘要',
     'no raw image retained': '不保留原始图像',
     warm: '暖光',
     bright: '明亮',

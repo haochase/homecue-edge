@@ -5,7 +5,7 @@ export function buildDemoUrl(appUrl, apiBase) {
 }
 
 export const labels = {
-  title: '\u5bb6\u5ead AI \u7ba1\u5bb6',
+  title: '\u5bb6\u5ead\u667a\u80fd\u7ba1\u5bb6',
   runPlan: '\u751f\u6210\u8ba1\u5212',
   resetHome: '\u91cd\u7f6e\u5bb6\u5ead',
   confirmActions: '\u786e\u8ba4\u6267\u884c',

@@ -19,8 +19,8 @@ const apiBase = urlApiBase && urlApiBase !== 'static' ? urlApiBase : import.meta
 
 export const demoRuntime = {
   isStatic: staticDemoRequested,
-  label: staticDemoRequested ? 'static demo' : 'edge api',
-  detail: staticDemoRequested ? 'public no-backend demo' : apiBase,
+  label: staticDemoRequested ? '静态演示' : '边缘接口',
+  detail: staticDemoRequested ? '公开静态演示' : apiBase,
 }
 
 export async function loadInitialState(): Promise<InitialState> {
@@ -152,9 +152,9 @@ export async function requestVisionScene(
       faces_identified: false,
     },
     suggested_prompt: textHint.trim()
-      ? `Use this scene summary for a reversible home routine: ${textHint.trim()}`
-      : 'Use the current room context and user preference summary to propose a reversible comfort routine.',
-    model_route: 'static home-scene VLM adapter',
+      ? `根据当前场景摘要生成一个可逆的家庭流程：${textHint.trim()}`
+      : '使用当前房间上下文和用户偏好摘要，提出一个可逆的舒适流程。',
+    model_route: '静态家庭场景视觉适配器',
   }
 
   if (demoRuntime.isStatic) {

@@ -15,10 +15,10 @@ const outputFile = process.argv[5] ?? path.join(repoRoot, 'assets', 'demo', 'pho
 const requireSpeech = process.env.PHONE_LOOP_REQUIRE_SPEECH !== 'false'
 
 const labels = {
-  title: '\u5bb6\u5ead AI \u7ba1\u5bb6',
+  title: '\u5bb6\u5ead\u667a\u80fd\u7ba1\u5bb6',
   voiceInput: '\u8bed\u97f3\u8f93\u5165',
   stopVoice: '\u505c\u6b62\u8bed\u97f3',
-  openFrontCamera: '\u6253\u5f00\u524d\u7f6e\u6444\u50cf\u5934',
+  openFrontCamera: '\u4f18\u5148\u6253\u5f00\u524d\u7f6e\u6444\u50cf\u5934',
   captureFrame: '\u622a\u53d6\u753b\u9762',
   analyzeScene: '\u5206\u6790\u573a\u666f',
   writeRequest: '\u5199\u5165\u8bf7\u6c42',
@@ -244,7 +244,7 @@ async function verifyScenePromptHandoff(page) {
       }
 
       const value = textarea.value.trim()
-      if (value.includes('User appears to be settling in after a tiring day') && proposeOnly.checked) {
+      if (value.includes('低负担') && proposeOnly.checked) {
         return {
           prompt: value,
           proposeOnly: proposeOnly.checked,

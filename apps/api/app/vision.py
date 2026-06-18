@@ -24,23 +24,18 @@ def analyze_scene(request: VisionSceneRequest) -> VisionSceneResponse:
         scene = "low-energy evening arrival"
         confidence = 0.78
         suggested_prompt = (
-            "User appears to be settling in after a tiring day. Prepare a calm, "
-            "low-effort home routine with warm light and minimal interruptions."
+            "用户像是在疲惫一天后回到家。请准备一个安静、低负担、暖光且尽量少打扰的家庭流程。"
         )
     elif any(word in hint for word in ["guest", "family", "child", "dinner"]):
         scene = "shared family activity"
         confidence = 0.72
         suggested_prompt = (
-            "The room appears to be used by multiple people. Keep suggestions "
-            "family-safe, explain device changes, and avoid disruptive actions."
+            "房间可能有多人使用。请保持建议适合家庭，说明设备变化，并避免打扰性动作。"
         )
     else:
         scene = "ordinary home context"
         confidence = 0.62
-        suggested_prompt = (
-            "Use the current room context and user preference summary to propose "
-            "a reversible comfort routine."
-        )
+        suggested_prompt = "使用当前房间上下文和用户偏好摘要，提出一个可逆的舒适流程。"
 
     if hint:
         observations.append(f"text_hint={request.text_hint[:120]}")
