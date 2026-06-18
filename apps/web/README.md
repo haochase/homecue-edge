@@ -91,7 +91,8 @@ The test launches Playwright Chromium, verifies the Chinese UI, runs
 the `/vision/scene` suggested-prompt handoff, propose-only planning, confirms
 the routine from the web UI, checks offline fallback, and simulates an ESP32
 serial confirmation through `/execute`. Evidence is written to the ignored
-`assets/demo/desktop-loop.json` file.
+`assets/demo/desktop-loop.json` file, with current-step screenshots in the
+ignored `assets/demo/playwright-chromium-screens/` directory.
 
 ## Full Loop
 
@@ -107,4 +108,6 @@ Add `-IncludeChrome` to run the same desktop loop in installed Windows Chrome
 with an isolated temporary profile. Add `-IncludePhone` to run the Android phone
 loop after the desktop loop. The wrapper checks the running API's Chinese
 `/vision/scene` contract first, and restarts an older managed uvicorn process if
-that contract is stale.
+that contract is stale. The generated Markdown report reads screenshot paths
+from the desktop and Windows Chrome loop JSON files, so each report points at
+the screenshots from the current run.

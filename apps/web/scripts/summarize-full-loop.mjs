@@ -1,4 +1,4 @@
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -8,13 +8,12 @@ const repoRoot = path.resolve(scriptDir, '..', '..', '..')
 const outputFile = process.argv[2] ?? path.join(repoRoot, 'assets', 'demo', 'full-loop-report.md')
 const desktopFile = process.argv[3] ?? path.join(repoRoot, 'assets', 'demo', 'desktop-loop.json')
 const phoneFile = process.argv[4] ?? path.join(repoRoot, 'assets', 'demo', 'phone-loop.json')
-const screenshotDir = process.argv[5] ?? path.join(repoRoot, 'assets', 'demo', 'desktop-screens')
 const chromeFile = process.argv[6] ?? path.join(repoRoot, 'assets', 'demo', 'chrome-loop.json')
 
 const desktop = await readJsonIfExists(desktopFile)
 const phone = await readJsonIfExists(phoneFile)
 const chrome = await readJsonIfExists(chromeFile)
-const screenshots = await listKnownScreenshots(screenshotDir)
+const screenshots = collectScreenshots([desktop, chrome])
 
 const report = [
   '# Home AI Companion Loop Report',
@@ -118,27 +117,8 @@ function formatStatus(success) {
   return 'unknown'
 }
 
-async function listKnownScreenshots(directory) {
-  const expected = [
-    '01-control-console.png',
-    '02-online-plan.png',
-    '03-execution-guard.png',
-    '04-device-after.png',
-    '05-offline-fallback.png',
-  ]
-  const found = []
-
-  for (const filename of expected) {
-    const file = path.join(directory, filename)
-    try {
-      const info = await stat(file)
-      if (info.isFile()) found.push(relativePath(file))
-    } catch (error) {
-      if (error?.code !== 'ENOENT') throw error
-    }
-  }
-
-  return found
+function collectScreenshots(values) {
+  return values.flatMap((value) => (Array.isArray(value?.screenshots) ? value.screenshots : []))
 }
 
 function relativePath(file) {

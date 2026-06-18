@@ -156,7 +156,9 @@ For a computer-side browser check without phone hardware:
 
 This launches desktop Chromium and verifies the Chinese UI, propose/confirm
 flow, scene suggested-prompt handoff, offline fallback, and ESP32-style
-execution synchronization.
+execution synchronization. The desktop loop writes current-step screenshots
+next to its ignored JSON evidence so the Markdown report does not rely on stale
+screen captures.
 
 To minimize manual setup, run the full loop wrapper. It starts the API and Vite
 dev server if they are not already running, runs the desktop loop, then writes a

@@ -34,7 +34,9 @@ an unlocked USB-debugging phone is connected. Before browser checks, the wrapper
 verifies the running API can classify the default Chinese home-scene hint through
 `/vision/scene`; when the port is occupied by an older managed uvicorn process,
 it restarts that process and fails if the refreshed API still does not satisfy
-the contract.
+the contract. Desktop and Windows Chrome loops write per-step screenshots to
+ignored `assets/demo/*-screens/` folders and the report uses only the screenshot
+paths recorded in the current JSON evidence.
 
 ```powershell
 .\scripts\check-chrome-loop.ps1

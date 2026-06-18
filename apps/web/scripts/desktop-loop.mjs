@@ -20,6 +20,8 @@ const apiBase = process.argv[4] ?? 'http://127.0.0.1:8723'
 const browserName = process.env.DESKTOP_LOOP_BROWSER_NAME ?? 'playwright-chromium'
 const launchOptions = buildLaunchOptions()
 const userDataDir = process.env.DESKTOP_LOOP_USER_DATA_DIR ?? path.join(repoRoot, 'assets', 'tmp', `desktop-loop-${Date.now()}`)
+const screenshotDir =
+  process.env.DESKTOP_LOOP_SCREENSHOT_DIR ?? path.join(repoRoot, 'assets', 'demo', `${browserName}-screens`)
 
 const evidence = {
   success: false,
@@ -28,6 +30,7 @@ const evidence = {
   apiBase,
   browserName,
   checks: {},
+  screenshots: [],
 }
 
 let browser
@@ -47,13 +50,19 @@ try {
   await page.goto(buildDemoUrl(appUrl, apiBase), { waitUntil: 'networkidle' })
   await page.waitForSelector('.context-grid', { timeout: 10000 })
   evidence.pageUrl = page.url()
+  await captureScreenshot(page, '01-control-console.png')
 
   await runCheck('localizedUi', () => verifyLocalizedUi(page))
   await runCheck('scenePromptHandoff', () => verifyScenePromptHandoff(page))
+  await captureScreenshot(page, '02-scene-prompt-handoff.png')
   await runCheck('proposeOnly', () => verifyProposeOnly(page))
+  await captureScreenshot(page, '03-propose-only.png')
   await runCheck('webConfirmExecute', () => verifyWebConfirmExecute(page))
+  await captureScreenshot(page, '04-web-confirmation.png')
   await runCheck('offlineFallback', () => verifyOfflineFallback(page))
+  await captureScreenshot(page, '05-offline-fallback.png')
   await runCheck('externalExecutionSync', () => verifyExternalExecutionSync(page))
+  await captureScreenshot(page, '06-external-sync.png')
 
   evidence.success = true
   evidence.finishedAt = new Date().toISOString()
@@ -255,6 +264,17 @@ async function verifyExternalExecutionSync(page) {
 async function writeEvidence(file, value) {
   await mkdir(path.dirname(file), { recursive: true })
   await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+}
+
+async function captureScreenshot(page, filename) {
+  await mkdir(screenshotDir, { recursive: true })
+  const file = path.join(screenshotDir, filename)
+  await page.screenshot({ path: file, fullPage: true })
+  evidence.screenshots.push(relativePath(file))
+}
+
+function relativePath(file) {
+  return path.relative(repoRoot, path.resolve(file)).replaceAll(path.sep, '/')
 }
 
 function buildLaunchOptions() {
