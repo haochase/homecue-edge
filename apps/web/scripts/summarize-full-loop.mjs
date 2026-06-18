@@ -121,6 +121,7 @@ function summarizeDesktopLoop(value) {
     browserName: value.browserName ?? null,
     pageUrl: value.pageUrl ?? null,
     title: checks.localizedUi?.title ?? null,
+    textIntegrity: summarizeTextIntegrity(checks.localizedUi?.textIntegrity),
     browserEnvironment: summarizeBrowserEnvironment(checks.browserEnvironment),
     responsiveLayout: summarizeResponsiveLayout(checks.responsiveLayout),
     runtimeHealth: summarizeRuntimeHealth(checks.runtimeHealth),
@@ -261,6 +262,18 @@ function summarizeRuntimeHealth(value) {
   }
 }
 
+function summarizeTextIntegrity(value) {
+  if (!value) {
+    return null
+  }
+
+  return {
+    requiredPhraseCount: value.requiredPhraseCount ?? null,
+    missingPhraseCount: value.missingPhraseCount ?? null,
+    mojibakeCount: value.mojibakeCount ?? null,
+  }
+}
+
 function summarizeScreenshotEvidence(value) {
   if (!value) {
     return null
@@ -327,6 +340,7 @@ function formatDesktop(value) {
   const checks = value.checks ?? {}
   return [
     `- Title: ${checks.localizedUi?.title ?? 'unknown'}`,
+    `- Chinese text integrity: ${formatTextIntegrity(checks.localizedUi?.textIntegrity)}`,
     `- Browser environment: ${formatBrowserEnvironment(checks.browserEnvironment)}`,
     `- Responsive layout: ${formatResponsiveLayout(checks.responsiveLayout)}`,
     `- Runtime health: ${formatRuntimeHealth(checks.runtimeHealth)}`,
@@ -395,6 +409,18 @@ function validateBrowserParity(desktop, chrome) {
   const desktopChecks = desktop?.checks ?? {}
   const chromeChecks = chrome?.checks ?? {}
   compareValue(errors, 'title', desktopChecks.localizedUi?.title, chromeChecks.localizedUi?.title)
+  compareValue(
+    errors,
+    'text integrity mojibake count',
+    desktopChecks.localizedUi?.textIntegrity?.mojibakeCount,
+    chromeChecks.localizedUi?.textIntegrity?.mojibakeCount,
+  )
+  compareValue(
+    errors,
+    'text integrity missing phrase count',
+    desktopChecks.localizedUi?.textIntegrity?.missingPhraseCount,
+    chromeChecks.localizedUi?.textIntegrity?.missingPhraseCount,
+  )
   compareValue(errors, 'scene', desktopChecks.scenePromptHandoff?.scene, chromeChecks.scenePromptHandoff?.scene)
   compareValue(
     errors,
@@ -480,6 +506,9 @@ function validateDesktopEvidence(label, value, errors) {
   }
   if (checks.scenePromptHandoff?.rawImageRetained !== false || checks.scenePromptHandoff?.rawImageEchoed !== false) {
     errors.push(`${label} scene privacy proof is incomplete.`)
+  }
+  if (checks.localizedUi?.textIntegrity?.missingPhraseCount !== 0 || checks.localizedUi?.textIntegrity?.mojibakeCount !== 0) {
+    errors.push(`${label} localized text integrity proof is incomplete.`)
   }
 }
 
@@ -601,6 +630,11 @@ function formatRuntimeHealth(value) {
   }
 
   return `clean (${summary})`
+}
+
+function formatTextIntegrity(value) {
+  if (!value) return 'not checked'
+  return `${value.requiredPhraseCount ?? 0} phrases, missing:${value.missingPhraseCount ?? '?'} mojibake:${value.mojibakeCount ?? '?'}`
 }
 
 function formatScreenshotEvidence(value) {

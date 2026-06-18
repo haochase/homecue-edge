@@ -162,6 +162,8 @@ execution synchronization. The desktop loop writes current-step screenshots
 next to its ignored JSON evidence so the Markdown report does not rely on stale
 screen captures. Desktop and Windows Chrome checks also send a sentinel image
 payload and fail if `/vision/scene` echoes it back or marks it retained.
+They also validate key Chinese phrases and fail on common mojibake markers so
+desktop evidence covers page localization integrity, not just selector presence.
 
 To minimize manual setup, run the full loop wrapper. It starts the API and Vite
 dev server if they are not already running, runs the desktop loop, then writes a
@@ -169,10 +171,13 @@ Markdown report to `assets/demo/full-loop-report.md`:
 
 ```powershell
 .\scripts\check-full-loop.ps1
+.\scripts\check-full-loop.ps1 -IncludeChrome -IncludePhone -StepTimeoutSeconds 180
 ```
 
 Add `-IncludePhone` when an unlocked Android phone is connected by USB and
-Chrome debugging is available.
+Chrome debugging is available. The phone wrapper closes old HomeCue Android
+Chrome test tabs before launching the current target so repeated runs do not
+reuse stale page state.
 
 Add `-IncludeChrome` to also verify the loop in installed Windows Chrome with an
 isolated temporary profile.
@@ -180,6 +185,9 @@ isolated temporary profile.
 The full wrapper also checks that the running API passes the Chinese
 `/vision/scene` contract. If the port is occupied by an older managed uvicorn
 process, it restarts that process before running browser checks.
+The generated JSON summary is validated against the original desktop, Windows
+Chrome, and phone JSON evidence, including screenshot hashes and Chinese text
+integrity fields.
 
 ## Contributing & Security
 

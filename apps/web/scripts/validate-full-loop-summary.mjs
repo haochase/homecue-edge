@@ -79,6 +79,7 @@ function validateDesktopLoop(errors, loop, label, { required, expectedRunId }) {
   assertString(errors, loop.browserName, `${label}.browserName`)
   assertString(errors, loop.pageUrl, `${label}.pageUrl`)
 
+  validateTextIntegrity(errors, loop.textIntegrity, `${label}.textIntegrity`)
   validateRuntimeHealth(errors, loop.runtimeHealth, `${label}.runtimeHealth`)
   validateResponsiveLayout(errors, loop.responsiveLayout, `${label}.responsiveLayout`)
   validateScreenshotEvidence(errors, loop.screenshotEvidence, `${label}.screenshotEvidence`)
@@ -254,6 +255,18 @@ async function validateRawDesktopEvidence(errors, loop, manifestEntry, label) {
   compareValue(errors, checks.localizedUi?.title ?? null, loop.title ?? null, `${label}.title raw evidence`)
   compareValue(
     errors,
+    checks.localizedUi?.textIntegrity?.missingPhraseCount ?? null,
+    loop.textIntegrity?.missingPhraseCount ?? null,
+    `${label}.textIntegrity.missingPhraseCount raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.localizedUi?.textIntegrity?.mojibakeCount ?? null,
+    loop.textIntegrity?.mojibakeCount ?? null,
+    `${label}.textIntegrity.mojibakeCount raw evidence`,
+  )
+  compareValue(
+    errors,
     checks.runtimeHealth?.issueCount ?? null,
     loop.runtimeHealth?.issueCount ?? null,
     `${label}.runtimeHealth.issueCount raw evidence`,
@@ -397,6 +410,17 @@ function validateRuntimeHealth(errors, value, label) {
 
   if (value.success !== true) errors.push(`${label}.success must be true.`)
   if (value.issueCount !== 0) errors.push(`${label}.issueCount must be 0.`)
+}
+
+function validateTextIntegrity(errors, value, label) {
+  if (!value || typeof value !== 'object') {
+    errors.push(`${label} is missing.`)
+    return
+  }
+
+  if (!positiveNumber(value.requiredPhraseCount)) errors.push(`${label}.requiredPhraseCount must be positive.`)
+  if (value.missingPhraseCount !== 0) errors.push(`${label}.missingPhraseCount must be 0.`)
+  if (value.mojibakeCount !== 0) errors.push(`${label}.mojibakeCount must be 0.`)
 }
 
 function validateResponsiveLayout(errors, value, label) {

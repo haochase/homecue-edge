@@ -107,6 +107,7 @@ async function verifyLocalizedUi(page) {
   const bodyText = await page.locator('body').innerText()
   const requiredText = [labels.title, labels.runPlan, labels.resetHome, '\u5bb6\u5ead\u573a\u666f']
   const missing = requiredText.filter((text) => !bodyText.includes(text))
+  const textIntegrity = verifyChineseTextIntegrity(bodyText)
 
   if (missing.length) {
     throw new Error(`Localized UI text missing: ${missing.join(', ')}`)
@@ -116,6 +117,36 @@ async function verifyLocalizedUi(page) {
     title: await page.locator('h1').innerText(),
     runButton: await page.getByRole('button', { name: labels.runPlan }).innerText(),
     resetButtonCount: await page.getByRole('button', { name: labels.resetHome }).count(),
+    textIntegrity,
+  }
+}
+
+function verifyChineseTextIntegrity(bodyText) {
+  const requiredPhrases = [
+    labels.title,
+    '家庭场景',
+    '本地上下文',
+    '边缘侧保留',
+    '手机视觉摘要',
+    '优先打开前置摄像头',
+    '结构化动作会先通过本地策略校验。',
+  ]
+  const missingPhrases = requiredPhrases.filter((phrase) => !bodyText.includes(phrase))
+  const mojibakeMatches = Array.from(new Set(bodyText.match(/\uFFFD|锟|Ã|Â|â€|âœ|ä¸|å®|ç”|è¾|绛\?|鎽|璇|鍓|寰/g) ?? []))
+
+  if (missingPhrases.length || mojibakeMatches.length) {
+    throw new Error(
+      `Chinese text integrity failed: ${JSON.stringify({
+        missingPhrases,
+        mojibakeMatches,
+      })}`,
+    )
+  }
+
+  return {
+    requiredPhraseCount: requiredPhrases.length,
+    missingPhraseCount: missingPhrases.length,
+    mojibakeCount: mojibakeMatches.length,
   }
 }
 
