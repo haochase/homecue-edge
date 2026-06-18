@@ -71,6 +71,7 @@ async function validateSummary(value, { requirePhone, requireChrome }) {
   })
   validatePhoneLoop(errors, value.loops?.phone, 'loops.phone', { required: requirePhone, expectedRunId: value.runId })
   validateBrowserParity(errors, value.browserParity, { required: requireChrome })
+  validateBrowserParityAgainstLoops(errors, value, { required: requireChrome })
   await validateEvidenceManifest(errors, value.evidence?.files, { requirePhone, requireChrome })
   await validateRawEvidence(errors, value, { requirePhone, requireChrome })
 
@@ -175,6 +176,103 @@ function validateBrowserParity(errors, parity, { required }) {
   if (Array.isArray(parity.errors) && parity.errors.length) {
     errors.push(`browserParity errors must be empty: ${parity.errors.join('; ')}`)
   }
+}
+
+function validateBrowserParityAgainstLoops(errors, summary, { required }) {
+  if (!required) return
+
+  const expected = recomputeBrowserParity(summary.loops?.desktop, summary.loops?.windowsChrome)
+  const actual = summary.browserParity ?? {}
+  if (actual.checked !== expected.checked) {
+    errors.push(`browserParity.checked mismatch (${expected.checked} != ${actual.checked ?? 'missing'}).`)
+  }
+  if (actual.success !== expected.success) {
+    errors.push(`browserParity.success mismatch (${expected.success} != ${actual.success ?? 'missing'}).`)
+  }
+  if (parityErrorsSignature(actual.errors) !== parityErrorsSignature(expected.errors)) {
+    errors.push(
+      `browserParity.errors mismatch (${parityErrorsSignature(expected.errors)} != ${parityErrorsSignature(
+        actual.errors,
+      )}).`,
+    )
+  }
+}
+
+function recomputeBrowserParity(desktop, chrome) {
+  const errors = []
+  compareParityValue(errors, 'title', desktop?.title, chrome?.title)
+  compareParityValue(
+    errors,
+    'text integrity mojibake count',
+    desktop?.textIntegrity?.mojibakeCount,
+    chrome?.textIntegrity?.mojibakeCount,
+  )
+  compareParityValue(
+    errors,
+    'text integrity missing phrase count',
+    desktop?.textIntegrity?.missingPhraseCount,
+    chrome?.textIntegrity?.missingPhraseCount,
+  )
+  compareParityValue(
+    errors,
+    'first viewport panel count',
+    desktop?.firstViewportVisibility?.panelCount,
+    chrome?.firstViewportVisibility?.panelCount,
+  )
+  compareParityValue(
+    errors,
+    'first viewport min visible ratio',
+    desktop?.firstViewportVisibility?.minVisibleRatio,
+    chrome?.firstViewportVisibility?.minVisibleRatio,
+  )
+  compareParityValue(errors, 'scene', desktop?.scenePromptHandoff?.scene, chrome?.scenePromptHandoff?.scene)
+  compareParityValue(
+    errors,
+    'scene raw image retained',
+    desktop?.scenePromptHandoff?.rawImageRetained,
+    chrome?.scenePromptHandoff?.rawImageRetained,
+  )
+  compareParityValue(
+    errors,
+    'scene raw image echoed',
+    desktop?.scenePromptHandoff?.rawImageEchoed,
+    chrome?.scenePromptHandoff?.rawImageEchoed,
+  )
+  compareParityValue(errors, 'web confirmation source', desktop?.webConfirmExecute?.latestSource, chrome?.webConfirmExecute?.latestSource)
+  compareParityValue(errors, 'offline fallback source', desktop?.offlineFallback?.latestSource, chrome?.offlineFallback?.latestSource)
+  compareParityValue(
+    errors,
+    'external accepted action count',
+    desktop?.externalExecutionSync?.acceptedActionCount,
+    chrome?.externalExecutionSync?.acceptedActionCount,
+  )
+  compareParityValue(errors, 'external sync source', desktop?.externalExecutionSync?.latestSource, chrome?.externalExecutionSync?.latestSource)
+  compareParityValue(errors, 'runtime issue count', desktop?.runtimeHealth?.issueCount, chrome?.runtimeHealth?.issueCount)
+  compareParityValue(errors, 'screenshot count', desktop?.screenshotEvidence?.count, chrome?.screenshotEvidence?.count)
+  compareParityValue(
+    errors,
+    'screenshot unique digest count',
+    desktop?.screenshotEvidence?.uniqueDigestCount,
+    chrome?.screenshotEvidence?.uniqueDigestCount,
+  )
+  compareParityValue(errors, 'responsive layout', summaryLayoutSignature(desktop?.responsiveLayout), summaryLayoutSignature(chrome?.responsiveLayout))
+
+  return {
+    checked: true,
+    success: errors.length === 0,
+    errors,
+  }
+}
+
+function compareParityValue(errors, label, left, right) {
+  if (left !== right) {
+    errors.push(`${label} mismatch (${left ?? 'missing'} != ${right ?? 'missing'})`)
+  }
+}
+
+function parityErrorsSignature(value) {
+  if (!Array.isArray(value)) return null
+  return value.join('|')
 }
 
 async function validateEvidenceManifest(errors, files, { requirePhone, requireChrome }) {
@@ -522,6 +620,18 @@ function responsiveLayoutSignature(value) {
         item.minPanelWidth ?? null,
         item.minPanelHeight ?? null,
       ].join(':'),
+    )
+    .join('|')
+}
+
+function summaryLayoutSignature(value) {
+  if (!Array.isArray(value)) return null
+  return value
+    .map(
+      (item) =>
+        `${item.label}:${item.overflowX}:${item.overflowingButtonCount ?? 0}:${
+          item.overlappingPanelPairCount ?? 0
+        }:${item.panelCount ?? 'missing'}`,
     )
     .join('|')
 }

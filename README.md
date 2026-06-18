@@ -198,6 +198,8 @@ The generated JSON summary is validated against the original desktop, Windows
 Chrome, and phone JSON evidence, including screenshot hashes and Chinese text
 integrity / first-viewport visibility / responsive layout fields. The evidence
 manifest must also list every screenshot path declared by the raw browser JSON.
+When Windows Chrome is required, the validator recomputes desktop/Chrome parity
+from the summarized loop fields rather than trusting the reported parity flag.
 
 ## Contributing & Security
 
