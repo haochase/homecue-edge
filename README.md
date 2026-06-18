@@ -202,6 +202,8 @@ When Windows Chrome is required, the validator recomputes desktop/Chrome parity
 from the summarized loop fields rather than trusting the reported parity flag.
 It also checks each loop's started/finished timestamps against the raw evidence
 and requires the report generation time to be no earlier than completed loops.
+Loop page URLs must share the summary app origin and carry the same API base in
+their query string, with raw evidence checked against the same URLs.
 
 ## Contributing & Security
 

@@ -61,6 +61,8 @@ async function validateSummary(value, { requirePhone, requireChrome }) {
     required: true,
     expectedRunId: value.runId,
     generatedAt: value.generatedAt,
+    appUrl: value.appUrl,
+    apiBase: value.apiBase,
     expectedBrowserName: 'playwright-chromium',
     expectedExecutablePath: 'bundled',
   })
@@ -68,6 +70,8 @@ async function validateSummary(value, { requirePhone, requireChrome }) {
     required: requireChrome,
     expectedRunId: value.runId,
     generatedAt: value.generatedAt,
+    appUrl: value.appUrl,
+    apiBase: value.apiBase,
     expectedBrowserName: 'windows-chrome',
     expectedExecutablePath: 'custom',
   })
@@ -75,6 +79,8 @@ async function validateSummary(value, { requirePhone, requireChrome }) {
     required: requirePhone,
     expectedRunId: value.runId,
     generatedAt: value.generatedAt,
+    appUrl: value.appUrl,
+    apiBase: value.apiBase,
   })
   validateBrowserParity(errors, value.browserParity, { required: requireChrome })
   validateBrowserParityAgainstLoops(errors, value, { required: requireChrome })
@@ -88,7 +94,7 @@ function validateDesktopLoop(
   errors,
   loop,
   label,
-  { required, expectedRunId, generatedAt, expectedBrowserName, expectedExecutablePath },
+  { required, expectedRunId, generatedAt, appUrl, apiBase, expectedBrowserName, expectedExecutablePath },
 ) {
   if (!loop || typeof loop !== 'object') {
     if (required) errors.push(`${label} is missing.`)
@@ -106,6 +112,7 @@ function validateDesktopLoop(
   assertString(errors, loop.browserName, `${label}.browserName`)
   assertString(errors, loop.pageUrl, `${label}.pageUrl`)
   validateLoopTiming(errors, loop, label, generatedAt)
+  validateLoopUrls(errors, loop, label, { appUrl, apiBase })
 
   if (expectedBrowserName && loop.browserName !== expectedBrowserName) {
     errors.push(`${label}.browserName must be ${expectedBrowserName}.`)
@@ -140,7 +147,7 @@ function validateDesktopLoop(
   }
 }
 
-function validatePhoneLoop(errors, loop, label, { required, expectedRunId, generatedAt }) {
+function validatePhoneLoop(errors, loop, label, { required, expectedRunId, generatedAt, appUrl, apiBase }) {
   if (!loop || typeof loop !== 'object') {
     if (required) errors.push(`${label} is missing.`)
     return
@@ -156,6 +163,7 @@ function validatePhoneLoop(errors, loop, label, { required, expectedRunId, gener
   assertString(errors, loop.title, `${label}.title`)
   assertString(errors, loop.pageUrl, `${label}.pageUrl`)
   validateLoopTiming(errors, loop, label, generatedAt)
+  validateLoopUrls(errors, loop, label, { appUrl, apiBase })
   validateRuntimeHealth(errors, loop.runtimeHealth, `${label}.runtimeHealth`)
 
   if (loop.frontCamera?.ready !== true) errors.push(`${label}.frontCamera.ready must be true.`)
@@ -354,7 +362,14 @@ function requireManifestLabel(errors, files, label) {
 async function validateRawEvidence(errors, summary, { requirePhone, requireChrome }) {
   const manifest = manifestByLabel(summary.evidence?.files)
   const screenshots = manifestByLabel(summary.evidence?.files, 'Screenshot')
-  await validateRawDesktopEvidence(errors, summary.loops?.desktop, manifest.get('Desktop JSON'), screenshots, 'loops.desktop')
+  await validateRawDesktopEvidence(
+    errors,
+    summary.loops?.desktop,
+    manifest.get('Desktop JSON'),
+    screenshots,
+    'loops.desktop',
+    { appUrl: summary.appUrl, apiBase: summary.apiBase },
+  )
 
   if (requireChrome || summary.loops?.windowsChrome?.run) {
     await validateRawDesktopEvidence(
@@ -363,11 +378,15 @@ async function validateRawEvidence(errors, summary, { requirePhone, requireChrom
       manifest.get('Windows Chrome JSON'),
       screenshots,
       'loops.windowsChrome',
+      { appUrl: summary.appUrl, apiBase: summary.apiBase },
     )
   }
 
   if (requirePhone || summary.loops?.phone?.run) {
-    await validateRawPhoneEvidence(errors, summary.loops?.phone, manifest.get('Phone JSON'), 'loops.phone')
+    await validateRawPhoneEvidence(errors, summary.loops?.phone, manifest.get('Phone JSON'), 'loops.phone', {
+      appUrl: summary.appUrl,
+      apiBase: summary.apiBase,
+    })
   }
 }
 
@@ -387,7 +406,7 @@ function manifestByLabel(files, labelFilter = null) {
   return map
 }
 
-async function validateRawDesktopEvidence(errors, loop, manifestEntry, screenshotEntries, label) {
+async function validateRawDesktopEvidence(errors, loop, manifestEntry, screenshotEntries, label, { appUrl, apiBase }) {
   if (!manifestEntry?.present || !loop?.run) return
 
   const raw = await readManifestJson(errors, manifestEntry, label)
@@ -395,6 +414,8 @@ async function validateRawDesktopEvidence(errors, loop, manifestEntry, screensho
 
   compareValue(errors, raw.success === true, loop.success, `${label}.success raw evidence`)
   compareValue(errors, raw.runId ?? null, loop.runId ?? null, `${label}.runId raw evidence`)
+  compareValue(errors, raw.appUrl ?? null, appUrl ?? null, `${label}.appUrl raw evidence`)
+  compareValue(errors, raw.apiBase ?? null, apiBase ?? null, `${label}.apiBase raw evidence`)
   compareValue(errors, raw.startedAt ?? null, loop.startedAt ?? null, `${label}.startedAt raw evidence`)
   compareValue(errors, raw.finishedAt ?? null, loop.finishedAt ?? null, `${label}.finishedAt raw evidence`)
   compareValue(errors, raw.browserName ?? null, loop.browserName ?? null, `${label}.browserName raw evidence`)
@@ -545,7 +566,7 @@ function validateRawScreenshotsInManifest(errors, screenshots, screenshotEntries
   }
 }
 
-async function validateRawPhoneEvidence(errors, loop, manifestEntry, label) {
+async function validateRawPhoneEvidence(errors, loop, manifestEntry, label, { appUrl, apiBase }) {
   if (!manifestEntry?.present || !loop?.run) return
 
   const raw = await readManifestJson(errors, manifestEntry, label)
@@ -553,6 +574,8 @@ async function validateRawPhoneEvidence(errors, loop, manifestEntry, label) {
 
   compareValue(errors, raw.success === true, loop.success, `${label}.success raw evidence`)
   compareValue(errors, raw.runId ?? null, loop.runId ?? null, `${label}.runId raw evidence`)
+  compareValue(errors, raw.appUrl ?? null, appUrl ?? null, `${label}.appUrl raw evidence`)
+  compareValue(errors, raw.apiBase ?? null, apiBase ?? null, `${label}.apiBase raw evidence`)
   compareValue(errors, raw.startedAt ?? null, loop.startedAt ?? null, `${label}.startedAt raw evidence`)
   compareValue(errors, raw.finishedAt ?? null, loop.finishedAt ?? null, `${label}.finishedAt raw evidence`)
   compareValue(errors, raw.pageUrl ?? null, loop.pageUrl ?? null, `${label}.pageUrl raw evidence`)
@@ -685,6 +708,30 @@ function validateLoopTiming(errors, loop, label, generatedAt) {
   }
   if (Number.isFinite(finishedMs) && Number.isFinite(generatedMs) && generatedMs < finishedMs) {
     errors.push(`generatedAt must not be earlier than ${label}.finishedAt.`)
+  }
+}
+
+function validateLoopUrls(errors, loop, label, { appUrl, apiBase }) {
+  const page = parseUrl(loop.pageUrl)
+  const app = parseUrl(appUrl)
+  const expectedApiBase = typeof apiBase === 'string' ? apiBase : null
+
+  if (!page) errors.push(`${label}.pageUrl must be a valid URL.`)
+  if (!app) errors.push('appUrl must be a valid URL.')
+  if (page && app && page.origin !== app.origin) {
+    errors.push(`${label}.pageUrl origin must match appUrl origin.`)
+  }
+  if (page && expectedApiBase && page.searchParams.get('apiBase') !== expectedApiBase) {
+    errors.push(`${label}.pageUrl apiBase query must match summary apiBase.`)
+  }
+}
+
+function parseUrl(value) {
+  if (typeof value !== 'string' || value.length === 0) return null
+  try {
+    return new URL(value)
+  } catch {
+    return null
   }
 }
 
