@@ -259,6 +259,21 @@ async function verifyResponsiveLayout(page) {
       const overflowX = documentElement.scrollWidth - documentElement.clientWidth
       const requiredSelectors = ['.workspace', '.prompt-panel', '.scene-panel', '.plan-panel', '.lower-grid']
       const missingSelectors = requiredSelectors.filter((selector) => !document.querySelector(selector))
+      const panelRects = Array.from(document.querySelectorAll('.workspace > .panel, .lower-grid > .panel')).map(
+        (panel, index) => {
+          const rect = panel.getBoundingClientRect()
+          return {
+            label: panel.className || `panel-${index}`,
+            left: Math.round(rect.left),
+            top: Math.round(rect.top),
+            right: Math.round(rect.right),
+            bottom: Math.round(rect.bottom),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+          }
+        },
+      )
+      const overlappingPanelPairs = []
       const overflowingButtons = Array.from(document.querySelectorAll('button'))
         .map((button) => {
           const rect = button.getBoundingClientRect()
@@ -271,17 +286,45 @@ async function verifyResponsiveLayout(page) {
         })
         .filter((button) => button.scrollWidth > button.clientWidth + 1)
 
+      for (let leftIndex = 0; leftIndex < panelRects.length; leftIndex += 1) {
+        for (let rightIndex = leftIndex + 1; rightIndex < panelRects.length; rightIndex += 1) {
+          const left = panelRects[leftIndex]
+          const right = panelRects[rightIndex]
+          const overlapWidth = Math.max(0, Math.min(left.right, right.right) - Math.max(left.left, right.left))
+          const overlapHeight = Math.max(0, Math.min(left.bottom, right.bottom) - Math.max(left.top, right.top))
+          const overlapArea = overlapWidth * overlapHeight
+          if (overlapArea > 1) {
+            overlappingPanelPairs.push({
+              left: left.label,
+              right: right.label,
+              overlapWidth,
+              overlapHeight,
+              overlapArea,
+            })
+          }
+        }
+      }
+
       return {
         ...currentViewport,
         clientWidth: documentElement.clientWidth,
         scrollWidth: documentElement.scrollWidth,
         overflowX,
         missingSelectors,
+        panelCount: panelRects.length,
+        minPanelWidth: panelRects.length ? Math.min(...panelRects.map((panel) => panel.width)) : 0,
+        minPanelHeight: panelRects.length ? Math.min(...panelRects.map((panel) => panel.height)) : 0,
+        overlappingPanelPairs,
         overflowingButtons,
       }
     }, viewport)
 
-    if (result.overflowX > 1 || result.missingSelectors.length || result.overflowingButtons.length) {
+    if (
+      result.overflowX > 1 ||
+      result.missingSelectors.length ||
+      result.overflowingButtons.length ||
+      result.overlappingPanelPairs.length
+    ) {
       throw new Error(`Responsive layout failed: ${JSON.stringify(result)}`)
     }
 

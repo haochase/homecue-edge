@@ -224,6 +224,10 @@ function summarizeResponsiveLayout(value) {
     height: item.height ?? null,
     overflowX: item.overflowX ?? null,
     overflowingButtonCount: item.overflowingButtons?.length ?? 0,
+    overlappingPanelPairCount: item.overlappingPanelPairs?.length ?? 0,
+    panelCount: item.panelCount ?? null,
+    minPanelWidth: item.minPanelWidth ?? null,
+    minPanelHeight: item.minPanelHeight ?? null,
   }))
 }
 
@@ -493,7 +497,14 @@ function compareValue(errors, label, left, right) {
 
 function layoutSignature(value) {
   if (!Array.isArray(value)) return null
-  return value.map((item) => `${item.label}:${item.overflowX}`).join('|')
+  return value
+    .map(
+      (item) =>
+        `${item.label}:${item.overflowX}:${item.overflowingButtons?.length ?? 0}:${
+          item.overlappingPanelPairs?.length ?? 0
+        }:${item.panelCount ?? 'missing'}`,
+    )
+    .join('|')
 }
 
 function validateDesktopEvidence(label, value, errors) {
@@ -544,6 +555,12 @@ function validateDesktopEvidence(label, value, errors) {
   }
   if (checks.firstViewportVisibility?.panels?.length !== 5) {
     errors.push(`${label} first viewport visibility panel count is not 5.`)
+  }
+  if (Array.isArray(checks.responsiveLayout)) {
+    const overlapping = checks.responsiveLayout.filter((item) => item.overlappingPanelPairs?.length)
+    if (overlapping.length) {
+      errors.push(`${label} responsive layout has overlapping panels.`)
+    }
   }
 }
 
@@ -617,7 +634,12 @@ function formatPromptHandoff(value) {
 
 function formatResponsiveLayout(value) {
   if (!Array.isArray(value)) return 'not checked'
-  const labels = value.map((item) => `${item.label}:${item.overflowX}px`)
+  const labels = value.map(
+    (item) =>
+      `${item.label}:${item.overflowX}px buttons:${item.overflowingButtons?.length ?? 0} overlaps:${
+        item.overlappingPanelPairs?.length ?? 0
+      }`,
+  )
   return labels.length ? labels.join(', ') : 'unknown'
 }
 

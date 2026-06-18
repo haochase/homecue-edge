@@ -280,6 +280,12 @@ async function validateRawDesktopEvidence(errors, loop, manifestEntry, label) {
   )
   compareValue(
     errors,
+    responsiveLayoutSignature(checks.responsiveLayout),
+    responsiveLayoutSignature(loop.responsiveLayout),
+    `${label}.responsiveLayout raw evidence`,
+  )
+  compareValue(
+    errors,
     checks.runtimeHealth?.issueCount ?? null,
     loop.runtimeHealth?.issueCount ?? null,
     `${label}.runtimeHealth.issueCount raw evidence`,
@@ -415,6 +421,25 @@ function compareValue(errors, left, right, label) {
   }
 }
 
+function responsiveLayoutSignature(value) {
+  if (!Array.isArray(value)) return null
+  return value
+    .map((item) =>
+      [
+        item.label ?? null,
+        item.width ?? null,
+        item.height ?? null,
+        item.overflowX ?? null,
+        item.overflowingButtonCount ?? item.overflowingButtons?.length ?? null,
+        item.overlappingPanelPairCount ?? item.overlappingPanelPairs?.length ?? null,
+        item.panelCount ?? null,
+        item.minPanelWidth ?? null,
+        item.minPanelHeight ?? null,
+      ].join(':'),
+    )
+    .join('|')
+}
+
 function validateRuntimeHealth(errors, value, label) {
   if (!value || typeof value !== 'object') {
     errors.push(`${label} is missing.`)
@@ -459,6 +484,15 @@ function validateResponsiveLayout(errors, value, label) {
     if (item.overflowX !== 0) errors.push(`${label}.${item.label ?? 'unknown'}.overflowX must be 0.`)
     if (item.overflowingButtonCount !== 0) {
       errors.push(`${label}.${item.label ?? 'unknown'}.overflowingButtonCount must be 0.`)
+    }
+    if (item.overlappingPanelPairCount !== 0) {
+      errors.push(`${label}.${item.label ?? 'unknown'}.overlappingPanelPairCount must be 0.`)
+    }
+    if (!positiveNumber(item.panelCount)) {
+      errors.push(`${label}.${item.label ?? 'unknown'}.panelCount must be positive.`)
+    }
+    if (!positiveNumber(item.minPanelWidth) || !positiveNumber(item.minPanelHeight)) {
+      errors.push(`${label}.${item.label ?? 'unknown'} panel dimensions must be positive.`)
     }
   }
 }
