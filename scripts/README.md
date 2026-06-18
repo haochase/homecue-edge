@@ -30,7 +30,11 @@ Starts the API and Vite dev server when they are not already listening, runs the
 desktop browser loop, then writes `assets/demo/full-loop-report.md`. Add
 `-IncludeChrome` to verify an isolated Windows Chrome profile, and add
 `-IncludePhone` to run the Android Chrome phone loop after the desktop loop when
-an unlocked USB-debugging phone is connected.
+an unlocked USB-debugging phone is connected. Before browser checks, the wrapper
+verifies the running API can classify the default Chinese home-scene hint through
+`/vision/scene`; when the port is occupied by an older managed uvicorn process,
+it restarts that process and fails if the refreshed API still does not satisfy
+the contract.
 
 ```powershell
 .\scripts\check-chrome-loop.ps1

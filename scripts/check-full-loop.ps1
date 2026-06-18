@@ -50,6 +50,20 @@ function Wait-HttpOk {
   throw "$Name did not become ready within $StartupTimeoutSeconds seconds: $Url"
 }
 
+function Wait-PortClosed {
+  param([int]$Port)
+
+  $Deadline = (Get-Date).AddSeconds(12)
+  while ((Get-Date) -lt $Deadline) {
+    if (-not (Test-PortListening $Port)) {
+      return
+    }
+    Start-Sleep -Milliseconds 300
+  }
+
+  throw "Port $Port did not close after stopping the stale API process."
+}
+
 function Test-PortListening {
   param([int]$Port)
 
@@ -57,12 +71,39 @@ function Test-PortListening {
   return $null -ne $Connection
 }
 
-function Ensure-Api {
-  if (Test-HttpOk "$ApiBase/health") {
-    Write-Host "API already running: $ApiBase"
+function Test-ApiVisionContract {
+  $Body = '{"room":"living room","camera":"phone","text_hint":"\u665a\u4e0a\u6709\u70b9\u7d2f\uff0c\u5750\u5728\u5ba2\u5385\u6c99\u53d1\u4e0a\uff0c\u5ba4\u5185\u5149\u7ebf\u504f\u6697"}'
+
+  try {
+    $Result = Invoke-RestMethod "$ApiBase/vision/scene" -Method Post -ContentType "application/json; charset=utf-8" -Body $Body -TimeoutSec 5
+    return $Result.scene -eq "low-energy evening arrival" -and $Result.suggested_prompt -match "settling in after a tiring day"
+  }
+  catch {
+    return $false
+  }
+}
+
+function Stop-StaleApiIfManaged {
+  $Connections = @(Get-NetTCPConnection -LocalPort $ApiPort -State Listen -ErrorAction SilentlyContinue)
+  if ($Connections.Count -eq 0) {
     return
   }
 
+  $ProcessId = $Connections[0].OwningProcess
+  $ProcessInfo = Get-CimInstance Win32_Process -Filter "ProcessId=$ProcessId"
+  $CommandLine = $ProcessInfo.CommandLine
+
+  if ($CommandLine -match "uvicorn" -and $CommandLine -match "app\.main:app") {
+    Write-Warning "API on port $ApiPort failed the vision contract; restarting stale uvicorn process $ProcessId."
+    Stop-Process -Id $ProcessId -Force
+    Wait-PortClosed $ApiPort
+    return
+  }
+
+  throw "API on port $ApiPort failed the vision contract and is not a managed uvicorn app: $CommandLine"
+}
+
+function Start-Api {
   if (-not (Test-Path (Join-Path $ApiDir ".venv"))) {
     Push-Location $ApiDir
     try {
@@ -82,6 +123,36 @@ function Ensure-Api {
     -WindowStyle Hidden
 
   Wait-HttpOk "$ApiBase/health" "API"
+}
+
+function Invoke-CheckedScript {
+  param(
+    [string]$Name,
+    [string[]]$Arguments
+  )
+
+  & powershell @Arguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "$Name failed with exit code $LASTEXITCODE."
+  }
+}
+
+function Ensure-Api {
+  if (Test-HttpOk "$ApiBase/health") {
+    Write-Host "API already running: $ApiBase"
+    if (Test-ApiVisionContract) {
+      Write-Host "API vision contract ready."
+      return
+    }
+
+    Stop-StaleApiIfManaged
+  }
+
+  Start-Api
+  if (-not (Test-ApiVisionContract)) {
+    throw "API started, but /vision/scene did not pass the Chinese scene contract."
+  }
+  Write-Host "API vision contract ready."
 }
 
 function Ensure-Web {
@@ -104,15 +175,15 @@ Ensure-Api
 Ensure-Web
 
 if (-not $SkipDesktop) {
-  powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\check-desktop-loop.ps1" -AppUrl $AppUrl -ApiBase $ApiBase
+  Invoke-CheckedScript "desktop loop" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$PSScriptRoot\check-desktop-loop.ps1", "-AppUrl", $AppUrl, "-ApiBase", $ApiBase)
 }
 
 if ($IncludePhone) {
-  powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\check-phone-loop.ps1" -AppUrl $AppUrl -ApiBase $ApiBase
+  Invoke-CheckedScript "phone loop" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$PSScriptRoot\check-phone-loop.ps1", "-AppUrl", $AppUrl, "-ApiBase", $ApiBase)
 }
 
 if ($IncludeChrome) {
-  powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\check-chrome-loop.ps1" -AppUrl $AppUrl -ApiBase $ApiBase
+  Invoke-CheckedScript "chrome loop" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$PSScriptRoot\check-chrome-loop.ps1", "-AppUrl", $AppUrl, "-ApiBase", $ApiBase)
 }
 
 Push-Location $WebDir

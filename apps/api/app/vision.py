@@ -20,7 +20,7 @@ def analyze_scene(request: VisionSceneRequest) -> VisionSceneResponse:
     else:
         observations.append("no raw image retained")
 
-    if any(word in hint for word in ["tired", "dark", "night", "sofa"]):
+    if any(word in hint for word in ["tired", "dark", "night", "sofa", "累", "疲惫", "晚上", "夜间", "沙发", "偏暗"]):
         scene = "low-energy evening arrival"
         confidence = 0.78
         suggested_prompt = (

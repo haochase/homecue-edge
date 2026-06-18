@@ -276,7 +276,7 @@ function App() {
 
   function useScenePrompt() {
     if (!scene) return
-    setPrompt(buildScenePrompt(scene, sceneHint))
+    setPrompt(scene.suggested_prompt || buildScenePrompt(scene, sceneHint))
     setProposeOnly(true)
   }
 
@@ -1021,6 +1021,12 @@ function translateValue(value: string) {
     'unknown device': '未知设备',
     'Review project notes at 21:10': '21:10 回顾项目笔记',
     'Cloud planning unavailable; basic home routine active.': '云端规划不可用，已启用基础家庭流程。',
+    'User appears to be settling in after a tiring day. Prepare a calm, low-effort home routine with warm light and minimal interruptions.':
+      '用户像是在疲惫一天后回到家。准备一个安静、低负担、暖光且尽量少打扰的家庭流程。',
+    'The room appears to be used by multiple people. Keep suggestions family-safe, explain device changes, and avoid disruptive actions.':
+      '房间可能有多人使用。建议保持适合家庭，说明设备变化，并避免打扰性动作。',
+    'Use the current room context and user preference summary to propose a reversible comfort routine.':
+      '使用当前房间上下文和用户偏好摘要，提出一个可逆的舒适流程。',
   }
 
   if (value.startsWith('text_hint=')) return `文字提示：${value.slice('text_hint='.length)}`

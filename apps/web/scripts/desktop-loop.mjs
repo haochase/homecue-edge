@@ -49,6 +49,7 @@ try {
   evidence.pageUrl = page.url()
 
   await runCheck('localizedUi', () => verifyLocalizedUi(page))
+  await runCheck('scenePromptHandoff', () => verifyScenePromptHandoff(page))
   await runCheck('proposeOnly', () => verifyProposeOnly(page))
   await runCheck('webConfirmExecute', () => verifyWebConfirmExecute(page))
   await runCheck('offlineFallback', () => verifyOfflineFallback(page))
@@ -93,6 +94,37 @@ async function verifyLocalizedUi(page) {
     title: await page.locator('h1').innerText(),
     runButton: await page.getByRole('button', { name: labels.runPlan }).innerText(),
     resetButtonCount: await page.getByRole('button', { name: labels.resetHome }).count(),
+  }
+}
+
+async function verifyScenePromptHandoff(page) {
+  await page.getByRole('button', { name: labels.analyzeScene }).click()
+  await page.waitForSelector('.scene-result', { timeout: 10000 })
+  await page.getByRole('button', { name: labels.writeRequest }).click()
+
+  const promptState = await page
+    .waitForFunction(() => {
+      const textarea = document.querySelector('.prompt-panel textarea')
+      const proposeOnly = document.querySelectorAll('.agent-toggle input')[1]
+      if (!(textarea instanceof HTMLTextAreaElement) || !(proposeOnly instanceof HTMLInputElement)) {
+        return null
+      }
+
+      const value = textarea.value.trim()
+      if (value.includes('User appears to be settling in after a tiring day') && proposeOnly.checked) {
+        return {
+          prompt: value,
+          proposeOnly: proposeOnly.checked,
+        }
+      }
+
+      return null
+    }, null, { timeout: 8000 })
+    .then((handle) => handle.jsonValue())
+
+  return {
+    prompt: promptState.prompt,
+    proposeOnly: promptState.proposeOnly,
   }
 }
 

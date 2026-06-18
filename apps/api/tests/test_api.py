@@ -400,6 +400,19 @@ def test_vision_scene_returns_privacy_safe_prompt():
     assert "calm" in payload["suggested_prompt"]
 
 
+def test_vision_scene_understands_chinese_home_hint():
+    response = client.post(
+        "/vision/scene",
+        json={"room": "living room", "camera": "phone", "text_hint": "晚上有点累，坐在客厅沙发上，室内光线偏暗"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["scene"] == "low-energy evening arrival"
+    assert payload["privacy_summary"]["raw_image_retained"] is False
+    assert "calm" in payload["suggested_prompt"]
+
+
 def test_voice_returns_501_when_transcription_disabled():
     response = client.post("/voice", content=b"not-a-real-wav")
 

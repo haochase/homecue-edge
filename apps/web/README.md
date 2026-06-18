@@ -73,9 +73,10 @@ npm run phone:loop -- http://127.0.0.1:5173 http://127.0.0.1:8723 http://127.0.0
 
 The test opens the console on the phone, verifies the Chinese UI, starts the
 speech input control, checks that the camera stream prefers the front camera,
-captures one frame for `/vision/scene`, creates a propose-only routine, then
-simulates an ESP32 serial confirmation through `/execute`. Evidence is written
-to the ignored `assets/demo/phone-loop.json` file.
+captures one frame for `/vision/scene`, writes the returned suggested prompt
+into the planning request, creates a propose-only routine, then simulates an
+ESP32 serial confirmation through `/execute`. Evidence is written to the
+ignored `assets/demo/phone-loop.json` file.
 
 ## Desktop Browser Loop
 
@@ -87,9 +88,10 @@ to verify the computer-side browser workflow without phone hardware:
 ```
 
 The test launches Playwright Chromium, verifies the Chinese UI, runs
-propose-only planning, confirms the routine from the web UI, checks offline
-fallback, and simulates an ESP32 serial confirmation through `/execute`.
-Evidence is written to the ignored `assets/demo/desktop-loop.json` file.
+the `/vision/scene` suggested-prompt handoff, propose-only planning, confirms
+the routine from the web UI, checks offline fallback, and simulates an ESP32
+serial confirmation through `/execute`. Evidence is written to the ignored
+`assets/demo/desktop-loop.json` file.
 
 ## Full Loop
 
@@ -103,4 +105,6 @@ dev server when needed, run the desktop loop, and write
 
 Add `-IncludeChrome` to run the same desktop loop in installed Windows Chrome
 with an isolated temporary profile. Add `-IncludePhone` to run the Android phone
-loop after the desktop loop.
+loop after the desktop loop. The wrapper checks the running API's Chinese
+`/vision/scene` contract first, and restarts an older managed uvicorn process if
+that contract is stale.

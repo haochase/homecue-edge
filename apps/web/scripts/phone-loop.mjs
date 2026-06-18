@@ -20,6 +20,7 @@ const labels = {
   openFrontCamera: '\u6253\u5f00\u524d\u7f6e\u6444\u50cf\u5934',
   captureFrame: '\u622a\u53d6\u753b\u9762',
   analyzeScene: '\u5206\u6790\u573a\u666f',
+  writeRequest: '\u5199\u5165\u8bf7\u6c42',
   proposeOnly: '\u53ea\u751f\u6210\u5efa\u8bae',
   runPlan: '\u751f\u6210\u8ba1\u5212',
   pendingHardware: '\u7b49\u5f85\u786c\u4ef6\u786e\u8ba4',
@@ -57,6 +58,7 @@ try {
   await runCheck('localizedUi', () => verifyLocalizedUi(page))
   await runCheck('frontCamera', () => verifyFrontCamera(page))
   await runCheck('scene', () => verifySceneSummary(page))
+  await runCheck('scenePromptHandoff', () => verifyScenePromptHandoff(page))
   await runCheck('speechInput', () => verifySpeechInput(page, requireSpeech))
   await runCheck('externalExecution', () => verifyExternalExecution(page, apiBase))
 
@@ -199,8 +201,36 @@ async function verifySceneSummary(page) {
   }
 }
 
+async function verifyScenePromptHandoff(page) {
+  await tapButton(page, labels.writeRequest)
+
+  const promptState = await page
+    .waitForFunction(() => {
+      const textarea = document.querySelector('.prompt-panel textarea')
+      const proposeOnly = document.querySelectorAll('.agent-toggle input')[1]
+      if (!(textarea instanceof HTMLTextAreaElement) || !(proposeOnly instanceof HTMLInputElement)) {
+        return null
+      }
+
+      const value = textarea.value.trim()
+      if (value.includes('User appears to be settling in after a tiring day') && proposeOnly.checked) {
+        return {
+          prompt: value,
+          proposeOnly: proposeOnly.checked,
+        }
+      }
+
+      return null
+    }, null, { timeout: 8000 })
+    .then((handle) => handle.jsonValue())
+
+  return {
+    prompt: promptState.prompt,
+    proposeOnly: promptState.proposeOnly,
+  }
+}
+
 async function verifyExternalExecution(page, currentApiBase) {
-  await setProposeOnly(page)
   await tapButton(page, labels.runPlan)
   await page.waitForSelector('.execution-row.pending.accepted', { timeout: 10000 })
 

@@ -9,6 +9,8 @@ export const labels = {
   runPlan: '\u751f\u6210\u8ba1\u5212',
   resetHome: '\u91cd\u7f6e\u5bb6\u5ead',
   confirmActions: '\u786e\u8ba4\u6267\u884c',
+  analyzeScene: '\u5206\u6790\u573a\u666f',
+  writeRequest: '\u5199\u5165\u8bf7\u6c42',
   online: '\u5728\u7ebf',
   weak: '\u5f31\u7f51',
   offline: '\u79bb\u7ebf',

@@ -78,6 +78,7 @@ function formatDesktop(value) {
   const checks = value.checks ?? {}
   return [
     `- Title: ${checks.localizedUi?.title ?? 'unknown'}`,
+    `- Scene prompt handoff: ${formatPromptHandoff(checks.scenePromptHandoff)}`,
     `- Propose-only status: ${checks.proposeOnly?.status ?? 'unknown'}`,
     `- Web confirmation source: ${checks.webConfirmExecute?.latestSource ?? 'unknown'}`,
     `- Offline fallback source: ${checks.offlineFallback?.latestSource ?? 'unknown'}`,
@@ -100,9 +101,15 @@ function formatPhone(value) {
     `- Speech recognition: ${speech.support?.webkitSpeechRecognition || speech.support?.SpeechRecognition ? 'available' : 'unavailable'}`,
     `- Speech status: ${speech.listeningState?.status ?? 'unknown'}`,
     `- Scene frame: ${checks.scene?.frameSize ?? 'not captured'}`,
+    `- Scene prompt handoff: ${formatPromptHandoff(checks.scenePromptHandoff)}`,
     `- External sync source: ${checks.externalExecution?.latestSource ?? 'unknown'}`,
     `- External accepted actions: ${checks.externalExecution?.acceptedActionCount ?? 'unknown'}`,
   ]
+}
+
+function formatPromptHandoff(value) {
+  if (!value) return 'not checked'
+  return value.proposeOnly && value.prompt ? 'ready' : 'incomplete'
 }
 
 function formatStatus(success) {

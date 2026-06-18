@@ -145,7 +145,8 @@ can run the mobile multimodal loop with minimal manual steps:
 
 The script configures ADB reverse ports and Android Chrome DevTools, then checks
 Chinese UI text, speech-input readiness, front-camera preference, scene capture,
-and the ESP32-style `/execute` synchronization path.
+the `/vision/scene` suggested-prompt handoff into propose-only planning, and
+the ESP32-style `/execute` synchronization path.
 
 For a computer-side browser check without phone hardware:
 
@@ -154,7 +155,8 @@ For a computer-side browser check without phone hardware:
 ```
 
 This launches desktop Chromium and verifies the Chinese UI, propose/confirm
-flow, offline fallback, and ESP32-style execution synchronization.
+flow, scene suggested-prompt handoff, offline fallback, and ESP32-style
+execution synchronization.
 
 To minimize manual setup, run the full loop wrapper. It starts the API and Vite
 dev server if they are not already running, runs the desktop loop, then writes a
@@ -169,6 +171,10 @@ Chrome debugging is available.
 
 Add `-IncludeChrome` to also verify the loop in installed Windows Chrome with an
 isolated temporary profile.
+
+The full wrapper also checks that the running API passes the Chinese
+`/vision/scene` contract. If the port is occupied by an older managed uvicorn
+process, it restarts that process before running browser checks.
 
 ## Contributing & Security
 
