@@ -24,6 +24,7 @@ Starts the FastAPI edge gateway on `http://127.0.0.1:8723` and the Vite web cons
 .\scripts\check-full-loop.ps1
 .\scripts\check-full-loop.ps1 -IncludePhone
 .\scripts\check-full-loop.ps1 -IncludeChrome -IncludePhone
+.\scripts\check-full-loop.ps1 -IncludeChrome -IncludePhone -StepTimeoutSeconds 180
 ```
 
 Starts the API and Vite dev server when they are not already listening, runs the
@@ -31,7 +32,9 @@ desktop browser loop, then writes `assets/demo/full-loop-report.md` and the
 machine-readable `assets/demo/full-loop-report.json` summary. Add
 `-IncludeChrome` to verify an isolated Windows Chrome profile, and add
 `-IncludePhone` to run the Android Chrome phone loop after the desktop loop when
-an unlocked USB-debugging phone is connected. Before browser checks, the wrapper
+an unlocked USB-debugging phone is connected; the phone wrapper closes old
+HomeCue/local test tabs from previous runs before opening the current target.
+Before browser checks, the wrapper
 verifies the running API can classify the default Chinese home-scene hint through
 `/vision/scene`; when the port is occupied by an older managed uvicorn process,
 it restarts that process and fails if the refreshed API still does not satisfy
@@ -50,7 +53,8 @@ or optional phone/Chrome checks are omitted, the wrapper passes an explicit
 `__*_not_run__.json` sentinel so old evidence from a previous run is not reused.
 Relative `-ReportPath` values are resolved from the repository root.
 Relative `-ReportPath` and `-SummaryPath` values are resolved from the
-repository root.
+repository root. Use `-StepTimeoutSeconds` to bound each browser or phone child
+loop and clean up its process tree if device automation hangs.
 Each full-loop run also stamps desktop, phone, and Chrome JSON evidence with a
 shared run id; the report gate fails when required evidence files do not share
 that id. When both desktop Chromium and installed Windows Chrome are included,
@@ -64,7 +68,9 @@ and validation errors for downstream automation. After writing the summary, the
 wrapper runs `npm run summary:check` with matching phone/Chrome requirements so
 schema or contract drift fails the full-loop gate immediately. That checker
 also re-reads every present manifest file and recomputes byte size plus the
-short SHA-256 digest, so stale or edited evidence files are caught.
+short SHA-256 digest, then cross-checks the desktop, Windows Chrome, and phone
+summary fields against their original JSON evidence so stale or edited evidence
+files are caught.
 
 ```powershell
 .\scripts\check-chrome-loop.ps1

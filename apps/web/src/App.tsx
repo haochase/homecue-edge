@@ -56,7 +56,7 @@ const preferredCameraConstraints: MediaStreamConstraints[] = [
   },
 ]
 
-const frontCameraLabelPattern = /front|user|selfie|face|前置|前摄|自拍/i
+const frontCameraLabelPattern = /front|user|selfie|face|camera.*front|前置|前摄|前面|前方|自拍/i
 
 type CameraOpenResult = {
   stream: MediaStream
@@ -348,7 +348,7 @@ function App() {
     }
 
     setCameraError('')
-    setCameraStatus('正在优先打开前置摄像头...')
+    setCameraStatus('正在查找前置摄像头...')
 
     try {
       const camera = await openPreferredCamera()
@@ -795,7 +795,7 @@ function InfoBlock({ title, value }: { title: string; value: string }) {
 
 function formatDeviceDetail(device: DeviceState[string]) {
   if (device.scene) return `场景：${translateValue(device.scene)}`
-  if (device.temperature) return `${device.temperature}C`
+  if (device.temperature) return `${device.temperature}°C`
   if (device.mode) return `模式：${translateValue(device.mode)}`
   if (device.playlist) return `播放：${translateValue(device.playlist)}`
   if (device.message) return translateValue(device.message)
@@ -826,6 +826,9 @@ function extractTranscript(results: BrowserSpeechResults) {
 async function openPreferredCamera(): Promise<CameraOpenResult> {
   let firstError: unknown
 
+  const labeledFrontCamera = await openLabeledFrontCamera()
+  if (labeledFrontCamera) return labeledFrontCamera
+
   for (const constraints of preferredCameraConstraints) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
@@ -855,11 +858,17 @@ async function preferFrontCamera(stream: MediaStream): Promise<CameraOpenResult>
   return { stream, preference: 'browser-preferred', ...current }
 }
 
-async function openLabeledFrontCamera(currentStream: MediaStream): Promise<CameraOpenResult | null> {
+async function openLabeledFrontCamera(currentStream?: MediaStream): Promise<CameraOpenResult | null> {
   if (!navigator.mediaDevices.enumerateDevices) return null
 
-  const currentDeviceId = currentStream.getVideoTracks()[0]?.getSettings().deviceId
-  const devices = await navigator.mediaDevices.enumerateDevices()
+  const currentDeviceId = currentStream?.getVideoTracks()[0]?.getSettings().deviceId
+  let devices: MediaDeviceInfo[]
+  try {
+    devices = await navigator.mediaDevices.enumerateDevices()
+  } catch {
+    return null
+  }
+
   const frontDevice = devices.find(
     (device) =>
       device.kind === 'videoinput' &&
@@ -880,7 +889,7 @@ async function openLabeledFrontCamera(currentStream: MediaStream): Promise<Camer
       },
     })
 
-    currentStream.getTracks().forEach((track) => track.stop())
+    currentStream?.getTracks().forEach((track) => track.stop())
     return { stream, preference: 'front-device-label', ...describeCameraStream(stream) }
   } catch {
     return null
@@ -1107,6 +1116,7 @@ function translateValue(value: string) {
     'action not allowed by edge policy': '动作被边缘策略拒绝',
     'unknown device': '未知设备',
     'Review project notes at 21:10': '21:10 回顾项目笔记',
+    '21:10 回顾项目笔记': '21:10 回顾项目笔记',
     'Cloud planning unavailable; basic home routine active.': '云端规划不可用，已启用基础家庭流程。',
     'User appears to be settling in after a tiring day. Prepare a calm, low-effort home routine with warm light and minimal interruptions.':
       '用户像是在疲惫一天后回到家。准备一个安静、低负担、暖光且尽量少打扰的家庭流程。',

@@ -65,7 +65,8 @@ Vite dev server are already running on the host.
 
 The wrapper verifies an authorized ADB device, grants Chrome camera/microphone
 permissions when possible, maps phone localhost ports back to the host with
-`adb reverse`, exposes Android Chrome DevTools on `127.0.0.1:9222`, and runs:
+`adb reverse`, exposes Android Chrome DevTools on `127.0.0.1:9222`, closes old
+HomeCue/local test tabs from previous runs, and runs:
 
 ```powershell
 npm run phone:loop -- http://127.0.0.1:5173 http://127.0.0.1:8723 http://127.0.0.1:9222
@@ -108,6 +109,7 @@ dev server when needed, run the desktop loop, and write
 
 ```powershell
 .\scripts\check-full-loop.ps1
+.\scripts\check-full-loop.ps1 -IncludeChrome -IncludePhone -StepTimeoutSeconds 180
 ```
 
 Add `-IncludeChrome` to run the same desktop loop in installed Windows Chrome
@@ -122,8 +124,10 @@ Chrome, and Android Chrome loops. Desktop and Windows Chrome sections include a
 browser environment fingerprint with user-agent family, viewport, pixel ratio,
 and media/speech API availability. The report command also fails if any
 requested loop evidence is missing, marked unsuccessful, or lacks the required
-checks. When the full-loop wrapper runs multiple targets, it stamps each JSON
-evidence file with the same run id and the report gate verifies they match.
+checks. Use `-StepTimeoutSeconds` to bound each child loop and clean up its
+process tree if browser or device automation hangs. When the full-loop wrapper
+runs multiple targets, it stamps each JSON evidence file with the same run id
+and the report gate verifies they match.
 Desktop Chromium and installed Windows Chrome are also compared for core UI,
 privacy, layout, runtime-health, screenshot, and execution-sync parity. The
 evidence section records each JSON and screenshot file with byte size and a
@@ -134,4 +138,5 @@ automation that should not parse Markdown. The wrapper then runs
 `npm run summary:check` with the same phone/Chrome requirements, so schema or
 contract drift fails before the full-loop command returns success. The checker
 also re-reads every present manifest file and recomputes byte size plus the
-short SHA-256 digest, catching stale or edited evidence files.
+short SHA-256 digest, then cross-checks the desktop, Windows Chrome, and phone
+summary fields against their original JSON evidence.

@@ -57,6 +57,7 @@ async function validateSummary(value, { requirePhone, requireChrome }) {
   validatePhoneLoop(errors, value.loops?.phone, 'loops.phone', { required: requirePhone, expectedRunId: value.runId })
   validateBrowserParity(errors, value.browserParity, { required: requireChrome })
   await validateEvidenceManifest(errors, value.evidence?.files, { requirePhone, requireChrome })
+  await validateRawEvidence(errors, value, { requirePhone, requireChrome })
 
   return errors
 }
@@ -211,6 +212,180 @@ function requireManifestLabel(errors, files, label) {
   const entry = files.find((item) => item?.label === label)
   if (!entry?.present) {
     errors.push(`evidence manifest missing present ${label}.`)
+  }
+}
+
+async function validateRawEvidence(errors, summary, { requirePhone, requireChrome }) {
+  const manifest = manifestByLabel(summary.evidence?.files)
+  await validateRawDesktopEvidence(errors, summary.loops?.desktop, manifest.get('Desktop JSON'), 'loops.desktop')
+
+  if (requireChrome || summary.loops?.windowsChrome?.run) {
+    await validateRawDesktopEvidence(errors, summary.loops?.windowsChrome, manifest.get('Windows Chrome JSON'), 'loops.windowsChrome')
+  }
+
+  if (requirePhone || summary.loops?.phone?.run) {
+    await validateRawPhoneEvidence(errors, summary.loops?.phone, manifest.get('Phone JSON'), 'loops.phone')
+  }
+}
+
+function manifestByLabel(files) {
+  const map = new Map()
+  if (!Array.isArray(files)) return map
+  for (const entry of files) {
+    if (entry?.present && typeof entry.label === 'string') {
+      map.set(entry.label, entry)
+    }
+  }
+  return map
+}
+
+async function validateRawDesktopEvidence(errors, loop, manifestEntry, label) {
+  if (!manifestEntry?.present || !loop?.run) return
+
+  const raw = await readManifestJson(errors, manifestEntry, label)
+  if (!raw) return
+
+  compareValue(errors, raw.success === true, loop.success, `${label}.success raw evidence`)
+  compareValue(errors, raw.runId ?? null, loop.runId ?? null, `${label}.runId raw evidence`)
+  compareValue(errors, raw.browserName ?? null, loop.browserName ?? null, `${label}.browserName raw evidence`)
+  compareValue(errors, raw.pageUrl ?? null, loop.pageUrl ?? null, `${label}.pageUrl raw evidence`)
+
+  const checks = raw.checks ?? {}
+  compareValue(errors, checks.localizedUi?.title ?? null, loop.title ?? null, `${label}.title raw evidence`)
+  compareValue(
+    errors,
+    checks.runtimeHealth?.issueCount ?? null,
+    loop.runtimeHealth?.issueCount ?? null,
+    `${label}.runtimeHealth.issueCount raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.screenshotEvidence?.count ?? null,
+    loop.screenshotEvidence?.count ?? null,
+    `${label}.screenshotEvidence.count raw evidence`,
+  )
+  compareValue(
+    errors,
+    raw.screenshots?.length ?? null,
+    loop.screenshotEvidence?.count ?? null,
+    `${label}.screenshots length raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.scenePromptHandoff?.rawImageRetained ?? null,
+    loop.scenePromptHandoff?.rawImageRetained ?? null,
+    `${label}.rawImageRetained raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.scenePromptHandoff?.rawImageEchoed ?? null,
+    loop.scenePromptHandoff?.rawImageEchoed ?? null,
+    `${label}.rawImageEchoed raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.proposeOnly?.latestExecuted ?? null,
+    loop.proposeOnly?.latestExecuted ?? null,
+    `${label}.proposeOnly.latestExecuted raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.webConfirmExecute?.latestSource ?? null,
+    loop.webConfirmExecute?.latestSource ?? null,
+    `${label}.webConfirmExecute.latestSource raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.offlineFallback?.latestSource ?? null,
+    loop.offlineFallback?.latestSource ?? null,
+    `${label}.offlineFallback.latestSource raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.externalExecutionSync?.latestSource ?? null,
+    loop.externalExecutionSync?.latestSource ?? null,
+    `${label}.externalExecutionSync.latestSource raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.externalExecutionSync?.acceptedActionCount ?? null,
+    loop.externalExecutionSync?.acceptedActionCount ?? null,
+    `${label}.externalExecutionSync.acceptedActionCount raw evidence`,
+  )
+}
+
+async function validateRawPhoneEvidence(errors, loop, manifestEntry, label) {
+  if (!manifestEntry?.present || !loop?.run) return
+
+  const raw = await readManifestJson(errors, manifestEntry, label)
+  if (!raw) return
+
+  compareValue(errors, raw.success === true, loop.success, `${label}.success raw evidence`)
+  compareValue(errors, raw.runId ?? null, loop.runId ?? null, `${label}.runId raw evidence`)
+  compareValue(errors, raw.pageUrl ?? null, loop.pageUrl ?? null, `${label}.pageUrl raw evidence`)
+
+  const checks = raw.checks ?? {}
+  compareValue(errors, checks.localizedUi?.title ?? null, loop.title ?? null, `${label}.title raw evidence`)
+  compareValue(
+    errors,
+    checks.runtimeHealth?.issueCount ?? null,
+    loop.runtimeHealth?.issueCount ?? null,
+    `${label}.runtimeHealth.issueCount raw evidence`,
+  )
+  compareValue(errors, checks.frontCamera?.ready ?? null, loop.frontCamera?.ready ?? null, `${label}.frontCamera.ready raw evidence`)
+  compareValue(
+    errors,
+    checks.frontCamera?.facingMode ?? null,
+    loop.frontCamera?.facingMode ?? null,
+    `${label}.frontCamera.facingMode raw evidence`,
+  )
+  compareValue(errors, checks.frontCamera?.width ?? null, loop.frontCamera?.width ?? null, `${label}.frontCamera.width raw evidence`)
+  compareValue(errors, checks.frontCamera?.height ?? null, loop.frontCamera?.height ?? null, `${label}.frontCamera.height raw evidence`)
+  compareValue(
+    errors,
+    Boolean(checks.speechInput?.support?.SpeechRecognition || checks.speechInput?.support?.webkitSpeechRecognition),
+    loop.speechInput?.available ?? null,
+    `${label}.speechInput.available raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.scene?.rawImageRetained ?? null,
+    loop.scene?.rawImageRetained ?? null,
+    `${label}.scene.rawImageRetained raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.scene?.rawImageNotRetained ?? null,
+    loop.scene?.rawImageNotRetained ?? null,
+    `${label}.scene.rawImageNotRetained raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.externalExecution?.latestSource ?? null,
+    loop.externalExecution?.latestSource ?? null,
+    `${label}.externalExecution.latestSource raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.externalExecution?.acceptedActionCount ?? null,
+    loop.externalExecution?.acceptedActionCount ?? null,
+    `${label}.externalExecution.acceptedActionCount raw evidence`,
+  )
+}
+
+async function readManifestJson(errors, manifestEntry, label) {
+  try {
+    const absolutePath = path.resolve(repoRoot, manifestEntry.file)
+    return JSON.parse(await readFile(absolutePath, 'utf8'))
+  } catch (error) {
+    errors.push(`${label} raw evidence JSON cannot be read: ${error?.code ?? error.message ?? error}`)
+    return null
+  }
+}
+
+function compareValue(errors, left, right, label) {
+  if (left !== right) {
+    errors.push(`${label} mismatch (${left ?? 'missing'} != ${right ?? 'missing'}).`)
   }
 }
 

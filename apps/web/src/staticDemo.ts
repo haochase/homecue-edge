@@ -23,8 +23,8 @@ const staticContext: HomeContext = {
     privacy_policy: 'raw calendar and sensor data stay local; only summaries are sent to cloud reasoning',
   },
   schedule: [
-    { time: '21:30', title: 'short project review' },
-    { time: '23:30', title: 'sleep target' },
+    { time: '21:30', title: '项目复盘' },
+    { time: '23:30', title: '准备休息' },
   ],
 }
 
@@ -99,8 +99,8 @@ function buildStaticTrace(prompt: string): TraceStep[] {
       result: {
         home: { room: 'living room', time: '19:35', weather: 'light rain, 18C', occupancy: 'user just arrived home' },
         user: { mood: 'tired', preference: 'warm lighting, quiet movie nights, simple meals' },
-        schedule_summary: '2 evening items; next reminder is a short project review at 21:30',
-        privacy_note: 'Raw local data is not sent. This payload is a compact edge-side summary.',
+        schedule_summary: '今晚还有 2 个事项；下一项是 21:30 项目复盘',
+        privacy_note: '原始本地数据不会上传，这里只传递边缘侧摘要。',
       },
     },
     {
@@ -126,7 +126,7 @@ function buildStaticTrace(prompt: string): TraceStep[] {
           { device: 'ac', command: 'set_temperature', value: 26 },
           { device: 'projector', command: 'set_mode', value: 'cinema' },
           { device: 'speaker', command: 'play', value: 'soft ambient' },
-          { device: 'reminder', command: 'set', value: 'Review project notes at 21:10' },
+          { device: 'reminder', command: 'set', value: '21:10 回顾项目笔记' },
         ],
       },
       result: {
@@ -135,17 +135,17 @@ function buildStaticTrace(prompt: string): TraceStep[] {
           { device: 'ac', command: 'set_temperature', value: 26, accepted: true, reason: 'passes edge policy (not yet executed)' },
           { device: 'projector', command: 'set_mode', value: 'cinema', accepted: true, reason: 'passes edge policy (not yet executed)' },
           { device: 'speaker', command: 'play', value: 'soft ambient', accepted: true, reason: 'passes edge policy (not yet executed)' },
-          { device: 'reminder', command: 'set', value: 'Review project notes at 21:10', accepted: true, reason: 'passes edge policy (not yet executed)' },
+          { device: 'reminder', command: 'set', value: '21:10 回顾项目笔记', accepted: true, reason: 'passes edge policy (not yet executed)' },
         ],
         accepted_count: 5,
         rejected_count: 0,
-        note: 'Validation only. No device state was changed.',
+        note: '只做预校验，暂不改变设备状态。',
       },
     },
     {
       step: 3,
       type: 'final',
-      content: `Validated all five actions; emitting the comfort routine for: ${prompt.slice(0, 80)}`,
+      content: `已校验 5 个动作，输出舒适回家流程：${prompt.slice(0, 80)}`,
     },
   ]
 }
@@ -181,7 +181,7 @@ function buildMockPlan(prompt: string, networkMode: NetworkMode, useAgent = fals
       { device: 'ac', command: 'set_temperature', value: 26 },
       { device: 'projector', command: 'set_mode', value: 'cinema' },
       { device: 'speaker', command: 'play', value: 'soft ambient' },
-      { device: 'reminder', command: 'set', value: 'Review project notes at 21:10' },
+      { device: 'reminder', command: 'set', value: '21:10 回顾项目笔记' },
     ],
     suggestions: [
       { type: 'meal', title: 'Tomato egg noodles', detail: 'Fast, warm, and low effort.' },

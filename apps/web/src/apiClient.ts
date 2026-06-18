@@ -137,9 +137,11 @@ export async function requestVisionScene(
   room = 'living room',
   imageBase64 = '',
 ): Promise<VisionSceneResponse> {
+  const normalizedHint = textHint.toLowerCase()
+  const lowEnergyHint = normalizedHint.includes('tired') || /累|疲惫|困|低能量|放松/.test(textHint)
   const fallback: VisionSceneResponse = {
     provider: 'static_home_vlm_adapter',
-    scene: textHint.toLowerCase().includes('tired') ? 'low-energy evening arrival' : 'ordinary home context',
+    scene: lowEnergyHint ? 'low-energy evening arrival' : 'ordinary home context',
     confidence: 0.6,
     observations: [
       'input_camera=phone',

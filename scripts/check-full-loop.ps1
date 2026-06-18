@@ -5,6 +5,7 @@ param(
   [switch]$IncludeChrome,
   [switch]$SkipDesktop,
   [int]$StartupTimeoutSeconds = 60,
+  [int]$StepTimeoutSeconds = 180,
   [string]$ReportPath = "",
   [string]$SummaryPath = ""
 )
@@ -151,12 +152,72 @@ function Start-Api {
 function Invoke-CheckedScript {
   param(
     [string]$Name,
-    [string[]]$Arguments
+    [string[]]$Arguments,
+    [int]$TimeoutSeconds = $StepTimeoutSeconds
   )
 
-  & powershell @Arguments
-  if ($LASTEXITCODE -ne 0) {
-    throw "$Name failed with exit code $LASTEXITCODE."
+  $Process = New-Object System.Diagnostics.Process
+  $Process.StartInfo.FileName = "powershell"
+  $Process.StartInfo.Arguments = Join-ProcessArguments $Arguments
+  $Process.StartInfo.WorkingDirectory = $Root
+  $Process.StartInfo.UseShellExecute = $false
+  $Process.StartInfo.RedirectStandardOutput = $true
+  $Process.StartInfo.RedirectStandardError = $true
+  $Process.StartInfo.CreateNoWindow = $true
+
+  [void]$Process.Start()
+
+  if (-not $Process.WaitForExit($TimeoutSeconds * 1000)) {
+    Stop-ProcessTree -ProcessId $Process.Id
+    Write-ScriptLogText -Text $Process.StandardOutput.ReadToEnd()
+    Write-ScriptLogText -Text $Process.StandardError.ReadToEnd()
+    throw "$Name timed out after $TimeoutSeconds seconds."
+  }
+
+  Write-ScriptLogText -Text $Process.StandardOutput.ReadToEnd()
+  Write-ScriptLogText -Text $Process.StandardError.ReadToEnd()
+
+  if ($Process.ExitCode -ne 0) {
+    throw "$Name failed with exit code $($Process.ExitCode)."
+  }
+}
+
+function Join-ProcessArguments {
+  param([string[]]$Arguments)
+
+  return (($Arguments | ForEach-Object { ConvertTo-ProcessArgument $_ }) -join " ")
+}
+
+function ConvertTo-ProcessArgument {
+  param([string]$Value)
+
+  if ($null -eq $Value -or $Value -eq "") {
+    return '""'
+  }
+
+  if ($Value -notmatch '[\s"]') {
+    return $Value
+  }
+
+  return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Stop-ProcessTree {
+  param([int]$ProcessId)
+
+  $Children = @(Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq $ProcessId })
+  foreach ($Child in $Children) {
+    Stop-ProcessTree -ProcessId $Child.ProcessId
+  }
+
+  Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+}
+
+function Write-ScriptLogText {
+  param([string]$Text)
+
+  if ($Text) {
+    Write-Host $Text.TrimEnd()
   }
 }
 

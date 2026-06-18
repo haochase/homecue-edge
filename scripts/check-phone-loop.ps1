@@ -48,6 +48,55 @@ function Grant-ChromePermission {
   }
 }
 
+function Close-StaleHomeCueTabs {
+  param(
+    [string]$Endpoint,
+    [string]$TargetUrl
+  )
+
+  $TargetOrigin = ([System.Uri]$TargetUrl).GetLeftPart([System.UriPartial]::Authority)
+
+  try {
+    $Targets = Expand-JsonArray -Value (Invoke-RestMethod "$Endpoint/json/list")
+  }
+  catch {
+    Write-Warning "Could not inspect Android Chrome targets before launch. Continuing with existing tabs."
+    return
+  }
+
+  $ClosedCount = 0
+  foreach ($Target in $Targets) {
+    $Url = [string]$Target.url
+    if (
+      $Target.type -eq "page" -and
+      ($Url.StartsWith($TargetOrigin) -or $Url.Contains("/phone-probe.html"))
+    ) {
+      try {
+        Invoke-RestMethod -Method Put "$Endpoint/json/close/$($Target.id)" | Out-Null
+        $ClosedCount += 1
+      }
+      catch {
+        Write-Warning "Could not close stale Android Chrome tab: $Url"
+      }
+    }
+  }
+
+  if ($ClosedCount -gt 0) {
+    Write-Host "Closed stale HomeCue Android Chrome tabs: $ClosedCount"
+    Start-Sleep -Milliseconds 500
+  }
+}
+
+function Expand-JsonArray {
+  param($Value)
+
+  if ($Value -is [System.Array]) {
+    return $Value
+  }
+
+  return @($Value)
+}
+
 $DeviceLines = & $AdbPath devices
 if ($LASTEXITCODE -ne 0) {
   throw "adb devices failed."
@@ -74,6 +123,9 @@ if (-not $SkipReverse) {
 Invoke-Adb -Arguments @("forward", "tcp:$CdpPort", "localabstract:chrome_devtools_remote") | Out-Null
 
 $TargetUrl = "$AppUrl/?apiBase=$([System.Uri]::EscapeDataString($ApiBase))"
+$CdpEndpoint = "http://127.0.0.1:$CdpPort"
+Close-StaleHomeCueTabs -Endpoint $CdpEndpoint -TargetUrl $TargetUrl
+
 Invoke-Adb -Arguments @("shell", "input", "keyevent", "KEYCODE_WAKEUP") | Out-Null
 Invoke-Adb -Arguments @("shell", "wm", "dismiss-keyguard") | Out-Null
 Invoke-Adb -Arguments @(
@@ -95,7 +147,6 @@ if ($WindowState -notmatch [regex]::Escape($ChromePackage)) {
   throw "Chrome is not the foreground app after launch. Current focus: $FocusLine"
 }
 
-$CdpEndpoint = "http://127.0.0.1:$CdpPort"
 $Version = Invoke-RestMethod "$CdpEndpoint/json/version"
 Write-Host ("Android Chrome: {0}" -f $Version.Browser)
 

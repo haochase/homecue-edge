@@ -56,7 +56,7 @@ try {
   page = await getPhonePage(context, targetUrl)
   runtimeHealth = createRuntimeHealthCollector(page)
   await page.goto(targetUrl, { waitUntil: 'networkidle' })
-  await page.waitForSelector('.context-grid', { timeout: 15000 })
+  await waitForAppReady(page)
   evidence.pageUrl = page.url()
 
   await runCheck('localizedUi', () => verifyLocalizedUi(page))
@@ -83,7 +83,7 @@ try {
     await cleanupPage(page)
   }
   if (browser?.isConnected()) {
-    await browser.close()
+    await closeBrowserWithTimeout(browser, 5000)
   }
 }
 
@@ -106,12 +106,40 @@ async function runCheck(name, task) {
 async function getPhonePage(context, targetUrl) {
   const targetOrigin = new URL(targetUrl).origin
   const pages = context.pages()
+  const matchingPages = pages.filter((page) => page.url().startsWith(targetOrigin))
   const currentPage =
-    pages.find((page) => page.url().startsWith(targetOrigin)) ??
-    pages.find((page) => page.url().includes('phone-probe') || page.url().includes('127.0.0.1')) ??
-    pages[0]
+    matchingPages.at(-1) ??
+    pages.find((page) => page.url().includes('phone-probe')) ??
+    pages.find((page) => page.url().includes('127.0.0.1')) ??
+    pages.at(-1)
 
   return currentPage ?? context.newPage()
+}
+
+async function waitForAppReady(page) {
+  await page.waitForFunction(
+    (title) => {
+      const bodyText = document.body.textContent ?? ''
+      return (
+        document.readyState === 'complete' &&
+        bodyText.includes(title) &&
+        bodyText.includes('本地上下文') &&
+        bodyText.includes('边缘侧保留') &&
+        document.querySelectorAll('.info-block').length >= 6
+      )
+    },
+    labels.title,
+    { timeout: 15000 },
+  )
+}
+
+async function closeBrowserWithTimeout(currentBrowser, timeoutMs) {
+  await Promise.race([
+    currentBrowser.close(),
+    new Promise((resolve) => {
+      setTimeout(resolve, timeoutMs)
+    }),
+  ])
 }
 
 async function verifyLocalizedUi(page) {
@@ -281,27 +309,39 @@ async function verifyExternalExecution(page, currentApiBase) {
     source: 'esp32-serial',
     actions: acceptedActions,
   })
+  await page.bringToFront().catch(() => undefined)
 
-  const syncedState = await page
-    .waitForFunction(
-      ({ executedLabel, sourceLabel }) => {
-        const bodyText = document.body.textContent ?? ''
-        const sourceText = document.querySelector('.sync-source')?.textContent?.trim() ?? ''
-        if (bodyText.includes(executedLabel) && sourceText.includes(sourceLabel)) {
-          return {
-            sourceText,
-            planStatus: document.querySelector('.status-badge')?.textContent?.trim() ?? '',
-            executionRows: Array.from(document.querySelectorAll('.execution-row')).map((row) =>
-              row.textContent?.trim(),
-            ),
+  let syncedState
+  try {
+    syncedState = await page
+      .waitForFunction(
+        ({ executedLabel, sourceLabel }) => {
+          const bodyText = document.body.textContent ?? ''
+          const sourceText = document.querySelector('.sync-source')?.textContent?.trim() ?? ''
+          if (bodyText.includes(executedLabel) && sourceText.includes(sourceLabel)) {
+            return {
+              sourceText,
+              planStatus: document.querySelector('.status-badge')?.textContent?.trim() ?? '',
+              executionRows: Array.from(document.querySelectorAll('.execution-row')).map((row) =>
+                row.textContent?.trim(),
+              ),
+            }
           }
-        }
-        return null
-      },
-      { executedLabel: labels.executed, sourceLabel: labels.esp32Serial },
-      { timeout: 10000 },
-    )
-    .then((handle) => handle.jsonValue())
+          return null
+        },
+        { executedLabel: labels.executed, sourceLabel: labels.esp32Serial },
+        { timeout: 30000 },
+      )
+      .then((handle) => handle.jsonValue())
+  } catch (error) {
+    const syncError = new Error(`External execution did not sync to phone UI within 30000ms: ${error.message}`)
+    syncError.details = {
+      apiExecution: execution,
+      latest: await fetchJson(`${currentApiBase}/execution/latest`),
+      domState: await readExternalSyncDom(page),
+    }
+    throw syncError
+  }
 
   const latest = await fetchJson(`${currentApiBase}/execution/latest`)
 
@@ -313,6 +353,15 @@ async function verifyExternalExecution(page, currentApiBase) {
     latestSequence: latest.sequence,
     syncedState,
   }
+}
+
+async function readExternalSyncDom(page) {
+  return page.evaluate(() => ({
+    bodyHasExecuted: (document.body.textContent ?? '').includes('已本地执行'),
+    sourceText: document.querySelector('.sync-source')?.textContent?.trim() ?? '',
+    planStatus: document.querySelector('.status-badge')?.textContent?.trim() ?? '',
+    executionRows: Array.from(document.querySelectorAll('.execution-row')).map((row) => row.textContent?.trim()),
+  }))
 }
 
 function getAcceptedActions(plan) {
