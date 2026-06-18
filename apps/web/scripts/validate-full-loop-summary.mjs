@@ -507,7 +507,7 @@ async function validateRawDesktopEvidence(errors, loop, manifestEntry, screensho
     loop.screenshotEvidence?.count ?? null,
     `${label}.screenshots length raw evidence`,
   )
-  validateRawScreenshotsInManifest(errors, raw.screenshots, screenshotEntries, label)
+  validateRawScreenshotsInManifest(errors, raw.screenshots, checks.screenshotEvidence?.files, screenshotEntries, label)
   compareValue(
     errors,
     checks.scenePromptHandoff?.rawImageRetained ?? null,
@@ -552,7 +552,7 @@ async function validateRawDesktopEvidence(errors, loop, manifestEntry, screensho
   )
 }
 
-function validateRawScreenshotsInManifest(errors, screenshots, screenshotEntries, label) {
+function validateRawScreenshotsInManifest(errors, screenshots, rawScreenshotFiles, screenshotEntries, label) {
   if (!Array.isArray(screenshots)) {
     errors.push(`${label}.screenshots raw evidence must be an array.`)
     return
@@ -563,6 +563,44 @@ function validateRawScreenshotsInManifest(errors, screenshots, screenshotEntries
 
   if (missingFiles.length) {
     errors.push(`${label}.screenshots missing from evidence manifest: ${missingFiles.join(', ')}.`)
+  }
+
+  if (!Array.isArray(rawScreenshotFiles)) {
+    errors.push(`${label}.screenshotEvidence.files raw evidence must be an array.`)
+    return
+  }
+
+  if (rawScreenshotFiles.length !== screenshots.length) {
+    errors.push(
+      `${label}.screenshotEvidence.files length mismatch (${rawScreenshotFiles.length} != ${screenshots.length}).`,
+    )
+  }
+
+  const rawScreenshots = new Set(screenshots)
+  const invalidRawFiles = rawScreenshotFiles.filter(
+    (entry) => typeof entry?.path !== 'string' || !rawScreenshots.has(entry.path),
+  )
+
+  if (invalidRawFiles.length) {
+    const labels = invalidRawFiles.map((entry) => entry?.path ?? 'missing').join(', ')
+    errors.push(`${label}.screenshotEvidence.files missing from raw screenshots: ${labels}.`)
+  }
+
+  for (const rawFile of rawScreenshotFiles) {
+    if (!rawFile || typeof rawFile.path !== 'string') continue
+
+    const manifestEntry = manifestEntriesByFile.get(rawFile.path)
+    if (!manifestEntry) {
+      errors.push(`${label}.screenshotEvidence.files missing from evidence manifest: ${rawFile.path}.`)
+      continue
+    }
+
+    if (rawFile.bytes !== manifestEntry.bytes) {
+      errors.push(`${label}.screenshotEvidence.files ${rawFile.path} byte mismatch (${manifestEntry.bytes} != ${rawFile.bytes}).`)
+    }
+    if (rawFile.sha256 !== manifestEntry.sha256) {
+      errors.push(`${label}.screenshotEvidence.files ${rawFile.path} sha256 mismatch (${manifestEntry.sha256} != ${rawFile.sha256}).`)
+    }
   }
 }
 

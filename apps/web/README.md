@@ -139,4 +139,5 @@ automation that should not parse Markdown. The wrapper then runs
 contract drift fails before the full-loop command returns success. The checker
 also re-reads every present manifest file and recomputes byte size plus the
 short SHA-256 digest, then cross-checks the desktop, Windows Chrome, and phone
-summary fields against their original JSON evidence.
+summary fields against their original JSON evidence. Raw browser JSON screenshot
+file byte counts and digests must also match the final manifest entries.
