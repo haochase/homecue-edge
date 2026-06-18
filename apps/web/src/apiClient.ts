@@ -82,12 +82,20 @@ export async function requestDeviceReset(): Promise<DeviceState> {
   return response.json()
 }
 
-export async function requestVisionScene(textHint: string, room = 'living room'): Promise<VisionSceneResponse> {
+export async function requestVisionScene(
+  textHint: string,
+  room = 'living room',
+  imageBase64 = '',
+): Promise<VisionSceneResponse> {
   const fallback: VisionSceneResponse = {
     provider: 'static_home_vlm_adapter',
     scene: textHint.toLowerCase().includes('tired') ? 'low-energy evening arrival' : 'ordinary home context',
     confidence: 0.6,
-    observations: ['input_camera=mock', `room=${room}`, 'static demo scene summary'],
+    observations: [
+      'input_camera=phone',
+      `room=${room}`,
+      imageBase64 ? 'image frame provided' : 'static demo scene summary',
+    ],
     privacy_summary: {
       room,
       raw_image_retained: false,
@@ -106,7 +114,7 @@ export async function requestVisionScene(textHint: string, room = 'living room')
   const response = await fetch(`${apiBase}/vision/scene`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ room, camera: 'phone', text_hint: textHint }),
+    body: JSON.stringify({ room, camera: 'phone', text_hint: textHint, image_base64: imageBase64 }),
   })
 
   if (!response.ok) {

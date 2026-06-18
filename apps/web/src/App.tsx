@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import { demoRuntime, fetchDevices, loadInitialState, requestDeviceReset, requestPlan, requestVisionScene } from './apiClient'
 import type { DeviceState, NetworkMode, PlanResponse, PrecheckResult, Routine, TraceStep, VisionSceneResponse } from './types'
@@ -7,6 +7,8 @@ const initialPrompt =
   'I just got home and feel tired. Make the room comfortable, suggest something simple for dinner, and set up a relaxing movie mode.'
 
 function App() {
+  const cameraPreviewRef = useRef<HTMLVideoElement | null>(null)
+  const cameraStreamRef = useRef<MediaStream | null>(null)
   const [prompt, setPrompt] = useState(initialPrompt)
   const [networkMode, setNetworkMode] = useState<NetworkMode>('online')
   const [agentMode, setAgentMode] = useState(false)
@@ -19,10 +21,14 @@ function App() {
   const [devices, setDevices] = useState<DeviceState>({})
   const [trace, setTrace] = useState<TraceStep[]>([])
   const [sceneHint, setSceneHint] = useState('tired on sofa at night, living room is dim')
+  const [sceneImageBase64, setSceneImageBase64] = useState('')
   const [scene, setScene] = useState<VisionSceneResponse | null>(null)
   const [showTrace, setShowTrace] = useState(true)
   const [isPlanning, setIsPlanning] = useState(false)
   const [isReadingScene, setIsReadingScene] = useState(false)
+  const [cameraActive, setCameraActive] = useState(false)
+  const [cameraStatus, setCameraStatus] = useState('Camera standby')
+  const [cameraError, setCameraError] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -49,6 +55,12 @@ function App() {
 
     const intervalId = window.setInterval(pollDevices, 3000)
     return () => window.clearInterval(intervalId)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
+    }
   }, [])
 
   async function runPlan() {
@@ -90,7 +102,7 @@ function App() {
     setError('')
 
     try {
-      const data = await requestVisionScene(sceneHint)
+      const data = await requestVisionScene(sceneHint, 'living room', sceneImageBase64)
       setScene(data)
     } catch {
       setError('Could not read the home scene. Check the API server or use static demo mode.')
@@ -103,6 +115,81 @@ function App() {
     if (!scene) return
     setPrompt(scene.suggested_prompt)
     setProposeOnly(true)
+  }
+
+  async function startCamera() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError('Camera API is unavailable on this browser.')
+      setCameraStatus('Camera unavailable')
+      return
+    }
+
+    setCameraError('')
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: { ideal: 'environment' },
+          height: { ideal: 720 },
+          width: { ideal: 1280 },
+        },
+      })
+
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
+      cameraStreamRef.current = stream
+
+      if (cameraPreviewRef.current) {
+        cameraPreviewRef.current.srcObject = stream
+        await cameraPreviewRef.current.play().catch(() => undefined)
+      }
+
+      setCameraActive(true)
+      setCameraStatus('Camera ready')
+    } catch {
+      setCameraActive(false)
+      setCameraStatus('Camera blocked')
+      setCameraError('Camera permission or device access failed.')
+    }
+  }
+
+  function captureSceneFrame() {
+    const video = cameraPreviewRef.current
+
+    if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) {
+      setCameraError('Camera frame is not ready yet.')
+      return
+    }
+
+    const maxWidth = 640
+    const scale = Math.min(1, maxWidth / video.videoWidth)
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(video.videoWidth * scale)
+    canvas.height = Math.round(video.videoHeight * scale)
+
+    const context2d = canvas.getContext('2d')
+    if (!context2d) {
+      setCameraError('Could not capture this camera frame.')
+      return
+    }
+
+    context2d.drawImage(video, 0, 0, canvas.width, canvas.height)
+    const [, base64 = ''] = canvas.toDataURL('image/jpeg', 0.72).split(',')
+    setSceneImageBase64(base64)
+    setCameraStatus('Frame ready')
+    setCameraError('')
+  }
+
+  function stopCamera() {
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
+    cameraStreamRef.current = null
+
+    if (cameraPreviewRef.current) {
+      cameraPreviewRef.current.srcObject = null
+    }
+
+    setCameraActive(false)
+    setCameraStatus(sceneImageBase64 ? 'Frame ready' : 'Camera stopped')
   }
 
   return (
@@ -196,6 +283,28 @@ function App() {
             onChange={(event) => setSceneHint(event.target.value)}
             aria-label="Scene hint"
           />
+          <div className={`camera-surface ${cameraActive ? 'active' : ''}`}>
+            <video ref={cameraPreviewRef} className="camera-preview" autoPlay muted playsInline />
+            {!cameraActive && (
+              <div className="camera-placeholder">{sceneImageBase64 ? 'Frame captured' : 'Camera standby'}</div>
+            )}
+          </div>
+          <div className="camera-controls">
+            <button type="button" onClick={startCamera}>
+              Start camera
+            </button>
+            <button type="button" onClick={captureSceneFrame} disabled={!cameraActive}>
+              Capture frame
+            </button>
+            <button type="button" onClick={stopCamera} disabled={!cameraActive}>
+              Stop
+            </button>
+          </div>
+          <div className="camera-status-row">
+            <span>{cameraStatus}</span>
+            {sceneImageBase64 && <strong>{formatImageSize(sceneImageBase64)}</strong>}
+          </div>
+          {cameraError && <p className="camera-error">{cameraError}</p>}
           <div className="actions scene-actions">
             <button type="button" className="primary" onClick={readScene} disabled={isReadingScene}>
               {isReadingScene ? 'Reading...' : 'Read scene'}
@@ -434,6 +543,10 @@ function formatPrivacySummary(summary: VisionSceneResponse['privacy_summary']) {
   return Object.entries(summary)
     .map(([key, value]) => `${key}: ${String(value)}`)
     .join(' / ')
+}
+
+function formatImageSize(base64: string) {
+  return `${Math.max(1, Math.round((base64.length * 3) / 4 / 1024))} KB`
 }
 
 export default App
