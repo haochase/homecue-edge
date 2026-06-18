@@ -301,6 +301,8 @@ function summarizeScreenshotEvidence(value) {
   return {
     success: value.success !== false,
     count: value.count ?? null,
+    expectedFiles: Array.isArray(value.expectedFiles) ? value.expectedFiles : [],
+    uniqueDigestCount: value.uniqueDigestCount ?? null,
     minWidth: value.minWidth ?? null,
     minHeight: value.minHeight ?? null,
     minBytes: value.minBytes ?? null,
@@ -477,6 +479,12 @@ function validateBrowserParity(desktop, chrome) {
   compareValue(errors, 'external sync source', desktopChecks.externalExecutionSync?.latestSource, chromeChecks.externalExecutionSync?.latestSource)
   compareValue(errors, 'runtime issue count', desktopChecks.runtimeHealth?.issueCount, chromeChecks.runtimeHealth?.issueCount)
   compareValue(errors, 'screenshot count', desktopChecks.screenshotEvidence?.count, chromeChecks.screenshotEvidence?.count)
+  compareValue(
+    errors,
+    'screenshot unique digest count',
+    desktopChecks.screenshotEvidence?.uniqueDigestCount,
+    chromeChecks.screenshotEvidence?.uniqueDigestCount,
+  )
 
   const desktopLayout = layoutSignature(desktopChecks.responsiveLayout)
   const chromeLayout = layoutSignature(chromeChecks.responsiveLayout)
@@ -543,6 +551,12 @@ function validateDesktopEvidence(label, value, errors) {
   }
   if (checks.screenshotEvidence && checks.screenshotEvidence.count !== 6) {
     errors.push(`${label} screenshot evidence count is ${checks.screenshotEvidence.count}.`)
+  }
+  if (
+    checks.screenshotEvidence &&
+    checks.screenshotEvidence.uniqueDigestCount !== checks.screenshotEvidence.count
+  ) {
+    errors.push(`${label} screenshot evidence contains duplicate images.`)
   }
   if (checks.scenePromptHandoff?.rawImageRetained !== false || checks.scenePromptHandoff?.rawImageEchoed !== false) {
     errors.push(`${label} scene privacy proof is incomplete.`)
@@ -706,7 +720,9 @@ function formatScreenshotEvidence(value) {
   if (!value) return 'not checked'
   if (value.success === false) return `fail (${value.error ?? 'unknown error'})`
 
-  return `${value.count ?? 0} PNGs, min ${value.minWidth ?? '?'}x${value.minHeight ?? '?'}, ${value.minBytes ?? '?'} bytes`
+  return `${value.count ?? 0} PNGs, unique:${value.uniqueDigestCount ?? '?'}, min ${value.minWidth ?? '?'}x${
+    value.minHeight ?? '?'
+  }, ${value.minBytes ?? '?'} bytes`
 }
 
 function formatBoolean(value) {

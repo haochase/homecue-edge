@@ -6,6 +6,14 @@ import { fileURLToPath } from 'node:url'
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
 const summaryFile = process.argv[2] ?? path.join(repoRoot, 'assets', 'demo', 'full-loop-report.json')
+const EXPECTED_SCREENSHOT_FILES = [
+  '01-control-console.png',
+  '02-scene-prompt-handoff.png',
+  '03-propose-only.png',
+  '04-web-confirmation.png',
+  '05-offline-fallback.png',
+  '06-external-sync.png',
+]
 const options = parseOptions(process.argv.slice(3))
 const summary = JSON.parse(await readFile(summaryFile, 'utf8'))
 const errors = await validateSummary(summary, options)
@@ -298,6 +306,18 @@ async function validateRawDesktopEvidence(errors, loop, manifestEntry, label) {
   )
   compareValue(
     errors,
+    checks.screenshotEvidence?.uniqueDigestCount ?? null,
+    loop.screenshotEvidence?.uniqueDigestCount ?? null,
+    `${label}.screenshotEvidence.uniqueDigestCount raw evidence`,
+  )
+  compareValue(
+    errors,
+    screenshotFilesSignature(checks.screenshotEvidence?.expectedFiles),
+    screenshotFilesSignature(loop.screenshotEvidence?.expectedFiles),
+    `${label}.screenshotEvidence.expectedFiles raw evidence`,
+  )
+  compareValue(
+    errors,
     raw.screenshots?.length ?? null,
     loop.screenshotEvidence?.count ?? null,
     `${label}.screenshots length raw evidence`,
@@ -440,6 +460,11 @@ function responsiveLayoutSignature(value) {
     .join('|')
 }
 
+function screenshotFilesSignature(value) {
+  if (!Array.isArray(value)) return null
+  return value.join('|')
+}
+
 function validateRuntimeHealth(errors, value, label) {
   if (!value || typeof value !== 'object') {
     errors.push(`${label} is missing.`)
@@ -505,6 +530,12 @@ function validateScreenshotEvidence(errors, value, label) {
 
   if (value.success !== true) errors.push(`${label}.success must be true.`)
   if (value.count !== 6) errors.push(`${label}.count must be 6.`)
+  if (value.uniqueDigestCount !== value.count) {
+    errors.push(`${label}.uniqueDigestCount must match count.`)
+  }
+  if (screenshotFilesSignature(value.expectedFiles) !== EXPECTED_SCREENSHOT_FILES.join('|')) {
+    errors.push(`${label}.expectedFiles must match the required six-step screenshot set.`)
+  }
   if (!positiveNumber(value.minWidth) || !positiveNumber(value.minHeight)) {
     errors.push(`${label} min dimensions must be positive.`)
   }

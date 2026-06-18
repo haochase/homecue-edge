@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -523,19 +524,34 @@ async function captureScreenshot(page, filename) {
 }
 
 async function verifyScreenshotEvidence(screenshots) {
-  const expectedCount = 6
+  const expectedFiles = [
+    '01-control-console.png',
+    '02-scene-prompt-handoff.png',
+    '03-propose-only.png',
+    '04-web-confirmation.png',
+    '05-offline-fallback.png',
+    '06-external-sync.png',
+  ]
+  const expectedCount = expectedFiles.length
   if (screenshots.length !== expectedCount) {
     throw new Error(`Expected ${expectedCount} screenshots, got ${screenshots.length}.`)
   }
 
   const results = []
-  for (const screenshot of screenshots) {
+  for (const [index, screenshot] of screenshots.entries()) {
+    const expectedFile = expectedFiles[index]
+    if (path.basename(screenshot) !== expectedFile) {
+      throw new Error(`Unexpected screenshot order: expected ${expectedFile}, got ${screenshot}.`)
+    }
+
     const absolutePath = path.resolve(repoRoot, screenshot)
     const fileStat = await stat(absolutePath)
-    const metadata = parsePngMetadata(await readFile(absolutePath))
+    const buffer = await readFile(absolutePath)
+    const metadata = parsePngMetadata(buffer)
     const result = {
       path: screenshot,
       bytes: fileStat.size,
+      sha256: createHash('sha256').update(buffer).digest('hex').slice(0, 12),
       ...metadata,
     }
 
@@ -546,8 +562,15 @@ async function verifyScreenshotEvidence(screenshots) {
     results.push(result)
   }
 
+  const uniqueDigests = new Set(results.map((item) => item.sha256))
+  if (uniqueDigests.size !== results.length) {
+    throw new Error(`Screenshot evidence contains duplicate images: ${JSON.stringify(results)}`)
+  }
+
   return {
     count: results.length,
+    expectedFiles,
+    uniqueDigestCount: uniqueDigests.size,
     minWidth: Math.min(...results.map((item) => item.width)),
     minHeight: Math.min(...results.map((item) => item.height)),
     minBytes: Math.min(...results.map((item) => item.bytes)),
