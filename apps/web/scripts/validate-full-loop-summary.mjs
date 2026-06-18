@@ -302,6 +302,9 @@ async function validateEvidenceManifest(errors, files, { requirePhone, requireCh
   const presentFiles = files.filter((entry) => entry?.present)
   if (!presentFiles.length) errors.push('evidence.files must contain present entries.')
 
+  validateUniquePresentManifestFiles(errors, presentFiles)
+  validateUniqueManifestJsonLabels(errors, files, ['Desktop JSON', 'Windows Chrome JSON', 'Phone JSON'])
+
   for (const entry of presentFiles) {
     assertString(errors, entry.label, 'evidence.files[].label')
     assertString(errors, entry.file, `evidence entry ${entry.label ?? 'unknown'} file`)
@@ -352,9 +355,36 @@ async function validateManifestFile(errors, entry) {
   }
 }
 
+function validateUniquePresentManifestFiles(errors, files) {
+  const labelsByFile = new Map()
+
+  for (const entry of files) {
+    if (typeof entry?.file !== 'string') continue
+
+    const labels = labelsByFile.get(entry.file) ?? []
+    labels.push(entry.label ?? 'unknown')
+    labelsByFile.set(entry.file, labels)
+  }
+
+  for (const [file, labels] of labelsByFile) {
+    if (labels.length > 1) {
+      errors.push(`evidence manifest file ${file} appears ${labels.length} times (${labels.join(', ')}).`)
+    }
+  }
+}
+
+function validateUniqueManifestJsonLabels(errors, files, labels) {
+  for (const label of labels) {
+    const entries = files.filter((entry) => entry?.present && entry.label === label)
+    if (entries.length > 1) {
+      errors.push(`evidence manifest label ${label} appears ${entries.length} times.`)
+    }
+  }
+}
+
 function requireManifestLabel(errors, files, label) {
-  const entry = files.find((item) => item?.label === label)
-  if (!entry?.present) {
+  const entry = files.find((item) => item?.present && item.label === label)
+  if (!entry) {
     errors.push(`evidence manifest missing present ${label}.`)
   }
 }
@@ -371,6 +401,9 @@ async function validateRawEvidence(errors, summary, { requirePhone, requireChrom
     {
       appUrl: summary.appUrl,
       apiBase: summary.apiBase,
+      expectedManifestLabel: 'Desktop JSON',
+      expectedBrowserName: 'playwright-chromium',
+      expectedExecutablePath: 'bundled',
       expectedScreenshotDir: 'assets/demo/playwright-chromium-screens/',
     },
   )
@@ -386,6 +419,9 @@ async function validateRawEvidence(errors, summary, { requirePhone, requireChrom
       {
         appUrl: summary.appUrl,
         apiBase: summary.apiBase,
+        expectedManifestLabel: 'Windows Chrome JSON',
+        expectedBrowserName: 'windows-chrome',
+        expectedExecutablePath: 'custom',
         expectedScreenshotDir: 'assets/demo/windows-chrome-screens/',
       },
     )
@@ -425,12 +461,18 @@ async function validateRawDesktopEvidence(
   manifestEntry,
   screenshotEntries,
   label,
-  { appUrl, apiBase, expectedScreenshotDir },
+  { appUrl, apiBase, expectedManifestLabel, expectedBrowserName, expectedExecutablePath, expectedScreenshotDir },
 ) {
   if (!manifestEntry?.present || !loop?.run) return null
 
   const raw = await readManifestJson(errors, manifestEntry, label)
   if (!raw) return null
+
+  validateRawBrowserIdentity(errors, raw, manifestEntry, label, {
+    expectedManifestLabel,
+    expectedBrowserName,
+    expectedExecutablePath,
+  })
 
   compareValue(errors, raw.success === true, loop.success, `${label}.success raw evidence`)
   compareValue(errors, raw.runId ?? null, loop.runId ?? null, `${label}.runId raw evidence`)
@@ -579,6 +621,29 @@ async function validateRawDesktopEvidence(
   )
 
   return raw
+}
+
+function validateRawBrowserIdentity(
+  errors,
+  raw,
+  manifestEntry,
+  label,
+  { expectedManifestLabel, expectedBrowserName, expectedExecutablePath },
+) {
+  if (expectedManifestLabel && manifestEntry.label !== expectedManifestLabel) {
+    errors.push(`${label} raw evidence manifest label must be ${expectedManifestLabel}.`)
+  }
+  if (expectedBrowserName && raw.browserName !== expectedBrowserName) {
+    errors.push(`${label}.browserName raw evidence must be ${expectedBrowserName}.`)
+  }
+
+  const browserEnvironment = raw.checks?.browserEnvironment
+  if (expectedBrowserName && browserEnvironment?.browserName !== expectedBrowserName) {
+    errors.push(`${label}.browserEnvironment.browserName raw evidence must be ${expectedBrowserName}.`)
+  }
+  if (expectedExecutablePath && browserEnvironment?.executablePath !== expectedExecutablePath) {
+    errors.push(`${label}.browserEnvironment.executablePath raw evidence must be ${expectedExecutablePath}.`)
+  }
 }
 
 function validateIndependentBrowserScreenshots(errors, desktop, chrome) {

@@ -142,4 +142,6 @@ short SHA-256 digest, then cross-checks the desktop, Windows Chrome, and phone
 summary fields against their original JSON evidence. Raw browser JSON screenshot
 file byte counts and digests must also match the final manifest entries. Desktop
 Chromium and installed Windows Chrome screenshots are required to come from
-separate browser-specific evidence directories.
+separate browser-specific evidence directories. JSON evidence labels and file
+paths must be unique, and raw desktop/Chrome browser identity fields must match
+their manifest role.
