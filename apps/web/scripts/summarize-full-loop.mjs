@@ -13,6 +13,7 @@ const chromeFile = process.argv[6] ?? path.join(repoRoot, 'assets', 'demo', 'chr
 const desktop = await readJsonIfExists(desktopFile)
 const phone = await readJsonIfExists(phoneFile)
 const chrome = await readJsonIfExists(chromeFile)
+const browserParity = validateBrowserParity(desktop, chrome)
 const requiredEvidence = validateEvidence({ desktop, phone, chrome })
 const screenshots = collectScreenshots([desktop, chrome])
 
@@ -27,6 +28,7 @@ const report = [
   `- Windows Chrome loop: ${chrome ? formatStatus(chrome.success) : 'not run'}`,
   `- Phone loop: ${phone ? formatStatus(phone.success) : 'not run'}`,
   `- Run ID: ${requiredEvidence.runId ?? 'not set'}`,
+  `- Browser parity: ${formatParity(browserParity)}`,
   `- App URL: ${desktop?.appUrl ?? phone?.appUrl ?? 'unknown'}`,
   `- API base: ${desktop?.apiBase ?? phone?.apiBase ?? 'unknown'}`,
   '',
@@ -127,12 +129,75 @@ function validateEvidence({ desktop, phone, chrome }) {
   if (uniqueRunIds.length > 1) {
     errors.push(`Evidence run ids do not match: ${runIds.map(([label, runId]) => `${label}=${runId}`).join(', ')}.`)
   }
+  if (isRequiredFile(desktopFile) && isRequiredFile(chromeFile) && !browserParity.success) {
+    errors.push(`Browser parity failed: ${browserParity.errors.join('; ')}.`)
+  }
 
   return {
     success: errors.length === 0,
     errors,
     runId: uniqueRunIds[0] ?? null,
   }
+}
+
+function validateBrowserParity(desktop, chrome) {
+  if (!isRequiredFile(desktopFile) || !isRequiredFile(chromeFile)) {
+    return {
+      checked: false,
+      success: null,
+      errors: [],
+    }
+  }
+
+  const errors = []
+  const desktopChecks = desktop?.checks ?? {}
+  const chromeChecks = chrome?.checks ?? {}
+  compareValue(errors, 'title', desktopChecks.localizedUi?.title, chromeChecks.localizedUi?.title)
+  compareValue(errors, 'scene', desktopChecks.scenePromptHandoff?.scene, chromeChecks.scenePromptHandoff?.scene)
+  compareValue(
+    errors,
+    'scene raw image retained',
+    desktopChecks.scenePromptHandoff?.rawImageRetained,
+    chromeChecks.scenePromptHandoff?.rawImageRetained,
+  )
+  compareValue(
+    errors,
+    'scene raw image echoed',
+    desktopChecks.scenePromptHandoff?.rawImageEchoed,
+    chromeChecks.scenePromptHandoff?.rawImageEchoed,
+  )
+  compareValue(errors, 'web confirmation source', desktopChecks.webConfirmExecute?.latestSource, chromeChecks.webConfirmExecute?.latestSource)
+  compareValue(errors, 'offline fallback source', desktopChecks.offlineFallback?.latestSource, chromeChecks.offlineFallback?.latestSource)
+  compareValue(
+    errors,
+    'external accepted action count',
+    desktopChecks.externalExecutionSync?.acceptedActionCount,
+    chromeChecks.externalExecutionSync?.acceptedActionCount,
+  )
+  compareValue(errors, 'external sync source', desktopChecks.externalExecutionSync?.latestSource, chromeChecks.externalExecutionSync?.latestSource)
+  compareValue(errors, 'runtime issue count', desktopChecks.runtimeHealth?.issueCount, chromeChecks.runtimeHealth?.issueCount)
+  compareValue(errors, 'screenshot count', desktopChecks.screenshotEvidence?.count, chromeChecks.screenshotEvidence?.count)
+
+  const desktopLayout = layoutSignature(desktopChecks.responsiveLayout)
+  const chromeLayout = layoutSignature(chromeChecks.responsiveLayout)
+  compareValue(errors, 'responsive layout', desktopLayout, chromeLayout)
+
+  return {
+    checked: true,
+    success: errors.length === 0,
+    errors,
+  }
+}
+
+function compareValue(errors, label, left, right) {
+  if (left !== right) {
+    errors.push(`${label} mismatch (${left ?? 'missing'} != ${right ?? 'missing'})`)
+  }
+}
+
+function layoutSignature(value) {
+  if (!Array.isArray(value)) return null
+  return value.map((item) => `${item.label}:${item.overflowX}`).join('|')
 }
 
 function validateDesktopEvidence(label, value, errors) {
@@ -267,6 +332,12 @@ function formatBrowserEnvironment(value) {
   const speech = value.speechRecognition ? 'speech:on' : 'speech:off'
 
   return `${value.browserName ?? browserFamily} (${browserFamily}, ${mode}, ${viewport.innerWidth ?? '?'}x${viewport.innerHeight ?? '?'}, dpr ${viewport.devicePixelRatio ?? '?'}, ${media}, ${speech})`
+}
+
+function formatParity(value) {
+  if (!value?.checked) return 'not checked'
+  if (value.success) return 'pass'
+  return `fail (${value.errors.join('; ')})`
 }
 
 function formatRuntimeHealth(value) {

@@ -50,7 +50,9 @@ or optional phone/Chrome checks are omitted, the wrapper passes an explicit
 Relative `-ReportPath` values are resolved from the repository root.
 Each full-loop run also stamps desktop, phone, and Chrome JSON evidence with a
 shared run id; the report gate fails when required evidence files do not share
-that id.
+that id. When both desktop Chromium and installed Windows Chrome are included,
+the report gate also checks browser parity for core UI, privacy, layout, runtime
+health, screenshot, and execution-sync results.
 
 ```powershell
 .\scripts\check-chrome-loop.ps1
