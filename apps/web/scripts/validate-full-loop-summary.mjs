@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -7,7 +8,7 @@ const repoRoot = path.resolve(scriptDir, '..', '..', '..')
 const summaryFile = process.argv[2] ?? path.join(repoRoot, 'assets', 'demo', 'full-loop-report.json')
 const options = parseOptions(process.argv.slice(3))
 const summary = JSON.parse(await readFile(summaryFile, 'utf8'))
-const errors = validateSummary(summary, options)
+const errors = await validateSummary(summary, options)
 
 if (errors.length) {
   console.error(`Full loop summary validation failed: ${summaryFile}`)
@@ -26,7 +27,7 @@ function parseOptions(args) {
   }
 }
 
-function validateSummary(value, { requirePhone, requireChrome }) {
+async function validateSummary(value, { requirePhone, requireChrome }) {
   const errors = []
 
   if (!value || typeof value !== 'object') {
@@ -55,7 +56,7 @@ function validateSummary(value, { requirePhone, requireChrome }) {
   })
   validatePhoneLoop(errors, value.loops?.phone, 'loops.phone', { required: requirePhone, expectedRunId: value.runId })
   validateBrowserParity(errors, value.browserParity, { required: requireChrome })
-  validateEvidenceManifest(errors, value.evidence?.files, { requirePhone, requireChrome })
+  await validateEvidenceManifest(errors, value.evidence?.files, { requirePhone, requireChrome })
 
   return errors
 }
@@ -150,7 +151,7 @@ function validateBrowserParity(errors, parity, { required }) {
   }
 }
 
-function validateEvidenceManifest(errors, files, { requirePhone, requireChrome }) {
+async function validateEvidenceManifest(errors, files, { requirePhone, requireChrome }) {
   if (!Array.isArray(files)) return
 
   const presentFiles = files.filter((entry) => entry?.present)
@@ -163,11 +164,47 @@ function validateEvidenceManifest(errors, files, { requirePhone, requireChrome }
     if (typeof entry.sha256 !== 'string' || !/^[a-f0-9]{12}$/u.test(entry.sha256)) {
       errors.push(`evidence entry ${entry.file ?? entry.label} sha256 must be a 12-char hex digest.`)
     }
+    await validateManifestFile(errors, entry)
   }
 
   requireManifestLabel(errors, files, 'Desktop JSON')
   if (requireChrome) requireManifestLabel(errors, files, 'Windows Chrome JSON')
   if (requirePhone) requireManifestLabel(errors, files, 'Phone JSON')
+}
+
+async function validateManifestFile(errors, entry) {
+  if (typeof entry.file !== 'string' || entry.file.length === 0) return
+
+  const absolutePath = path.resolve(repoRoot, entry.file)
+  const relativePath = path.relative(repoRoot, absolutePath)
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    errors.push(`evidence entry ${entry.file} must stay inside the repository root.`)
+    return
+  }
+
+  let fileStat
+  let buffer
+  try {
+    fileStat = await stat(absolutePath)
+    buffer = await readFile(absolutePath)
+  } catch (error) {
+    errors.push(`evidence entry ${entry.file} cannot be read: ${error?.code ?? error.message ?? error}`)
+    return
+  }
+
+  if (!fileStat.isFile()) {
+    errors.push(`evidence entry ${entry.file} is not a file.`)
+    return
+  }
+
+  if (fileStat.size !== entry.bytes) {
+    errors.push(`evidence entry ${entry.file} byte mismatch (${fileStat.size} != ${entry.bytes}).`)
+  }
+
+  const digest = createHash('sha256').update(buffer).digest('hex').slice(0, 12)
+  if (digest !== entry.sha256) {
+    errors.push(`evidence entry ${entry.file} sha256 mismatch (${digest} != ${entry.sha256}).`)
+  }
 }
 
 function requireManifestLabel(errors, files, label) {

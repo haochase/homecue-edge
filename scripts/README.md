@@ -62,7 +62,9 @@ uses the same validated evidence and includes top-level `success`, `runId`,
 browser parity, per-loop status, runtime-health counts, screenshot summaries,
 and validation errors for downstream automation. After writing the summary, the
 wrapper runs `npm run summary:check` with matching phone/Chrome requirements so
-schema or contract drift fails the full-loop gate immediately.
+schema or contract drift fails the full-loop gate immediately. That checker
+also re-reads every present manifest file and recomputes byte size plus the
+short SHA-256 digest, so stale or edited evidence files are caught.
 
 ```powershell
 .\scripts\check-chrome-loop.ps1

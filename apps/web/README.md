@@ -132,4 +132,6 @@ evidence and exposes top-level `success`, `runId`, browser parity, per-loop
 status, runtime-health counts, screenshot summaries, and validation errors for
 automation that should not parse Markdown. The wrapper then runs
 `npm run summary:check` with the same phone/Chrome requirements, so schema or
-contract drift fails before the full-loop command returns success.
+contract drift fails before the full-loop command returns success. The checker
+also re-reads every present manifest file and recomputes byte size plus the
+short SHA-256 digest, catching stale or edited evidence files.
