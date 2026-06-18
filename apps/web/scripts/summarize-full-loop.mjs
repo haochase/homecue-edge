@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -16,6 +17,7 @@ const chrome = await readJsonIfExists(chromeFile)
 const browserParity = validateBrowserParity(desktop, chrome)
 const requiredEvidence = validateEvidence({ desktop, phone, chrome })
 const screenshots = collectScreenshots([desktop, chrome])
+const manifest = await buildEvidenceManifest({ desktop, phone, chrome, screenshots })
 
 const report = [
   '# Home AI Companion Loop Report',
@@ -46,10 +48,7 @@ const report = [
   '',
   '## Evidence Files',
   '',
-  `- Desktop JSON: ${relativePath(desktopFile)}`,
-  `- Windows Chrome JSON: ${chrome ? relativePath(chromeFile) : 'not run'}`,
-  `- Phone JSON: ${phone ? relativePath(phoneFile) : 'not run'}`,
-  ...screenshots.map((item) => `- Screenshot: ${item}`),
+  ...formatManifest(manifest),
   '',
   '## Demo Talking Points',
   '',
@@ -75,6 +74,49 @@ async function readJsonIfExists(file) {
     if (error?.code === 'ENOENT') return null
     throw error
   }
+}
+
+async function buildEvidenceManifest({ desktop, phone, chrome, screenshots }) {
+  const entries = []
+  const jsonFiles = [
+    ['Desktop JSON', desktopFile, Boolean(desktop)],
+    ['Windows Chrome JSON', chromeFile, Boolean(chrome)],
+    ['Phone JSON', phoneFile, Boolean(phone)],
+  ]
+
+  for (const [label, file, present] of jsonFiles) {
+    if (!present) {
+      entries.push({ label, present: false })
+      continue
+    }
+    entries.push(await fileManifestEntry(label, file))
+  }
+
+  for (const screenshot of screenshots) {
+    entries.push(await fileManifestEntry('Screenshot', path.resolve(repoRoot, screenshot)))
+  }
+
+  return entries
+}
+
+async function fileManifestEntry(label, file) {
+  const buffer = await readFile(file)
+  return {
+    label,
+    file: relativePath(file),
+    present: true,
+    bytes: buffer.length,
+    sha256: createHash('sha256').update(buffer).digest('hex').slice(0, 12),
+  }
+}
+
+function formatManifest(entries) {
+  return entries.map((entry) => {
+    if (!entry.present) {
+      return `- ${entry.label}: not run`
+    }
+    return `- ${entry.label}: ${entry.file} (${entry.bytes} bytes, sha256:${entry.sha256})`
+  })
 }
 
 function formatDesktop(value) {

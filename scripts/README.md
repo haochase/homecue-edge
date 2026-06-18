@@ -52,7 +52,9 @@ Each full-loop run also stamps desktop, phone, and Chrome JSON evidence with a
 shared run id; the report gate fails when required evidence files do not share
 that id. When both desktop Chromium and installed Windows Chrome are included,
 the report gate also checks browser parity for core UI, privacy, layout, runtime
-health, screenshot, and execution-sync results.
+health, screenshot, and execution-sync results. The report's evidence manifest
+lists each JSON and screenshot artifact with byte size and a short SHA-256 digest
+so local proof files can be tied back to the generated report.
 
 ```powershell
 .\scripts\check-chrome-loop.ps1

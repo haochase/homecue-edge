@@ -124,4 +124,6 @@ requested loop evidence is missing, marked unsuccessful, or lacks the required
 checks. When the full-loop wrapper runs multiple targets, it stamps each JSON
 evidence file with the same run id and the report gate verifies they match.
 Desktop Chromium and installed Windows Chrome are also compared for core UI,
-privacy, layout, runtime-health, screenshot, and execution-sync parity.
+privacy, layout, runtime-health, screenshot, and execution-sync parity. The
+evidence section records each JSON and screenshot file with byte size and a
+short SHA-256 digest.
