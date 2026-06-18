@@ -19,6 +19,9 @@ $WebPort = [System.Uri]$AppUrl | Select-Object -ExpandProperty Port
 if (-not $ReportPath) {
   $ReportPath = Join-Path $Root "assets\demo\full-loop-report.md"
 }
+elseif (-not [System.IO.Path]::IsPathRooted($ReportPath)) {
+  $ReportPath = Join-Path $Root $ReportPath
+}
 
 function Test-HttpOk {
   param([string]$Url)
@@ -188,7 +191,14 @@ if ($IncludeChrome) {
 
 Push-Location $WebDir
 try {
-  $ReportArgs = @($ReportPath, (Join-Path $Root "assets\demo\desktop-loop.json"))
+  if ($SkipDesktop) {
+    $DesktopEvidencePath = "__desktop_not_run__.json"
+  }
+  else {
+    $DesktopEvidencePath = Join-Path $Root "assets\demo\desktop-loop.json"
+  }
+
+  $ReportArgs = @($ReportPath, $DesktopEvidencePath)
   if ($IncludePhone) {
     $ReportArgs += (Join-Path $Root "assets\demo\phone-loop.json")
   }

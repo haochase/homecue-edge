@@ -119,4 +119,6 @@ the screenshots from the current run. The report also summarizes browser
 runtime-health counts and desktop screenshot evidence for the desktop, Windows
 Chrome, and Android Chrome loops. Desktop and Windows Chrome sections include a
 browser environment fingerprint with user-agent family, viewport, pixel ratio,
-and media/speech API availability.
+and media/speech API availability. The report command also fails if any
+requested loop evidence is missing, marked unsuccessful, or lacks the required
+checks.

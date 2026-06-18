@@ -13,6 +13,7 @@ const chromeFile = process.argv[6] ?? path.join(repoRoot, 'assets', 'demo', 'chr
 const desktop = await readJsonIfExists(desktopFile)
 const phone = await readJsonIfExists(phoneFile)
 const chrome = await readJsonIfExists(chromeFile)
+const requiredEvidence = validateEvidence({ desktop, phone, chrome })
 const screenshots = collectScreenshots([desktop, chrome])
 
 const report = [
@@ -59,6 +60,10 @@ const report = [
 await mkdir(path.dirname(outputFile), { recursive: true })
 await writeFile(outputFile, report, 'utf8')
 console.log(`Full loop report: ${outputFile}`)
+if (!requiredEvidence.success) {
+  console.error(`Full loop report evidence validation failed:\n${requiredEvidence.errors.map((item) => `- ${item}`).join('\n')}`)
+  process.exit(1)
+}
 
 async function readJsonIfExists(file) {
   try {
@@ -90,6 +95,107 @@ function formatDesktop(value) {
     `- External sync source: ${checks.externalExecutionSync?.latestSource ?? 'unknown'}`,
     `- External accepted actions: ${checks.externalExecutionSync?.acceptedActionCount ?? 'unknown'}`,
   ]
+}
+
+function validateEvidence({ desktop, phone, chrome }) {
+  const errors = []
+
+  if (isRequiredFile(desktopFile)) {
+    validateDesktopEvidence('Desktop', desktop, errors)
+  }
+  if (isRequiredFile(phoneFile)) {
+    validatePhoneEvidence(phone, errors)
+  }
+  if (isRequiredFile(chromeFile)) {
+    validateDesktopEvidence('Windows Chrome', chrome, errors)
+  }
+
+  return {
+    success: errors.length === 0,
+    errors,
+  }
+}
+
+function validateDesktopEvidence(label, value, errors) {
+  if (!value) {
+    errors.push(`${label} evidence file is missing.`)
+    return
+  }
+  if (value.success !== true) {
+    errors.push(`${label} loop success is not true.`)
+  }
+
+  const checks = value.checks ?? {}
+  const requiredChecks = [
+    'browserEnvironment',
+    'localizedUi',
+    'responsiveLayout',
+    'scenePromptHandoff',
+    'proposeOnly',
+    'webConfirmExecute',
+    'offlineFallback',
+    'externalExecutionSync',
+    'screenshotEvidence',
+    'runtimeHealth',
+  ]
+  const missing = requiredChecks.filter((name) => !checks[name])
+  if (missing.length) {
+    errors.push(`${label} missing checks: ${missing.join(', ')}.`)
+  }
+
+  if (!Array.isArray(value.screenshots) || value.screenshots.length !== 6) {
+    errors.push(`${label} expected 6 screenshots, got ${value.screenshots?.length ?? 0}.`)
+  }
+  if (checks.runtimeHealth && checks.runtimeHealth.success !== true) {
+    errors.push(`${label} runtime health is not clean.`)
+  }
+  if (checks.screenshotEvidence && checks.screenshotEvidence.count !== 6) {
+    errors.push(`${label} screenshot evidence count is ${checks.screenshotEvidence.count}.`)
+  }
+  if (checks.scenePromptHandoff?.rawImageRetained !== false || checks.scenePromptHandoff?.rawImageEchoed !== false) {
+    errors.push(`${label} scene privacy proof is incomplete.`)
+  }
+}
+
+function validatePhoneEvidence(value, errors) {
+  if (!value) {
+    errors.push('Phone evidence file is missing.')
+    return
+  }
+  if (value.success !== true) {
+    errors.push('Phone loop success is not true.')
+  }
+
+  const checks = value.checks ?? {}
+  const requiredChecks = [
+    'localizedUi',
+    'frontCamera',
+    'scene',
+    'scenePromptHandoff',
+    'speechInput',
+    'externalExecution',
+    'runtimeHealth',
+  ]
+  const missing = requiredChecks.filter((name) => !checks[name])
+  if (missing.length) {
+    errors.push(`Phone missing checks: ${missing.join(', ')}.`)
+  }
+  if (checks.frontCamera && checks.frontCamera.ready !== true) {
+    errors.push('Phone front camera is not ready.')
+  }
+  if (checks.frontCamera?.facingMode && checks.frontCamera.facingMode !== 'user') {
+    errors.push(`Phone camera facingMode is ${checks.frontCamera.facingMode}.`)
+  }
+  if (checks.runtimeHealth && checks.runtimeHealth.success !== true) {
+    errors.push('Phone runtime health is not clean.')
+  }
+  if (checks.scene && checks.scene.rawImageNotRetained !== true) {
+    errors.push('Phone scene privacy proof is incomplete.')
+  }
+}
+
+function isRequiredFile(file) {
+  return !path.basename(file).startsWith('__')
 }
 
 function formatPhone(value) {

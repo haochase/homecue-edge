@@ -42,7 +42,12 @@ responses. They verify that each screenshot is a non-empty PNG with plausible
 dimensions and image data, and the report summarizes runtime-health and
 screenshot-evidence counts. Desktop and Windows Chrome evidence also records
 browser environment details such as user agent family, viewport, pixel ratio,
-and media/speech API availability.
+and media/speech API availability. The report step validates the required JSON
+evidence before exiting successfully, so a missing or failed desktop, Chrome, or
+phone loop cannot be hidden by a generated Markdown summary. When `-SkipDesktop`
+or optional phone/Chrome checks are omitted, the wrapper passes an explicit
+`__*_not_run__.json` sentinel so old evidence from a previous run is not reused.
+Relative `-ReportPath` values are resolved from the repository root.
 
 ```powershell
 .\scripts\check-chrome-loop.ps1
