@@ -58,6 +58,7 @@ try {
 
   await runCheck('browserEnvironment', () => verifyBrowserEnvironment(page))
   await runCheck('localizedUi', () => verifyLocalizedUi(page))
+  await runCheck('firstViewportVisibility', () => verifyFirstViewportVisibility(page))
   await runCheck('responsiveLayout', () => verifyResponsiveLayout(page))
   await runCheck('scenePromptHandoff', () => verifyScenePromptHandoff(page))
   await captureScreenshot(page, '02-scene-prompt-handoff.png')
@@ -147,6 +148,56 @@ function verifyChineseTextIntegrity(bodyText) {
     requiredPhraseCount: requiredPhrases.length,
     missingPhraseCount: missingPhrases.length,
     mojibakeCount: mojibakeMatches.length,
+  }
+}
+
+async function verifyFirstViewportVisibility(page) {
+  const result = await page.evaluate(() => {
+    const selectors = [
+      ['topbar', '.topbar'],
+      ['prompt', '.prompt-panel'],
+      ['context', '.context-panel'],
+      ['scene', '.scene-panel'],
+      ['plan', '.plan-panel'],
+    ]
+
+    return selectors.map(([label, selector]) => {
+      const element = document.querySelector(selector)
+      if (!element) {
+        return { label, selector, present: false }
+      }
+
+      const rect = element.getBoundingClientRect()
+      const visibleWidth = Math.max(0, Math.min(rect.right, window.innerWidth) - Math.max(rect.left, 0))
+      const visibleHeight = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0))
+      const area = rect.width * rect.height
+      const visibleArea = visibleWidth * visibleHeight
+
+      return {
+        label,
+        selector,
+        present: true,
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        right: Math.round(rect.right),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        visibleRatio: area > 0 ? Number((visibleArea / area).toFixed(3)) : 0,
+      }
+    })
+  })
+
+  const failing = result.filter(
+    (item) => !item.present || item.width <= 0 || item.height <= 0 || item.top < 0 || item.visibleRatio < 0.9,
+  )
+  if (failing.length) {
+    throw new Error(`First viewport visibility failed: ${JSON.stringify(failing)}`)
+  }
+
+  return {
+    minVisibleRatio: Math.min(...result.map((item) => item.visibleRatio)),
+    panels: result,
   }
 }
 

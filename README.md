@@ -164,6 +164,9 @@ screen captures. Desktop and Windows Chrome checks also send a sentinel image
 payload and fail if `/vision/scene` echoes it back or marks it retained.
 They also validate key Chinese phrases and fail on common mojibake markers so
 desktop evidence covers page localization integrity, not just selector presence.
+The initial desktop viewport must keep the top bar plus the prompt, context,
+scene, and plan panels visible, so the proof catches first-screen layout
+regressions before screenshots are summarized.
 
 To minimize manual setup, run the full loop wrapper. It starts the API and Vite
 dev server if they are not already running, runs the desktop loop, then writes a
@@ -187,7 +190,7 @@ The full wrapper also checks that the running API passes the Chinese
 process, it restarts that process before running browser checks.
 The generated JSON summary is validated against the original desktop, Windows
 Chrome, and phone JSON evidence, including screenshot hashes and Chinese text
-integrity fields.
+integrity / first-viewport visibility fields.
 
 ## Contributing & Security
 

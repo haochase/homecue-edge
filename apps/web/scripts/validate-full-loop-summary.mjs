@@ -80,6 +80,7 @@ function validateDesktopLoop(errors, loop, label, { required, expectedRunId }) {
   assertString(errors, loop.pageUrl, `${label}.pageUrl`)
 
   validateTextIntegrity(errors, loop.textIntegrity, `${label}.textIntegrity`)
+  validateFirstViewportVisibility(errors, loop.firstViewportVisibility, `${label}.firstViewportVisibility`)
   validateRuntimeHealth(errors, loop.runtimeHealth, `${label}.runtimeHealth`)
   validateResponsiveLayout(errors, loop.responsiveLayout, `${label}.responsiveLayout`)
   validateScreenshotEvidence(errors, loop.screenshotEvidence, `${label}.screenshotEvidence`)
@@ -267,6 +268,18 @@ async function validateRawDesktopEvidence(errors, loop, manifestEntry, label) {
   )
   compareValue(
     errors,
+    checks.firstViewportVisibility?.minVisibleRatio ?? null,
+    loop.firstViewportVisibility?.minVisibleRatio ?? null,
+    `${label}.firstViewportVisibility.minVisibleRatio raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.firstViewportVisibility?.panels?.length ?? null,
+    loop.firstViewportVisibility?.panelCount ?? null,
+    `${label}.firstViewportVisibility.panelCount raw evidence`,
+  )
+  compareValue(
+    errors,
     checks.runtimeHealth?.issueCount ?? null,
     loop.runtimeHealth?.issueCount ?? null,
     `${label}.runtimeHealth.issueCount raw evidence`,
@@ -421,6 +434,19 @@ function validateTextIntegrity(errors, value, label) {
   if (!positiveNumber(value.requiredPhraseCount)) errors.push(`${label}.requiredPhraseCount must be positive.`)
   if (value.missingPhraseCount !== 0) errors.push(`${label}.missingPhraseCount must be 0.`)
   if (value.mojibakeCount !== 0) errors.push(`${label}.mojibakeCount must be 0.`)
+}
+
+function validateFirstViewportVisibility(errors, value, label) {
+  if (!value || typeof value !== 'object') {
+    errors.push(`${label} is missing.`)
+    return
+  }
+
+  if (typeof value.minVisibleRatio !== 'number' || value.minVisibleRatio < 0.9 || value.minVisibleRatio > 1) {
+    errors.push(`${label}.minVisibleRatio must be between 0.9 and 1.`)
+  }
+  if (value.panelCount !== 5) errors.push(`${label}.panelCount must be 5.`)
+  if (value.hiddenPanelCount !== 0) errors.push(`${label}.hiddenPanelCount must be 0.`)
 }
 
 function validateResponsiveLayout(errors, value, label) {

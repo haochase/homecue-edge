@@ -122,6 +122,7 @@ function summarizeDesktopLoop(value) {
     pageUrl: value.pageUrl ?? null,
     title: checks.localizedUi?.title ?? null,
     textIntegrity: summarizeTextIntegrity(checks.localizedUi?.textIntegrity),
+    firstViewportVisibility: summarizeFirstViewportVisibility(checks.firstViewportVisibility),
     browserEnvironment: summarizeBrowserEnvironment(checks.browserEnvironment),
     responsiveLayout: summarizeResponsiveLayout(checks.responsiveLayout),
     runtimeHealth: summarizeRuntimeHealth(checks.runtimeHealth),
@@ -274,6 +275,20 @@ function summarizeTextIntegrity(value) {
   }
 }
 
+function summarizeFirstViewportVisibility(value) {
+  if (!value) {
+    return null
+  }
+
+  return {
+    minVisibleRatio: value.minVisibleRatio ?? null,
+    panelCount: Array.isArray(value.panels) ? value.panels.length : null,
+    hiddenPanelCount: Array.isArray(value.panels)
+      ? value.panels.filter((panel) => panel.present !== true || panel.visibleRatio < 0.9).length
+      : null,
+  }
+}
+
 function summarizeScreenshotEvidence(value) {
   if (!value) {
     return null
@@ -341,6 +356,7 @@ function formatDesktop(value) {
   return [
     `- Title: ${checks.localizedUi?.title ?? 'unknown'}`,
     `- Chinese text integrity: ${formatTextIntegrity(checks.localizedUi?.textIntegrity)}`,
+    `- First viewport visibility: ${formatFirstViewportVisibility(checks.firstViewportVisibility)}`,
     `- Browser environment: ${formatBrowserEnvironment(checks.browserEnvironment)}`,
     `- Responsive layout: ${formatResponsiveLayout(checks.responsiveLayout)}`,
     `- Runtime health: ${formatRuntimeHealth(checks.runtimeHealth)}`,
@@ -421,6 +437,18 @@ function validateBrowserParity(desktop, chrome) {
     desktopChecks.localizedUi?.textIntegrity?.missingPhraseCount,
     chromeChecks.localizedUi?.textIntegrity?.missingPhraseCount,
   )
+  compareValue(
+    errors,
+    'first viewport panel count',
+    desktopChecks.firstViewportVisibility?.panels?.length,
+    chromeChecks.firstViewportVisibility?.panels?.length,
+  )
+  compareValue(
+    errors,
+    'first viewport min visible ratio',
+    desktopChecks.firstViewportVisibility?.minVisibleRatio,
+    chromeChecks.firstViewportVisibility?.minVisibleRatio,
+  )
   compareValue(errors, 'scene', desktopChecks.scenePromptHandoff?.scene, chromeChecks.scenePromptHandoff?.scene)
   compareValue(
     errors,
@@ -481,6 +509,7 @@ function validateDesktopEvidence(label, value, errors) {
   const requiredChecks = [
     'browserEnvironment',
     'localizedUi',
+    'firstViewportVisibility',
     'responsiveLayout',
     'scenePromptHandoff',
     'proposeOnly',
@@ -509,6 +538,12 @@ function validateDesktopEvidence(label, value, errors) {
   }
   if (checks.localizedUi?.textIntegrity?.missingPhraseCount !== 0 || checks.localizedUi?.textIntegrity?.mojibakeCount !== 0) {
     errors.push(`${label} localized text integrity proof is incomplete.`)
+  }
+  if (checks.firstViewportVisibility?.minVisibleRatio < 0.9) {
+    errors.push(`${label} first viewport visibility ratio is too low.`)
+  }
+  if (checks.firstViewportVisibility?.panels?.length !== 5) {
+    errors.push(`${label} first viewport visibility panel count is not 5.`)
   }
 }
 
@@ -635,6 +670,14 @@ function formatRuntimeHealth(value) {
 function formatTextIntegrity(value) {
   if (!value) return 'not checked'
   return `${value.requiredPhraseCount ?? 0} phrases, missing:${value.missingPhraseCount ?? '?'} mojibake:${value.mojibakeCount ?? '?'}`
+}
+
+function formatFirstViewportVisibility(value) {
+  if (!value) return 'not checked'
+  const hidden = Array.isArray(value.panels)
+    ? value.panels.filter((panel) => panel.present !== true || panel.visibleRatio < 0.9).length
+    : '?'
+  return `min visible ratio:${value.minVisibleRatio ?? '?'}, hidden panels:${hidden}`
 }
 
 function formatScreenshotEvidence(value) {
