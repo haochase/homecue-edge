@@ -187,7 +187,9 @@ Chrome test tabs before launching the current target so repeated runs do not
 reuse stale page state.
 
 Add `-IncludeChrome` to also verify the loop in installed Windows Chrome with an
-isolated temporary profile.
+isolated temporary profile. The summary validator requires this run to report
+`windows-chrome` with a custom executable, so the Chrome gate cannot be
+satisfied by the bundled Playwright Chromium run.
 
 The full wrapper also checks that the running API passes the Chinese
 `/vision/scene` contract. If the port is occupied by an older managed uvicorn

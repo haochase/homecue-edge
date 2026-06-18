@@ -57,10 +57,17 @@ async function validateSummary(value, { requirePhone, requireChrome }) {
     errors.push(`summary contains validation errors: ${value.evidence.validationErrors.join('; ')}`)
   }
 
-  validateDesktopLoop(errors, value.loops?.desktop, 'loops.desktop', { required: true, expectedRunId: value.runId })
+  validateDesktopLoop(errors, value.loops?.desktop, 'loops.desktop', {
+    required: true,
+    expectedRunId: value.runId,
+    expectedBrowserName: 'playwright-chromium',
+    expectedExecutablePath: 'bundled',
+  })
   validateDesktopLoop(errors, value.loops?.windowsChrome, 'loops.windowsChrome', {
     required: requireChrome,
     expectedRunId: value.runId,
+    expectedBrowserName: 'windows-chrome',
+    expectedExecutablePath: 'custom',
   })
   validatePhoneLoop(errors, value.loops?.phone, 'loops.phone', { required: requirePhone, expectedRunId: value.runId })
   validateBrowserParity(errors, value.browserParity, { required: requireChrome })
@@ -70,7 +77,7 @@ async function validateSummary(value, { requirePhone, requireChrome }) {
   return errors
 }
 
-function validateDesktopLoop(errors, loop, label, { required, expectedRunId }) {
+function validateDesktopLoop(errors, loop, label, { required, expectedRunId, expectedBrowserName, expectedExecutablePath }) {
   if (!loop || typeof loop !== 'object') {
     if (required) errors.push(`${label} is missing.`)
     return
@@ -87,6 +94,14 @@ function validateDesktopLoop(errors, loop, label, { required, expectedRunId }) {
   assertString(errors, loop.browserName, `${label}.browserName`)
   assertString(errors, loop.pageUrl, `${label}.pageUrl`)
 
+  if (expectedBrowserName && loop.browserName !== expectedBrowserName) {
+    errors.push(`${label}.browserName must be ${expectedBrowserName}.`)
+  }
+
+  validateBrowserEnvironment(errors, loop.browserEnvironment, `${label}.browserEnvironment`, {
+    expectedBrowserName,
+    expectedExecutablePath,
+  })
   validateTextIntegrity(errors, loop.textIntegrity, `${label}.textIntegrity`)
   validateFirstViewportVisibility(errors, loop.firstViewportVisibility, `${label}.firstViewportVisibility`)
   validateRuntimeHealth(errors, loop.runtimeHealth, `${label}.runtimeHealth`)
@@ -261,6 +276,30 @@ async function validateRawDesktopEvidence(errors, loop, manifestEntry, label) {
   compareValue(errors, raw.pageUrl ?? null, loop.pageUrl ?? null, `${label}.pageUrl raw evidence`)
 
   const checks = raw.checks ?? {}
+  compareValue(
+    errors,
+    checks.browserEnvironment?.browserName ?? null,
+    loop.browserEnvironment?.browserName ?? null,
+    `${label}.browserEnvironment.browserName raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.browserEnvironment?.executablePath ?? null,
+    loop.browserEnvironment?.executablePath ?? null,
+    `${label}.browserEnvironment.executablePath raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.browserEnvironment?.getUserMedia ?? null,
+    loop.browserEnvironment?.getUserMedia ?? null,
+    `${label}.browserEnvironment.getUserMedia raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.browserEnvironment?.speechRecognition ?? null,
+    loop.browserEnvironment?.speechRecognition ?? null,
+    `${label}.browserEnvironment.speechRecognition raw evidence`,
+  )
   compareValue(errors, checks.localizedUi?.title ?? null, loop.title ?? null, `${label}.title raw evidence`)
   compareValue(
     errors,
@@ -473,6 +512,25 @@ function validateRuntimeHealth(errors, value, label) {
 
   if (value.success !== true) errors.push(`${label}.success must be true.`)
   if (value.issueCount !== 0) errors.push(`${label}.issueCount must be 0.`)
+}
+
+function validateBrowserEnvironment(errors, value, label, { expectedBrowserName, expectedExecutablePath }) {
+  if (!value || typeof value !== 'object') {
+    errors.push(`${label} is missing.`)
+    return
+  }
+
+  if (expectedBrowserName && value.browserName !== expectedBrowserName) {
+    errors.push(`${label}.browserName must be ${expectedBrowserName}.`)
+  }
+  if (expectedExecutablePath && value.executablePath !== expectedExecutablePath) {
+    errors.push(`${label}.executablePath must be ${expectedExecutablePath}.`)
+  }
+  if (value.getUserMedia !== true) errors.push(`${label}.getUserMedia must be true.`)
+  if (value.speechRecognition !== true) errors.push(`${label}.speechRecognition must be true.`)
+  if (typeof value.userAgent !== 'string' || !/Chrome|Chromium/u.test(value.userAgent)) {
+    errors.push(`${label}.userAgent must identify Chrome or Chromium.`)
+  }
 }
 
 function validateTextIntegrity(errors, value, label) {
