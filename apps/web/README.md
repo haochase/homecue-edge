@@ -113,8 +113,10 @@ dev server when needed, run the desktop loop, and write
 ```
 
 Add `-IncludeChrome` to run the same desktop loop in installed Windows Chrome
-with an isolated temporary profile. Add `-IncludePhone` to run the Android phone
-loop after the desktop loop. The wrapper checks the running API's Chinese
+with an isolated temporary profile. Chrome evidence records sanitized executable
+identity fields from Windows version metadata, but not the local absolute
+executable path. Add `-IncludePhone` to run the Android phone loop after the
+desktop loop. The wrapper checks the running API's Chinese
 `/vision/scene` contract first, and restarts an older managed uvicorn process if
 that contract is stale. The generated Markdown report reads screenshot paths
 from the desktop and Windows Chrome loop JSON files, so each report points at
@@ -144,4 +146,5 @@ file byte counts and digests must also match the final manifest entries. Desktop
 Chromium and installed Windows Chrome screenshots are required to come from
 separate browser-specific evidence directories. JSON evidence labels and file
 paths must be unique, and raw desktop/Chrome browser identity fields must match
-their manifest role.
+their manifest role. Windows Chrome evidence must identify `chrome.exe` with
+Google Chrome product metadata.

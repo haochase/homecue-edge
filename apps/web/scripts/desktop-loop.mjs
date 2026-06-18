@@ -222,6 +222,11 @@ async function verifyBrowserEnvironment(page) {
   const contextInfo = {
     browserName,
     executablePath: process.env.DESKTOP_LOOP_EXECUTABLE_PATH ? 'custom' : 'bundled',
+    executableFileName: process.env.DESKTOP_LOOP_EXECUTABLE_FILE_NAME ?? null,
+    executableSource: process.env.DESKTOP_LOOP_EXECUTABLE_SOURCE ?? null,
+    executableProductName: process.env.DESKTOP_LOOP_EXECUTABLE_PRODUCT_NAME ?? null,
+    executableCompanyName: process.env.DESKTOP_LOOP_EXECUTABLE_COMPANY_NAME ?? null,
+    executableProductVersion: process.env.DESKTOP_LOOP_EXECUTABLE_PRODUCT_VERSION ?? null,
     channel: process.env.DESKTOP_LOOP_CHANNEL ?? null,
     headed: process.env.DESKTOP_LOOP_HEADED === 'true',
   }

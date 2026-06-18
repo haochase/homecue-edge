@@ -189,7 +189,10 @@ reuse stale page state.
 Add `-IncludeChrome` to also verify the loop in installed Windows Chrome with an
 isolated temporary profile. The summary validator requires this run to report
 `windows-chrome` with a custom executable, so the Chrome gate cannot be
-satisfied by the bundled Playwright Chromium run.
+satisfied by the bundled Playwright Chromium run. Chrome evidence also records
+sanitized executable identity fields from Windows version metadata, including
+the file name, source kind, product name, company name, and product version, but
+not the local absolute executable path.
 
 The full wrapper also checks that the running API passes the Chinese
 `/vision/scene` contract. If the port is occupied by an older managed uvicorn
@@ -202,7 +205,8 @@ Screenshot byte counts and digests recorded inside raw browser JSON must also
 match the final evidence manifest. Desktop Chromium and Windows Chrome
 screenshots must come from their own browser-specific evidence directories. JSON
 evidence labels and file paths must be unique, and raw desktop/Chrome browser
-identity fields must match their manifest role.
+identity fields must match their manifest role. Windows Chrome evidence must
+identify `chrome.exe` with Google Chrome product metadata.
 When Windows Chrome is required, the validator recomputes desktop/Chrome parity
 from the summarized loop fields rather than trusting the reported parity flag.
 It also checks each loop's started/finished timestamps against the raw evidence

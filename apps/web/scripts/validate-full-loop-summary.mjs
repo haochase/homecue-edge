@@ -121,6 +121,7 @@ function validateDesktopLoop(
   validateBrowserEnvironment(errors, loop.browserEnvironment, `${label}.browserEnvironment`, {
     expectedBrowserName,
     expectedExecutablePath,
+    expectedInstalledChromeIdentity: expectedBrowserName === 'windows-chrome',
   })
   validateTextIntegrity(errors, loop.textIntegrity, `${label}.textIntegrity`)
   validateFirstViewportVisibility(errors, loop.firstViewportVisibility, `${label}.firstViewportVisibility`)
@@ -498,6 +499,36 @@ async function validateRawDesktopEvidence(
   )
   compareValue(
     errors,
+    checks.browserEnvironment?.executableFileName ?? null,
+    loop.browserEnvironment?.executableFileName ?? null,
+    `${label}.browserEnvironment.executableFileName raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.browserEnvironment?.executableSource ?? null,
+    loop.browserEnvironment?.executableSource ?? null,
+    `${label}.browserEnvironment.executableSource raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.browserEnvironment?.executableProductName ?? null,
+    loop.browserEnvironment?.executableProductName ?? null,
+    `${label}.browserEnvironment.executableProductName raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.browserEnvironment?.executableCompanyName ?? null,
+    loop.browserEnvironment?.executableCompanyName ?? null,
+    `${label}.browserEnvironment.executableCompanyName raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.browserEnvironment?.executableProductVersion ?? null,
+    loop.browserEnvironment?.executableProductVersion ?? null,
+    `${label}.browserEnvironment.executableProductVersion raw evidence`,
+  )
+  compareValue(
+    errors,
     checks.browserEnvironment?.getUserMedia ?? null,
     loop.browserEnvironment?.getUserMedia ?? null,
     `${label}.browserEnvironment.getUserMedia raw evidence`,
@@ -643,6 +674,9 @@ function validateRawBrowserIdentity(
   }
   if (expectedExecutablePath && browserEnvironment?.executablePath !== expectedExecutablePath) {
     errors.push(`${label}.browserEnvironment.executablePath raw evidence must be ${expectedExecutablePath}.`)
+  }
+  if (expectedBrowserName === 'windows-chrome') {
+    validateInstalledChromeExecutableIdentity(errors, browserEnvironment, `${label}.browserEnvironment raw evidence`)
   }
 }
 
@@ -899,7 +933,12 @@ function timestampMs(value) {
   return Number.isFinite(time) ? time : Number.NaN
 }
 
-function validateBrowserEnvironment(errors, value, label, { expectedBrowserName, expectedExecutablePath }) {
+function validateBrowserEnvironment(
+  errors,
+  value,
+  label,
+  { expectedBrowserName, expectedExecutablePath, expectedInstalledChromeIdentity = false },
+) {
   if (!value || typeof value !== 'object') {
     errors.push(`${label} is missing.`)
     return
@@ -915,6 +954,35 @@ function validateBrowserEnvironment(errors, value, label, { expectedBrowserName,
   if (value.speechRecognition !== true) errors.push(`${label}.speechRecognition must be true.`)
   if (typeof value.userAgent !== 'string' || !/Chrome|Chromium/u.test(value.userAgent)) {
     errors.push(`${label}.userAgent must identify Chrome or Chromium.`)
+  }
+  if (expectedInstalledChromeIdentity) {
+    validateInstalledChromeExecutableIdentity(errors, value, label)
+  }
+}
+
+function validateInstalledChromeExecutableIdentity(errors, value, label) {
+  if (!value || typeof value !== 'object') {
+    errors.push(`${label} executable identity is missing.`)
+    return
+  }
+
+  const productName = value.executableProductName ?? ''
+  const companyName = value.executableCompanyName ?? ''
+
+  if (value.executableFileName !== 'chrome.exe') {
+    errors.push(`${label}.executableFileName must be chrome.exe.`)
+  }
+  if (!['program-files', 'program-files-x86', 'local-app-data', 'custom-path'].includes(value.executableSource)) {
+    errors.push(`${label}.executableSource must identify the Chrome executable source kind.`)
+  }
+  if (typeof productName !== 'string' || !productName.includes('Google Chrome')) {
+    errors.push(`${label}.executableProductName must identify Google Chrome.`)
+  }
+  if (typeof companyName !== 'string' || !companyName.includes('Google')) {
+    errors.push(`${label}.executableCompanyName must identify Google.`)
+  }
+  if (typeof value.executableProductVersion !== 'string' || !/^\d+\./u.test(value.executableProductVersion)) {
+    errors.push(`${label}.executableProductVersion must start with a numeric Chrome version.`)
   }
 }
 

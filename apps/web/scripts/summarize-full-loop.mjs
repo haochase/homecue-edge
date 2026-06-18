@@ -249,6 +249,11 @@ function summarizeBrowserEnvironment(value) {
     speechRecognition: value.speechRecognition ?? null,
     headed: value.headed ?? null,
     executablePath: value.executablePath ?? null,
+    executableFileName: value.executableFileName ?? null,
+    executableSource: value.executableSource ?? null,
+    executableProductName: value.executableProductName ?? null,
+    executableCompanyName: value.executableCompanyName ?? null,
+    executableProductVersion: value.executableProductVersion ?? null,
     channel: value.channel ?? null,
   }
 }
@@ -674,10 +679,17 @@ function formatBrowserEnvironment(value) {
         ? 'Chromium'
         : 'unknown'
   const mode = value.executablePath === 'custom' ? 'installed' : 'bundled'
+  const executable = value.executableFileName
+    ? `${value.executableFileName}, ${value.executableProductName ?? 'unknown product'}, ${
+        value.executableSource ?? 'unknown source'
+      }`
+    : null
   const media = value.getUserMedia ? 'media:on' : 'media:off'
   const speech = value.speechRecognition ? 'speech:on' : 'speech:off'
 
-  return `${value.browserName ?? browserFamily} (${browserFamily}, ${mode}, ${viewport.innerWidth ?? '?'}x${viewport.innerHeight ?? '?'}, dpr ${viewport.devicePixelRatio ?? '?'}, ${media}, ${speech})`
+  return `${value.browserName ?? browserFamily} (${browserFamily}, ${mode}${
+    executable ? `, ${executable}` : ''
+  }, ${viewport.innerWidth ?? '?'}x${viewport.innerHeight ?? '?'}, dpr ${viewport.devicePixelRatio ?? '?'}, ${media}, ${speech})`
 }
 
 function formatParity(value) {
