@@ -242,10 +242,17 @@ function requireManifestLabel(errors, files, label) {
 
 async function validateRawEvidence(errors, summary, { requirePhone, requireChrome }) {
   const manifest = manifestByLabel(summary.evidence?.files)
-  await validateRawDesktopEvidence(errors, summary.loops?.desktop, manifest.get('Desktop JSON'), 'loops.desktop')
+  const screenshots = manifestByLabel(summary.evidence?.files, 'Screenshot')
+  await validateRawDesktopEvidence(errors, summary.loops?.desktop, manifest.get('Desktop JSON'), screenshots, 'loops.desktop')
 
   if (requireChrome || summary.loops?.windowsChrome?.run) {
-    await validateRawDesktopEvidence(errors, summary.loops?.windowsChrome, manifest.get('Windows Chrome JSON'), 'loops.windowsChrome')
+    await validateRawDesktopEvidence(
+      errors,
+      summary.loops?.windowsChrome,
+      manifest.get('Windows Chrome JSON'),
+      screenshots,
+      'loops.windowsChrome',
+    )
   }
 
   if (requirePhone || summary.loops?.phone?.run) {
@@ -253,9 +260,14 @@ async function validateRawEvidence(errors, summary, { requirePhone, requireChrom
   }
 }
 
-function manifestByLabel(files) {
+function manifestByLabel(files, labelFilter = null) {
   const map = new Map()
-  if (!Array.isArray(files)) return map
+  if (!Array.isArray(files)) return labelFilter ? [] : map
+
+  if (labelFilter) {
+    return files.filter((entry) => entry?.present && entry.label === labelFilter && typeof entry.file === 'string')
+  }
+
   for (const entry of files) {
     if (entry?.present && typeof entry.label === 'string') {
       map.set(entry.label, entry)
@@ -264,7 +276,7 @@ function manifestByLabel(files) {
   return map
 }
 
-async function validateRawDesktopEvidence(errors, loop, manifestEntry, label) {
+async function validateRawDesktopEvidence(errors, loop, manifestEntry, screenshotEntries, label) {
   if (!manifestEntry?.present || !loop?.run) return
 
   const raw = await readManifestJson(errors, manifestEntry, label)
@@ -361,6 +373,7 @@ async function validateRawDesktopEvidence(errors, loop, manifestEntry, label) {
     loop.screenshotEvidence?.count ?? null,
     `${label}.screenshots length raw evidence`,
   )
+  validateRawScreenshotsInManifest(errors, raw.screenshots, screenshotEntries, label)
   compareValue(
     errors,
     checks.scenePromptHandoff?.rawImageRetained ?? null,
@@ -403,6 +416,20 @@ async function validateRawDesktopEvidence(errors, loop, manifestEntry, label) {
     loop.externalExecutionSync?.acceptedActionCount ?? null,
     `${label}.externalExecutionSync.acceptedActionCount raw evidence`,
   )
+}
+
+function validateRawScreenshotsInManifest(errors, screenshots, screenshotEntries, label) {
+  if (!Array.isArray(screenshots)) {
+    errors.push(`${label}.screenshots raw evidence must be an array.`)
+    return
+  }
+
+  const manifestEntriesByFile = new Map(screenshotEntries.map((entry) => [entry.file, entry]))
+  const missingFiles = screenshots.filter((screenshot) => !manifestEntriesByFile.has(screenshot))
+
+  if (missingFiles.length) {
+    errors.push(`${label}.screenshots missing from evidence manifest: ${missingFiles.join(', ')}.`)
+  }
 }
 
 async function validateRawPhoneEvidence(errors, loop, manifestEntry, label) {

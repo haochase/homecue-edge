@@ -196,7 +196,8 @@ The full wrapper also checks that the running API passes the Chinese
 process, it restarts that process before running browser checks.
 The generated JSON summary is validated against the original desktop, Windows
 Chrome, and phone JSON evidence, including screenshot hashes and Chinese text
-integrity / first-viewport visibility / responsive layout fields.
+integrity / first-viewport visibility / responsive layout fields. The evidence
+manifest must also list every screenshot path declared by the raw browser JSON.
 
 ## Contributing & Security
 
