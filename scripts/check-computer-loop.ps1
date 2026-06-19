@@ -194,6 +194,9 @@ function New-ComputerLoopPlan {
       resultJsonPath = Convert-ToPlanPath $ResultJsonPath
       browserEvidenceResultJsonPath = Convert-ToPlanPath $BrowserEvidenceResultJsonPath
     }
+    expectedEvidence = [pscustomobject]@{
+      phoneEvidence = "__phone_not_run__.json"
+    }
     gates = [pscustomobject]@{
       fullLoopIncludeChrome = $true
       fullLoopIncludePhone = $false
