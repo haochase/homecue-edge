@@ -101,7 +101,8 @@ content that differs from the referenced JSON file fail closed. The result
 checker also reads the referenced summary JSON directly and verifies desktop +
 Windows Chrome ran, phone did not run, browser parity passed, `proofSummary`
 matches the referenced summary and browser-evidence result, summary manifest
-paths match the browser-evidence plan, and the raw desktop/Windows Chrome JSON
+paths match the browser-evidence plan, browser evidence carries the
+`Web Readiness JSON` manifest path, and the raw desktop/Windows Chrome JSON
 files share the summary run id and expected browser roles. It also verifies that
 `plan.outputs.resultJsonPath` is the file being checked and that the saved
 command arguments still match the planned output paths, timeout options, and
@@ -239,11 +240,11 @@ to save a machine-readable validation result with the inferred plan and executed
 check commands for CI, local automation, or demo handoff notes. The browser
 evidence result checker revalidates that saved JSON against the referenced
 summary, required evidence, screenshot directories, loop success flags, browser
-parity, raw desktop/Windows Chrome run ids, browser roles, and self-test gates
-without opening browsers. In validate mode it also prints a compact
-`Browser evidence proof summary` line with loop status, browser parity,
-screenshot counts, self-test state, external execution source, and the summary
-path.
+parity, web readiness, raw desktop/Windows Chrome run ids, browser roles, and
+self-test gates without opening browsers. In validate mode it also prints a
+compact `Browser evidence proof summary` line with loop status, browser parity,
+web-readiness strategy, screenshot counts, self-test state, external execution
+source, and the summary path.
 `selftest-browser-evidence-plan.ps1` uses that dry-run mode to verify complete,
 desktop-only, Chrome-only, manifest-path, raw-JSON screenshot fallback, and
 explicit override planning without hardware.

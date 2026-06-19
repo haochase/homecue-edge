@@ -461,6 +461,7 @@ function New-EvidenceProofSummary {
       desktopEvidencePath = $Plan.paths.desktopEvidence
       windowsChromeEvidencePath = $Plan.paths.windowsChromeEvidence
       phoneEvidencePath = $Plan.paths.phoneEvidence
+      webReadinessEvidencePath = Get-ManifestFile "Web Readiness JSON"
       desktopScreenshotDir = $Plan.paths.desktopScreenshotDir
       windowsChromeScreenshotDir = $Plan.paths.windowsChromeScreenshotDir
     }

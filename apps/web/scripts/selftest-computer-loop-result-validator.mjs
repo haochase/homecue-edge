@@ -388,6 +388,15 @@ const cases = [
     },
   },
   {
+    name: 'browser-evidence-proof-summary-web-readiness-path-mismatch',
+    expectedError:
+      'browserEvidence.proofSummary.evidence.webReadinessEvidencePath must match summary.evidence Web Readiness JSON.',
+    mutate: (result) => {
+      result.browserEvidence.proofSummary.evidence.webReadinessEvidencePath =
+        'assets/tmp/computer-loop-result-validator-selftest/other-web-readiness.json'
+    },
+  },
+  {
     name: 'browser-evidence-proof-summary-web-readiness-mismatch',
     expectedError:
       'browserEvidence.proofSummary.webReadiness.strategy must match summary.environment.webReadiness.strategy.',
@@ -1309,6 +1318,7 @@ function browserEvidenceProofSummary(browserEvidencePlan) {
       desktopEvidencePath: browserEvidencePlan.paths.desktopEvidence,
       windowsChromeEvidencePath: browserEvidencePlan.paths.windowsChromeEvidence,
       phoneEvidencePath: browserEvidencePlan.paths.phoneEvidence,
+      webReadinessEvidencePath: 'assets/tmp/computer-loop-result-validator-selftest/web-readiness.json',
       desktopScreenshotDir: browserEvidencePlan.paths.desktopScreenshotDir,
       windowsChromeScreenshotDir: browserEvidencePlan.paths.windowsChromeScreenshotDir,
     },

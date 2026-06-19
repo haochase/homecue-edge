@@ -115,6 +115,15 @@ const cases = [
     },
   },
   {
+    name: 'proof-summary-web-readiness-path-mismatch',
+    expectedError:
+      'proofSummary.evidence.webReadinessEvidencePath must match summary.evidence Web Readiness JSON.',
+    mutate: (result) => {
+      result.proofSummary.evidence.webReadinessEvidencePath =
+        'assets/tmp/browser-evidence-result-validator-selftest/other-web-readiness.json'
+    },
+  },
+  {
     name: 'summary-phone-run-mismatch',
     expectedError: 'summary.loops.phone.run must match plan.inferredFromSummary.phone.',
     prepare: async (result, name) => {
@@ -859,6 +868,7 @@ function proofSummary(plan) {
       desktopEvidencePath: plan.paths.desktopEvidence,
       windowsChromeEvidencePath: plan.paths.windowsChromeEvidence,
       phoneEvidencePath: plan.paths.phoneEvidence,
+      webReadinessEvidencePath: 'assets/tmp/browser-evidence-result-validator-selftest/web-readiness.json',
       desktopScreenshotDir: plan.paths.desktopScreenshotDir,
       windowsChromeScreenshotDir: plan.paths.windowsChromeScreenshotDir,
     },

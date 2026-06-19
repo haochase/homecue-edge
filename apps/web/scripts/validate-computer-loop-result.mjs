@@ -759,6 +759,7 @@ function validateBrowserEvidenceProofSummary(errors, proofSummary, summary, brow
     'summary.loops.phone.success',
   )
   validateBrowserEvidenceProofSummaryPaths(errors, proofSummary.evidence, browserEvidencePlan)
+  validateBrowserEvidenceProofSummaryWebReadinessPath(errors, proofSummary.evidence, summary)
 }
 
 function validateBrowserEvidenceProofSummaryPaths(errors, evidence, browserEvidencePlan) {
@@ -778,6 +779,19 @@ function validateBrowserEvidenceProofSummaryPaths(errors, evidence, browserEvide
   for (const [key, expected] of pairs) {
     compareRepoPaths(errors, evidence[key], expected, `browserEvidence.proofSummary.evidence.${key}`, `browserEvidence.plan ${key}`)
   }
+}
+
+function validateBrowserEvidenceProofSummaryWebReadinessPath(errors, evidence, summary) {
+  if (!evidence || typeof evidence !== 'object') return
+
+  const manifest = manifestByLabel(summary?.evidence?.files)
+  compareRepoPaths(
+    errors,
+    evidence.webReadinessEvidencePath,
+    manifest.get('Web Readiness JSON')?.file,
+    'browserEvidence.proofSummary.evidence.webReadinessEvidencePath',
+    'summary.evidence Web Readiness JSON',
+  )
 }
 
 function formatProofSummary(proofSummary) {

@@ -453,6 +453,7 @@ function validateProofSummary(errors, proofSummary, summary, plan) {
   )
   validateProofSummaryParity(errors, proofSummary.browserParity, summary.browserParity)
   validateProofSummaryWebReadiness(errors, proofSummary.webReadiness, summary.environment?.webReadiness)
+  validateProofSummaryWebReadinessEvidence(errors, proofSummary.evidence, summary)
   validateProofSummaryLoop(errors, proofSummary.loops?.desktop, summary.loops?.desktop, 'proofSummary.loops.desktop')
   validateProofSummaryLoop(errors, proofSummary.loops?.windowsChrome, summary.loops?.windowsChrome, 'proofSummary.loops.windowsChrome')
   compareValue(errors, proofSummary.loops?.phone?.run, summary.loops?.phone?.run, 'proofSummary.loops.phone.run', 'summary.loops.phone.run')
@@ -606,6 +607,19 @@ function validateProofSummaryEvidence(errors, evidence, plan) {
   for (const [key, expected] of pairs) {
     compareRepoPaths(errors, evidence[key], expected, `proofSummary.evidence.${key}`, `plan ${key}`)
   }
+}
+
+function validateProofSummaryWebReadinessEvidence(errors, evidence, summary) {
+  if (!evidence || typeof evidence !== 'object') return
+
+  const manifest = manifestByLabel(summary?.evidence?.files)
+  compareRepoPaths(
+    errors,
+    evidence.webReadinessEvidencePath,
+    manifest.get('Web Readiness JSON')?.file,
+    'proofSummary.evidence.webReadinessEvidencePath',
+    'summary.evidence Web Readiness JSON',
+  )
 }
 
 function validateSummaryLocalizedUi(errors, loop, label) {
