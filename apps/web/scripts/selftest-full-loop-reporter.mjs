@@ -20,7 +20,17 @@ if (positive.code !== 0) {
   console.error(positive.output)
   throw new Error(`Expected source full-loop report evidence to pass: ${phoneEvidenceFile}`)
 }
+assertReportIncludes(positive.report, 'The phone proof covers front-camera preference')
 console.log('PASS source report evidence')
+
+const browserOnly = await runReporter('browser-only', '__phone_not_run__.json')
+if (browserOnly.code !== 0) {
+  console.error(browserOnly.output)
+  throw new Error('Expected browser-only full-loop report evidence to pass without phone evidence.')
+}
+assertReportIncludes(browserOnly.report, 'Phone proof was not run in this report')
+assertReportExcludes(browserOnly.report, 'The phone proof covers front-camera preference')
+console.log('PASS browser-only talking points')
 
 const phoneEvidence = JSON.parse(await readFile(phoneEvidenceFile, 'utf8'))
 const negativeCases = [
@@ -92,10 +102,27 @@ async function runReporter(name, phoneFile) {
       output += chunk.toString()
     })
     child.on('error', reject)
-    child.on('close', (code) => {
-      resolve({ code, output })
+    child.on('close', async (code) => {
+      try {
+        const report = code === 0 ? await readFile(reportFile, 'utf8') : ''
+        resolve({ code, output, report })
+      } catch (error) {
+        reject(error)
+      }
     })
   })
+}
+
+function assertReportIncludes(report, expected) {
+  if (!report.includes(expected)) {
+    throw new Error(`Expected report to include: ${expected}`)
+  }
+}
+
+function assertReportExcludes(report, unexpected) {
+  if (report.includes(unexpected)) {
+    throw new Error(`Expected report to exclude: ${unexpected}`)
+  }
 }
 
 async function writeJson(file, value) {
