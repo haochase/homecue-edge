@@ -101,6 +101,39 @@ const cases = [
     },
   },
   {
+    name: 'absolute-output-summary-path',
+    expectedError: 'plan.outputs.summaryPath must be repo-relative.',
+    mutate: (result) => {
+      const absoluteSummaryPath = path.join(repoRoot, result.plan.outputs.summaryPath)
+      result.plan.outputs.summaryPath = absoluteSummaryPath
+      result.checks[0].summaryPath = absoluteSummaryPath
+      result.browserEvidence.plan.summaryPath = absoluteSummaryPath
+      result.browserEvidence.proofSummary.evidence.summaryPath = absoluteSummaryPath
+      result.proofSummary.evidence.summaryPath = absoluteSummaryPath
+    },
+  },
+  {
+    name: 'absolute-full-loop-script-path',
+    expectedError: 'plan.commands.fullLoop -File must be repo-relative.',
+    mutate: (result) => {
+      const fileIndex = result.plan.commands.fullLoop.args.indexOf('-File') + 1
+      result.plan.commands.fullLoop.args[fileIndex] = path.join(repoRoot, result.plan.commands.fullLoop.args[fileIndex])
+      result.plan.commands.fullLoop.display = displayCommand('powershell', result.plan.commands.fullLoop.args)
+      result.checks[0].command = result.plan.commands.fullLoop.display
+    },
+  },
+  {
+    name: 'absolute-browser-evidence-proof-summary-path',
+    expectedError: 'browserEvidence.proofSummary.evidence.desktopEvidencePath must be repo-relative.',
+    mutate: (result) => {
+      result.browserEvidence.proofSummary.evidence.desktopEvidencePath = path.join(
+        repoRoot,
+        result.browserEvidence.proofSummary.evidence.desktopEvidencePath,
+      )
+      result.proofSummary.evidence.desktopEvidencePath = result.browserEvidence.proofSummary.evidence.desktopEvidencePath
+    },
+  },
+  {
     name: 'failed-success-true',
     expectedError: 'success must be false in failed mode.',
     mutate: (result) => {

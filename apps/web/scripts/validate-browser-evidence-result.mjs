@@ -62,6 +62,8 @@ function validatePlan(errors, plan, validatedResultFile) {
   assertString(errors, plan.resultJsonPath, 'plan.resultJsonPath')
   validateRepoPath(errors, plan.summaryPath, 'plan.summaryPath')
   validateRepoPath(errors, plan.resultJsonPath, 'plan.resultJsonPath')
+  validatePortableRepoPath(errors, plan.summaryPath, 'plan.summaryPath')
+  validatePortableRepoPath(errors, plan.resultJsonPath, 'plan.resultJsonPath')
   compareRepoPaths(errors, plan.resultJsonPath, validatedResultFile, 'plan.resultJsonPath', 'validated result file')
 
   validateBooleanGroup(errors, plan.inferredFromSummary, 'plan.inferredFromSummary')
@@ -142,6 +144,7 @@ function validatePaths(errors, paths) {
   ]) {
     assertString(errors, paths[key], `plan.paths.${key}`)
     validateRepoPath(errors, paths[key], `plan.paths.${key}`)
+    validatePortableRepoPath(errors, paths[key], `plan.paths.${key}`)
   }
 }
 
@@ -198,8 +201,10 @@ function validateEvidenceCheck(errors, checks, { name, command, expected, path: 
   const [entry] = entries
   if (entry.required !== true) errors.push(`${name} check must be required.`)
   if (entry.command !== command) errors.push(`${name} command must be ${command}.`)
+  validatePortableRepoPath(errors, entry.path, `${name} path`)
   compareRepoPaths(errors, entry.path, expectedPath, `${name} path`, `plan path for ${name}`)
   if (screenshotDir) {
+    validatePortableRepoPath(errors, entry.screenshotDir, `${name} screenshotDir`)
     compareRepoPaths(
       errors,
       entry.screenshotDir,
@@ -605,6 +610,7 @@ function validateProofSummaryEvidence(errors, evidence, plan) {
     ['windowsChromeScreenshotDir', plan?.paths?.windowsChromeScreenshotDir],
   ]
   for (const [key, expected] of pairs) {
+    validatePortableRepoPath(errors, evidence[key], `proofSummary.evidence.${key}`)
     compareRepoPaths(errors, evidence[key], expected, `proofSummary.evidence.${key}`, `plan ${key}`)
   }
 }
@@ -613,6 +619,7 @@ function validateProofSummaryWebReadinessEvidence(errors, evidence, summary) {
   if (!evidence || typeof evidence !== 'object') return
 
   const manifest = manifestByLabel(summary?.evidence?.files)
+  validatePortableRepoPath(errors, evidence.webReadinessEvidencePath, 'proofSummary.evidence.webReadinessEvidencePath')
   compareRepoPaths(
     errors,
     evidence.webReadinessEvidencePath,
@@ -1021,6 +1028,12 @@ function sortJsonValue(value) {
 
 function validateRepoPath(errors, value, label) {
   if (!resolveRepoPath(value)) errors.push(`${label} must stay inside the repository root.`)
+}
+
+function validatePortableRepoPath(errors, value, label) {
+  if (typeof value === 'string' && path.isAbsolute(value)) {
+    errors.push(`${label} must be repo-relative.`)
+  }
 }
 
 function isInsidePath(child, parent) {

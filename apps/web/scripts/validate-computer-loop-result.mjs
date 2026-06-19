@@ -104,6 +104,7 @@ function validateOutputs(errors, outputs) {
   for (const label of ['outputDir', 'reportPath', 'summaryPath', 'resultJsonPath', 'browserEvidenceResultJsonPath']) {
     assertString(errors, outputs[label], `plan.outputs.${label}`)
     if (typeof outputs[label] === 'string') validateRepoPath(errors, outputs[label], `plan.outputs.${label}`)
+    validatePortableRepoPath(errors, outputs[label], `plan.outputs.${label}`)
   }
 
   const outputDir = resolveRepoPath(outputs.outputDir)
@@ -163,6 +164,13 @@ function validateCommands(errors, commands) {
   if (arrayContains(commands.browserEvidence?.args, '-RequirePhone')) {
     errors.push('plan.commands.browserEvidence.args must not include -RequirePhone for computer-only checks.')
   }
+  validateCommandArgPortablePath(errors, commands.fullLoop?.args, '-File', 'plan.commands.fullLoop -File')
+  validateCommandArgPortablePath(errors, commands.fullLoop?.args, '-PartialEvidenceDir', 'plan.commands.fullLoop -PartialEvidenceDir')
+  validateCommandArgPortablePath(errors, commands.fullLoop?.args, '-ReportPath', 'plan.commands.fullLoop -ReportPath')
+  validateCommandArgPortablePath(errors, commands.fullLoop?.args, '-SummaryPath', 'plan.commands.fullLoop -SummaryPath')
+  validateCommandArgPortablePath(errors, commands.browserEvidence?.args, '-File', 'plan.commands.browserEvidence -File')
+  validateCommandArgPortablePath(errors, commands.browserEvidence?.args, '-SummaryPath', 'plan.commands.browserEvidence -SummaryPath')
+  validateCommandArgPortablePath(errors, commands.browserEvidence?.args, '-ResultJsonPath', 'plan.commands.browserEvidence -ResultJsonPath')
 }
 
 function validatePlanConsistency(errors, plan, validatedResultFile) {
@@ -798,6 +806,7 @@ function validateBrowserEvidenceProofSummaryPaths(errors, evidence, browserEvide
     ['windowsChromeScreenshotDir', browserEvidencePlan?.paths?.windowsChromeScreenshotDir],
   ]
   for (const [key, expected] of pairs) {
+    validatePortableRepoPath(errors, evidence[key], `browserEvidence.proofSummary.evidence.${key}`)
     compareRepoPaths(errors, evidence[key], expected, `browserEvidence.proofSummary.evidence.${key}`, `browserEvidence.plan ${key}`)
   }
 }
@@ -806,6 +815,11 @@ function validateBrowserEvidenceProofSummaryWebReadinessPath(errors, evidence, s
   if (!evidence || typeof evidence !== 'object') return
 
   const manifest = manifestByLabel(summary?.evidence?.files)
+  validatePortableRepoPath(
+    errors,
+    evidence.webReadinessEvidencePath,
+    'browserEvidence.proofSummary.evidence.webReadinessEvidencePath',
+  )
   compareRepoPaths(
     errors,
     evidence.webReadinessEvidencePath,
@@ -919,9 +933,11 @@ function validateBrowserEvidenceCheck(errors, commandEntries, { command, path: e
   if (check.required !== true) {
     errors.push(`browserEvidence.checks ${command} must be required.`)
   }
+  validatePortableRepoPath(errors, check.path, `browserEvidence.checks ${command} path`)
   compareRepoPaths(errors, check.path, expectedPath, `browserEvidence.checks ${command} path`, `browserEvidence.plan ${command} path`)
 
   if (screenshotDir) {
+    validatePortableRepoPath(errors, check.screenshotDir, `browserEvidence.checks ${command} screenshotDir`)
     compareRepoPaths(
       errors,
       check.screenshotDir,
@@ -1383,6 +1399,7 @@ function validateNestedBrowserEvidencePaths(errors, browserEvidencePlan, outputs
     assertString(errors, value, `browserEvidence.plan.paths.${label}`)
     if (typeof value === 'string') {
       validateRepoPath(errors, value, `browserEvidence.plan.paths.${label}`)
+      validatePortableRepoPath(errors, value, `browserEvidence.plan.paths.${label}`)
       if (!isInsidePath(value, outputs.outputDir)) {
         errors.push(`browserEvidence.plan.paths.${label} must be inside plan.outputs.outputDir.`)
       }
@@ -1534,6 +1551,17 @@ function getCommandArgValue(errors, args, flag, label) {
 
 function validateRepoPath(errors, value, label) {
   if (!resolveRepoPath(value)) errors.push(`${label} must stay inside the repository root.`)
+}
+
+function validatePortableRepoPath(errors, value, label) {
+  if (typeof value === 'string' && path.isAbsolute(value)) {
+    errors.push(`${label} must be repo-relative.`)
+  }
+}
+
+function validateCommandArgPortablePath(errors, args, flag, label) {
+  const actual = getCommandArgValue(errors, args, flag, label)
+  if (actual !== null) validatePortableRepoPath(errors, actual, label)
 }
 
 function isInsidePath(child, parent) {

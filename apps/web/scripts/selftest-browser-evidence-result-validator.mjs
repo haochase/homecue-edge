@@ -65,6 +65,36 @@ const cases = [
     },
   },
   {
+    name: 'absolute-plan-summary-path',
+    expectedError: 'plan.summaryPath must be repo-relative.',
+    mutate: (result) => {
+      const absoluteSummaryPath = path.join(repoRoot, result.plan.summaryPath)
+      result.plan.summaryPath = absoluteSummaryPath
+      result.checks.find((check) => check.name === 'full-loop summary evidence').path = absoluteSummaryPath
+      result.proofSummary.evidence.summaryPath = absoluteSummaryPath
+    },
+  },
+  {
+    name: 'absolute-plan-desktop-path',
+    expectedError: 'plan.paths.desktopEvidence must be repo-relative.',
+    mutate: (result) => {
+      const absoluteDesktopPath = path.join(repoRoot, result.plan.paths.desktopEvidence)
+      result.plan.paths.desktopEvidence = absoluteDesktopPath
+      result.checks.find((check) => check.name === 'desktop raw evidence').path = absoluteDesktopPath
+      result.proofSummary.evidence.desktopEvidencePath = absoluteDesktopPath
+    },
+  },
+  {
+    name: 'absolute-proof-summary-path',
+    expectedError: 'proofSummary.evidence.windowsChromeEvidencePath must be repo-relative.',
+    mutate: (result) => {
+      result.proofSummary.evidence.windowsChromeEvidencePath = path.join(
+        repoRoot,
+        result.proofSummary.evidence.windowsChromeEvidencePath,
+      )
+    },
+  },
+  {
     name: 'missing-proof-summary',
     expectedError: 'proofSummary is missing in validate mode.',
     mutate: (result) => {
