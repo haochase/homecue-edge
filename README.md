@@ -220,7 +220,8 @@ their query string, with raw evidence checked against the same URLs.
 After a successful full-loop run, `npm run summary:selftest` in `apps/web`
 replays the validator against the current summary plus generated bad summaries
 under ignored `assets/tmp/` to prove the Chrome identity, version, origin, and
-manifest-uniqueness guards fail closed.
+manifest-uniqueness guards fail closed. `check-full-loop.ps1 -IncludeChrome`
+runs that self-test automatically after `summary:check`.
 
 ## Contributing & Security
 

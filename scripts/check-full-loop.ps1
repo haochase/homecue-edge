@@ -315,6 +315,13 @@ try {
   if ($LASTEXITCODE -ne 0) {
     throw "summary:check failed."
   }
+
+  if ($IncludeChrome) {
+    npm run summary:selftest
+    if ($LASTEXITCODE -ne 0) {
+      throw "summary:selftest failed."
+    }
+  }
 }
 finally {
   Remove-Item Env:\FULL_LOOP_RUN_ID -ErrorAction SilentlyContinue
