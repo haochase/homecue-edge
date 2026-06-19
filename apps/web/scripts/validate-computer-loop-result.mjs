@@ -726,6 +726,12 @@ function validateBrowserEvidenceProofSummary(errors, proofSummary, summary, brow
     'browserEvidence.plan.requiredEvidence',
   )
   validateProofSummaryParity(errors, proofSummary.browserParity, summary.browserParity, 'browserEvidence.proofSummary.browserParity')
+  validateProofSummaryWebReadiness(
+    errors,
+    proofSummary.webReadiness,
+    summary.environment?.webReadiness,
+    'browserEvidence.proofSummary.webReadiness',
+  )
   validateProofSummaryLoop(
     errors,
     proofSummary.loops?.desktop,

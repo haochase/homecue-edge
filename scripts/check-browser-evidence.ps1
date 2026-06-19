@@ -447,6 +447,7 @@ function New-EvidenceProofSummary {
       success = [bool]($Summary.browserParity.success -eq $true)
       errorCount = @($Summary.browserParity.errors).Count
     }
+    webReadiness = New-WebReadinessProofSummary -WebReadiness $Summary.environment.webReadiness
     loops = [pscustomobject]@{
       desktop = New-LoopProofSummary -Loop $Summary.loops.desktop
       windowsChrome = New-LoopProofSummary -Loop $Summary.loops.windowsChrome
@@ -463,6 +464,18 @@ function New-EvidenceProofSummary {
       desktopScreenshotDir = $Plan.paths.desktopScreenshotDir
       windowsChromeScreenshotDir = $Plan.paths.windowsChromeScreenshotDir
     }
+  }
+}
+
+function New-WebReadinessProofSummary {
+  param($WebReadiness)
+
+  return [pscustomobject]@{
+    run = [bool]($WebReadiness.run -eq $true)
+    success = [bool]($WebReadiness.success -eq $true)
+    strategy = $WebReadiness.strategy
+    httpReadyAfter = [bool]($WebReadiness.httpReadyAfter -eq $true)
+    duplicateStartAvoided = $WebReadiness.duplicateStartAvoided
   }
 }
 

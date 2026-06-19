@@ -33,7 +33,7 @@ if (positiveResult.code !== 0) {
 }
 if (
   !positiveResult.output.includes(
-    'Browser evidence proof summary: runId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass screenshots=6+6 text=7/0/0+7/0/0 selftests=not-requested external=esp32-serial summary=assets/tmp/browser-evidence-result-validator-selftest/full-loop-report.json',
+    'Browser evidence proof summary: runId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready screenshots=6+6 text=7/0/0+7/0/0 selftests=not-requested external=esp32-serial summary=assets/tmp/browser-evidence-result-validator-selftest/full-loop-report.json',
   )
 ) {
   console.error(positiveResult.output)
@@ -83,6 +83,13 @@ const cases = [
     expectedError: 'proofSummary.requiredEvidence must match plan.requiredEvidence.',
     mutate: (result) => {
       result.proofSummary.requiredEvidence.windowsChrome = false
+    },
+  },
+  {
+    name: 'proof-summary-web-readiness-mismatch',
+    expectedError: 'proofSummary.webReadiness.strategy must match summary.environment.webReadiness.strategy.',
+    mutate: (result) => {
+      result.proofSummary.webReadiness.strategy = 'started-new-server'
     },
   },
   {
@@ -174,6 +181,24 @@ const cases = [
     prepare: async (result, name) => {
       await attachSummary(result, name, (summary) => {
         summary.loops.desktop.success = false
+      })
+    },
+  },
+  {
+    name: 'summary-web-readiness-missing',
+    expectedError: 'summary.environment.webReadiness is missing.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        delete summary.environment.webReadiness
+      })
+    },
+  },
+  {
+    name: 'summary-web-readiness-manifest-missing',
+    expectedError: 'summary.evidence Web Readiness JSON must be present.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.evidence.files = summary.evidence.files.filter((entry) => entry.label !== 'Web Readiness JSON')
       })
     },
   },
@@ -497,16 +522,52 @@ async function createSummary(plan) {
       success: plan.inferredFromSummary.desktop && plan.inferredFromSummary.windowsChrome,
       errors: [],
     },
+    environment: {
+      webReadiness: summaryWebReadiness(),
+    },
     evidence: {
       files: [
         { label: 'Desktop JSON', file: plan.paths.desktopEvidence, present: true },
         { label: 'Windows Chrome JSON', file: plan.paths.windowsChromeEvidence, present: true },
         { label: 'Phone JSON', file: null, present: false },
+        {
+          label: 'Web Readiness JSON',
+          file: 'assets/tmp/browser-evidence-result-validator-selftest/web-readiness.json',
+          present: true,
+          ...(await writeWebReadinessEvidence()),
+        },
         ...(await screenshotEntries(plan.paths.desktopScreenshotDir)),
         ...(await screenshotEntries(plan.paths.windowsChromeScreenshotDir)),
       ],
     },
   }
+}
+
+function summaryWebReadiness(overrides = {}) {
+  return {
+    run: true,
+    success: true,
+    generatedAt: '2026-06-18T23:59:49.000Z',
+    runId: 'full-loop-selftest',
+    appUrl: 'http://127.0.0.1:5173',
+    webPort: 5173,
+    strategy: 'already-ready',
+    portListeningBefore: false,
+    httpReadyBefore: true,
+    httpReadyAfter: true,
+    duplicateStartAvoided: true,
+    gates: {
+      httpProbeBeforePortReuse: true,
+      stalePortBlocksDuplicateStart: true,
+    },
+    ...overrides,
+  }
+}
+
+async function writeWebReadinessEvidence(overrides = {}) {
+  const file = resolveRepoPath('assets/tmp/browser-evidence-result-validator-selftest/web-readiness.json')
+  await writeJson(file, summaryWebReadiness(overrides))
+  return fileDigest(file)
 }
 
 async function writeRawLoopEvidence(paths, { desktop = {}, chrome = {} } = {}) {
@@ -777,6 +838,13 @@ function proofSummary(plan) {
       checked: true,
       success: true,
       errorCount: 0,
+    },
+    webReadiness: {
+      run: true,
+      success: true,
+      strategy: 'already-ready',
+      httpReadyAfter: true,
+      duplicateStartAvoided: true,
     },
     loops: {
       desktop: loopProofSummary(),

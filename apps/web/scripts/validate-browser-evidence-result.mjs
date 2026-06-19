@@ -264,6 +264,7 @@ function formatBrowserEvidenceProofSummary(value, summary) {
     `chrome=${formatLoopStatus(proofSummary?.loops?.windowsChrome ?? summary?.loops?.windowsChrome)}`,
     `phone=${formatLoopStatus(proofSummary?.loops?.phone ?? summary?.loops?.phone)}`,
     `parity=${formatBrowserParity(proofSummary?.browserParity ?? summary?.browserParity)}`,
+    `web=${formatWebReadiness(proofSummary?.webReadiness ?? summary?.environment?.webReadiness)}`,
     `screenshots=${formatScreenshotPair(proofSummary ?? summary)}`,
     `text=${formatTextIntegrityPair(proofSummary ?? summary)}`,
     `selftests=${formatSelfTestState(value?.plan?.selfTest)}`,
@@ -283,6 +284,13 @@ function formatBrowserParity(browserParity) {
   if (browserParity?.checked !== true) return 'not-checked'
   if (browserParity.success === true) return 'pass'
   if (browserParity.success === false) return 'fail'
+  return 'unknown'
+}
+
+function formatWebReadiness(value) {
+  if (value?.run !== true) return 'not-run'
+  if (value.success === true) return value.strategy ?? 'pass'
+  if (value.success === false) return 'fail'
   return 'unknown'
 }
 
@@ -389,8 +397,12 @@ async function validateSummary(errors, summary, plan) {
     }
     validateBrowserParity(errors, summary)
   }
+  validateSummaryWebReadiness(errors, summary)
 
   const manifest = manifestByLabel(summary.evidence?.files)
+  if (manifest.get('Web Readiness JSON')?.present !== true) {
+    errors.push('summary.evidence Web Readiness JSON must be present.')
+  }
   if (plan.inferredFromSummary?.desktop) {
     compareRepoPaths(
       errors,
@@ -440,6 +452,7 @@ function validateProofSummary(errors, proofSummary, summary, plan) {
     'plan.requiredEvidence',
   )
   validateProofSummaryParity(errors, proofSummary.browserParity, summary.browserParity)
+  validateProofSummaryWebReadiness(errors, proofSummary.webReadiness, summary.environment?.webReadiness)
   validateProofSummaryLoop(errors, proofSummary.loops?.desktop, summary.loops?.desktop, 'proofSummary.loops.desktop')
   validateProofSummaryLoop(errors, proofSummary.loops?.windowsChrome, summary.loops?.windowsChrome, 'proofSummary.loops.windowsChrome')
   compareValue(errors, proofSummary.loops?.phone?.run, summary.loops?.phone?.run, 'proofSummary.loops.phone.run', 'summary.loops.phone.run')
@@ -467,6 +480,54 @@ function validateProofSummaryParity(errors, proof, summary) {
     Array.isArray(summary?.errors) ? summary.errors.length : null,
     'proofSummary.browserParity.errorCount',
     'summary.browserParity.errors.length',
+  )
+}
+
+function validateSummaryWebReadiness(errors, summary) {
+  const value = summary?.environment?.webReadiness
+  if (!value || typeof value !== 'object') {
+    errors.push('summary.environment.webReadiness is missing.')
+    return
+  }
+
+  if (value.run !== true) errors.push('summary.environment.webReadiness.run must be true.')
+  if (value.success !== true) errors.push('summary.environment.webReadiness.success must be true.')
+  compareValue(errors, value.runId, summary.runId, 'summary.environment.webReadiness.runId', 'summary.runId')
+  compareValue(errors, value.appUrl, summary.appUrl, 'summary.environment.webReadiness.appUrl', 'summary.appUrl')
+  if (!['already-ready', 'waited-on-stale-port', 'started-new-server'].includes(value.strategy)) {
+    errors.push('summary.environment.webReadiness.strategy must be a known Ensure-Web strategy.')
+  }
+  if (value.httpReadyAfter !== true) errors.push('summary.environment.webReadiness.httpReadyAfter must be true.')
+  if (value.gates?.httpProbeBeforePortReuse !== true) {
+    errors.push('summary.environment.webReadiness.gates.httpProbeBeforePortReuse must be true.')
+  }
+  if (value.gates?.stalePortBlocksDuplicateStart !== true) {
+    errors.push('summary.environment.webReadiness.gates.stalePortBlocksDuplicateStart must be true.')
+  }
+}
+
+function validateProofSummaryWebReadiness(errors, proof, summary, label = 'proofSummary.webReadiness') {
+  if (!proof || typeof proof !== 'object') {
+    errors.push(`${label} is missing.`)
+    return
+  }
+
+  compareValue(errors, proof.run, summary?.run, `${label}.run`, 'summary.environment.webReadiness.run')
+  compareValue(errors, proof.success, summary?.success, `${label}.success`, 'summary.environment.webReadiness.success')
+  compareValue(errors, proof.strategy, summary?.strategy, `${label}.strategy`, 'summary.environment.webReadiness.strategy')
+  compareValue(
+    errors,
+    proof.httpReadyAfter,
+    summary?.httpReadyAfter,
+    `${label}.httpReadyAfter`,
+    'summary.environment.webReadiness.httpReadyAfter',
+  )
+  compareValue(
+    errors,
+    proof.duplicateStartAvoided,
+    summary?.duplicateStartAvoided,
+    `${label}.duplicateStartAvoided`,
+    'summary.environment.webReadiness.duplicateStartAvoided',
   )
 }
 

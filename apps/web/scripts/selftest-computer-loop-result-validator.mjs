@@ -388,6 +388,14 @@ const cases = [
     },
   },
   {
+    name: 'browser-evidence-proof-summary-web-readiness-mismatch',
+    expectedError:
+      'browserEvidence.proofSummary.webReadiness.strategy must match summary.environment.webReadiness.strategy.',
+    mutate: (result) => {
+      result.browserEvidence.proofSummary.webReadiness.strategy = 'started-new-server'
+    },
+  },
+  {
     name: 'missing-proof-summary',
     expectedError: 'proofSummary is missing in validate mode.',
     mutate: (result) => {
