@@ -98,7 +98,8 @@ ignored `assets/demo/playwright-chromium-screens/` directory. The desktop loop
 also sends a sentinel image payload directly to `/vision/scene` and fails if the
 API returns that payload or marks it retained. It also fails on unexpected
 console errors, page exceptions, failed requests, HTTP 4xx/5xx responses, or
-blank-like screenshot evidence.
+blank-like screenshot evidence. The wrapper validates the raw loop JSON and
+screenshot files before returning success.
 
 ## Full Loop
 

@@ -161,8 +161,10 @@ flow, scene suggested-prompt handoff, offline fallback, and ESP32-style
 execution synchronization. The desktop loop writes current-step screenshots
 next to its ignored JSON evidence so the Markdown report does not rely on stale
 screen captures. The screenshot proof requires the six expected step images and
-unique image digests so repeated or stale captures fail the loop. Desktop and
-Windows Chrome checks also send a sentinel image payload and fail if
+unique image digests so repeated or stale captures fail the loop. Standalone
+desktop and Chrome wrappers also validate their raw loop JSON and screenshot
+files before returning success. Desktop and Windows Chrome checks also send a
+sentinel image payload and fail if
 `/vision/scene` echoes it back or marks it retained.
 They also validate key Chinese phrases and fail on common mojibake markers so
 desktop evidence covers page localization integrity, not just selector presence.

@@ -89,7 +89,8 @@ to replay the validator against generated bad summaries under ignored
 ```
 
 Runs the desktop browser loop against the installed Windows Chrome executable
-with an isolated temporary profile under `assets/tmp`.
+with an isolated temporary profile under `assets/tmp`, then validates the raw
+loop JSON and screenshot evidence.
 
 ```powershell
 .\scripts\verify-qwen.ps1

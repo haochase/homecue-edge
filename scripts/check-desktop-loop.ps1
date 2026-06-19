@@ -21,6 +21,20 @@ try {
   if ($LASTEXITCODE -ne 0) {
     throw "desktop:loop failed."
   }
+
+  $EvidenceCheckArgs = @(
+    $OutputPath,
+    "--browser-name",
+    "playwright-chromium",
+    "--executable-path",
+    "bundled",
+    "--screenshot-dir",
+    "assets/demo/playwright-chromium-screens/"
+  )
+  npm run desktop:evidence:check -- @EvidenceCheckArgs
+  if ($LASTEXITCODE -ne 0) {
+    throw "desktop:evidence:check failed."
+  }
 }
 finally {
   Pop-Location

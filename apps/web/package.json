@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "desktop:loop": "node scripts/desktop-loop.mjs",
+    "desktop:evidence:check": "node scripts/validate-desktop-loop-evidence.mjs",
     "phone:loop": "node scripts/phone-loop.mjs",
     "preview": "vite preview",
     "report:loop": "node scripts/summarize-full-loop.mjs",

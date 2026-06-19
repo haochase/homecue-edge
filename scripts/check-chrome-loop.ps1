@@ -84,6 +84,21 @@ try {
   if ($LASTEXITCODE -ne 0) {
     throw "chrome desktop:loop failed."
   }
+
+  $EvidenceCheckArgs = @(
+    $OutputPath,
+    "--browser-name",
+    "windows-chrome",
+    "--executable-path",
+    "custom",
+    "--screenshot-dir",
+    "assets/demo/windows-chrome-screens/",
+    "--require-installed-chrome"
+  )
+  npm run desktop:evidence:check -- @EvidenceCheckArgs
+  if ($LASTEXITCODE -ne 0) {
+    throw "chrome desktop:evidence:check failed."
+  }
 }
 finally {
   Remove-Item Env:\DESKTOP_LOOP_BROWSER_NAME -ErrorAction SilentlyContinue
