@@ -463,6 +463,16 @@ function Format-ProofStatus {
   return "unknown"
 }
 
+function Format-LoopRunStatus {
+  param($Loop)
+
+  if ($Loop.run -ne $true) {
+    return "not-run"
+  }
+
+  return Format-ProofStatus $Loop.success
+}
+
 $Plan = New-ComputerLoopPlan
 
 if ($DryRun) {
@@ -478,5 +488,5 @@ Invoke-CheckedScriptWithResult -Name "saved browser evidence recheck" -Command $
 
 $ProofSummary = Invoke-PostProcessWithResult -Plan $Plan
 Write-Host ("Computer loop check JSON: {0}" -f $ResultJsonPath)
-Write-Host ("Computer loop proof summary: desktop={0}, chrome={1}, parity={2}, web={3}, text={4}/{5}/{6}+{7}/{8}/{9}, screenshots={10}+{11}" -f (Format-ProofStatus $ProofSummary.loops.desktop.success), (Format-ProofStatus $ProofSummary.loops.windowsChrome.success), (Format-ProofStatus $ProofSummary.browserParity.success), $ProofSummary.webReadiness.strategy, $ProofSummary.loops.desktop.textRequiredPhrases, $ProofSummary.loops.desktop.textMissingPhrases, $ProofSummary.loops.desktop.textMojibake, $ProofSummary.loops.windowsChrome.textRequiredPhrases, $ProofSummary.loops.windowsChrome.textMissingPhrases, $ProofSummary.loops.windowsChrome.textMojibake, $ProofSummary.loops.desktop.screenshotCount, $ProofSummary.loops.windowsChrome.screenshotCount)
+Write-Host ("Computer loop proof summary: desktop={0}, chrome={1}, phone={2}, parity={3}, web={4}, text={5}/{6}/{7}+{8}/{9}/{10}, screenshots={11}+{12}, phoneEvidence={13}, summary={14}" -f (Format-ProofStatus $ProofSummary.loops.desktop.success), (Format-ProofStatus $ProofSummary.loops.windowsChrome.success), (Format-LoopRunStatus $ProofSummary.loops.phone), (Format-ProofStatus $ProofSummary.browserParity.success), $ProofSummary.webReadiness.strategy, $ProofSummary.loops.desktop.textRequiredPhrases, $ProofSummary.loops.desktop.textMissingPhrases, $ProofSummary.loops.desktop.textMojibake, $ProofSummary.loops.windowsChrome.textRequiredPhrases, $ProofSummary.loops.windowsChrome.textMissingPhrases, $ProofSummary.loops.windowsChrome.textMojibake, $ProofSummary.loops.desktop.screenshotCount, $ProofSummary.loops.windowsChrome.screenshotCount, $ProofSummary.evidence.phoneEvidencePath, $ProofSummary.evidence.summaryPath)
 Write-Host "Computer loop check passed."

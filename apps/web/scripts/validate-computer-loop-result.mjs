@@ -842,6 +842,7 @@ function formatProofSummary(proofSummary) {
     `summaryRunId=${proofSummary.summaryRunId ?? 'unknown'}`,
     `desktop=${formatProofBoolean(proofSummary.loops?.desktop?.success)}`,
     `chrome=${formatProofBoolean(proofSummary.loops?.windowsChrome?.success)}`,
+    `phone=${formatLoopRun(proofSummary.loops?.phone)}`,
     `parity=${formatProofBoolean(proofSummary.browserParity?.success)}`,
     `web=${proofSummary.webReadiness?.strategy ?? 'unknown'}`,
     `screenshots=${proofSummary.loops?.desktop?.screenshotCount ?? 'unknown'}+${
@@ -849,8 +850,14 @@ function formatProofSummary(proofSummary) {
     }`,
     `text=${formatProofText(proofSummary.loops?.desktop)}+${formatProofText(proofSummary.loops?.windowsChrome)}`,
     `external=${proofSummary.loops?.desktop?.externalExecutionSource ?? 'unknown'}`,
+    `phoneEvidence=${proofSummary.evidence?.phoneEvidencePath ?? 'unknown'}`,
     `summary=${proofSummary.evidence?.summaryPath ?? 'unknown'}`,
   ].join(' ')
+}
+
+function formatLoopRun(loop) {
+  if (!loop || loop.run !== true) return 'not-run'
+  return formatProofBoolean(loop.success)
 }
 
 function formatProofText(loop) {
