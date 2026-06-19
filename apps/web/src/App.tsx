@@ -65,6 +65,7 @@ const preferredCameraConstraints: MediaStreamConstraints[] = [
 ]
 
 const frontCameraLabelPattern = /front|user|selfie|face|camera.*front|前置|前摄|前面|前方|自拍/i
+const backCameraLabelPattern = /back|rear|environment|world|camera.*back|后置|后摄|后面|后方/i
 
 type CameraOpenResult = {
   stream: MediaStream
@@ -142,6 +143,7 @@ function App() {
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraStatus, setCameraStatus] = useState('摄像头待机')
   const [cameraError, setCameraError] = useState('')
+  const [cameraPreference, setCameraPreference] = useState<CameraOpenResult['preference'] | null>(null)
   const [isListening, setIsListening] = useState(false)
   const [voiceStatus, setVoiceStatus] = useState('语音待机')
   const [voiceError, setVoiceError] = useState('')
@@ -364,6 +366,7 @@ function App() {
 
       cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
       cameraStreamRef.current = stream
+      setCameraPreference(camera.preference)
 
       if (cameraPreviewRef.current) {
         cameraPreviewRef.current.srcObject = stream
@@ -374,6 +377,7 @@ function App() {
       setCameraStatus(formatCameraReadyStatus(camera))
     } catch {
       setCameraActive(false)
+      setCameraPreference(null)
       setCameraStatus('摄像头受阻')
       setCameraError('摄像头权限或设备访问失败。')
     }
@@ -415,6 +419,7 @@ function App() {
     }
 
     setCameraActive(false)
+    setCameraPreference(null)
     setCameraStatus(sceneImageBase64 ? '画面已截取' : '摄像头已停止')
   }
 
@@ -521,7 +526,14 @@ function App() {
             aria-label="场景提示"
           />
           <div className={`camera-surface ${cameraActive ? 'active' : ''}`}>
-            <video ref={cameraPreviewRef} className="camera-preview" autoPlay muted playsInline />
+            <video
+              ref={cameraPreviewRef}
+              className={`camera-preview ${shouldMirrorPreview(cameraPreference) ? 'mirror' : ''}`}
+              aria-label="手机前置摄像头预览"
+              autoPlay
+              muted
+              playsInline
+            />
             {!cameraActive && (
               <div className="camera-placeholder">{sceneImageBase64 ? '画面已截取' : '优先前置摄像头待机'}</div>
             )}
@@ -775,7 +787,10 @@ function summarizeArgs(args: Record<string, unknown> | undefined): string {
     const actions = (args as { actions: Array<{ device?: string; command?: string }> }).actions
     return `建议 ${actions.length} 个动作：${actions.map((a) => formatActionName(a.device ?? '', a.command ?? '')).join('、')}`
   }
-  return JSON.stringify(args).slice(0, 160)
+  return Object.entries(args)
+    .slice(0, 4)
+    .map(([key, value]) => `${translateKey(key)}：${formatTraceArgValue(value)}`)
+    .join('，')
 }
 
 function getConfirmableActions(actions: DeviceAction[], precheck: PrecheckResult[]) {
@@ -817,7 +832,19 @@ function formatPrivacySummary(summary: VisionSceneResponse['privacy_summary']) {
 }
 
 function formatImageSize(base64: string) {
-  return `${Math.max(1, Math.round((base64.length * 3) / 4 / 1024))} KB`
+  return `约 ${Math.max(1, Math.round((base64.length * 3) / 4 / 1024))} KB`
+}
+
+function formatTraceArgValue(value: unknown): string {
+  if (typeof value === 'string') return translateValue(value)
+  if (typeof value === 'number') return String(value)
+  if (typeof value === 'boolean') return translateValue(String(value))
+  if (Array.isArray(value)) return `${value.length} 项`
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).slice(0, 3)
+    return entries.map(([key, item]) => `${translateKey(key)} ${formatTraceArgValue(item)}`).join('、')
+  }
+  return '无'
 }
 
 function extractTranscript(results: BrowserSpeechResults) {
@@ -917,9 +944,21 @@ function isFrontCameraLabel(label: string | undefined) {
   return Boolean(label && frontCameraLabelPattern.test(label))
 }
 
+function isBackCameraLabel(label: string | undefined) {
+  return Boolean(label && backCameraLabelPattern.test(label))
+}
+
+function shouldMirrorPreview(preference: CameraOpenResult['preference'] | null) {
+  return preference === 'front-facing-mode' || preference === 'front-device-label'
+}
+
 function formatCameraReadyStatus(camera: CameraOpenResult) {
   if (camera.preference === 'front-facing-mode' || camera.preference === 'front-device-label') {
     return '前置摄像头已就绪'
+  }
+
+  if (isBackCameraLabel(camera.trackLabel) || camera.facingMode === 'environment') {
+    return '摄像头已就绪（浏览器返回后置镜头，已尝试按前置优先请求；可在手机权限弹窗中切换前置镜头）'
   }
 
   if (camera.facingMode) {
@@ -994,11 +1033,30 @@ function translateCommand(command: string) {
 
 function translateKey(key: string) {
   const labels: Record<string, string> = {
+    accepted_count: '通过数量',
+    actions: '动作',
+    agent_mode: '智能体模式',
+    camera: '摄像头',
+    command: '命令',
+    device: '设备',
+    execute: '执行',
+    faces_identified: '识别人脸',
+    image_base64: '图像帧',
+    name: '名称',
+    network_mode: '网络模式',
+    note: '说明',
+    privacy_note: '隐私说明',
+    provider: '提供方',
+    raw_image_retained: '保留原始图像',
+    reason: '原因',
+    rejected_count: '拒绝数量',
     room: '房间',
     scene: '场景',
-    raw_image_retained: '保留原始图像',
-    faces_identified: '识别人脸',
-    note: '说明',
+    schedule_summary: '日程摘要',
+    source_prompt: '来源请求',
+    text_hint: '文字提示',
+    type: '类型',
+    value: '值',
   }
   return labels[key] ?? key
 }
@@ -1006,12 +1064,18 @@ function translateKey(key: string) {
 function translateSource(source: string) {
   const labels: Record<string, string> = {
     mock: '本地模拟',
+    mock_after_agent_error: '智能体异常后本地兜底',
+    mock_after_qwen_error: '云端异常后本地兜底',
+    mock_home_vlm_adapter: '本地视觉摘要适配器',
     static_mock: '静态模拟',
     static_agent: '静态智能体',
     static_fallback: '静态兜底',
+    static_home_vlm_adapter: '静态视觉摘要适配器',
     local_fallback: '本地兜底',
     qwen: '云端模型',
+    qwen_agent: '云端智能体',
     plan: '计划接口',
+    static: '静态状态',
     web: '手机网页',
     'esp32-serial': 'ESP32 串口',
     external: '外部设备',
@@ -1037,12 +1101,14 @@ function translateTraceType(type: string) {
     max_steps_reached: '达到最大步数',
     error: '错误',
   }
-  return labels[type] ?? type.replaceAll('_', ' ')
+  return labels[type] ?? `未知轨迹：${type.replaceAll('_', ' ')}`
 }
 
 function translateMode(mode: string) {
   const labels: Record<string, string> = {
     mock_cloud_reasoning: '本地模拟推理',
+    mock_after_agent_error: '智能体异常后本地兜底',
+    mock_after_qwen_error: '云端异常后本地兜底',
     weak_network_cached_context: '弱网缓存上下文',
     offline_fallback: '离线兜底',
     static_agent_reasoning: '静态智能体推理',
@@ -1051,10 +1117,11 @@ function translateMode(mode: string) {
     qwen_agent_reasoning: '云端智能体推理',
     agent_max_steps_fallback: '智能体兜底',
   }
-  return labels[mode] ?? mode.replaceAll('_', ' ')
+  return labels[mode] ?? `未知模式：${mode.replaceAll('_', ' ')}`
 }
 
-function translateValue(value: string) {
+function translateValue(value: string): string {
+  const normalizedValue = value.trim()
   const labels: Record<string, string> = {
     'living room': '客厅',
     'user just arrived home': '用户刚回到家',
@@ -1071,6 +1138,13 @@ function translateValue(value: string) {
     'low-energy evening arrival': '低能量晚间回家',
     'shared family activity': '家庭共同活动',
     'ordinary home context': '普通家庭场景',
+    phone: '手机',
+    desktop: '桌面端',
+    'esp32-cam': 'ESP32 摄像头',
+    mock: '本地模拟',
+    'mock_home_vlm_adapter': '本地视觉摘要适配器',
+    'static_home_vlm_adapter': '静态视觉摘要适配器',
+    'home-scene VLM adapter placeholder': '家庭场景视觉适配器占位',
     true: '是',
     false: '否',
     'Only a compact scene label and observations are passed to planning.': '只把紧凑场景标签和观察摘要传给规划器。',
@@ -1118,6 +1192,20 @@ function translateValue(value: string) {
     'No cloud request is made in offline mode.': '离线模式不会发起云端请求。',
     'Offline mode uses a safe local rule set.': '离线模式使用安全的本地规则集。',
     'The routine keeps comfort actions simple and reversible.': '流程保持动作简单且可逆。',
+    'Agent planning failed; falling back to local mock plan.': '智能体规划失败，已回退到本地模拟计划。',
+    'Agent did not converge within MAX_STEPS; falling back to local mock plan.':
+      '智能体在最大步数内未收敛，已回退到本地模拟计划。',
+    'Qwen planned a routine.': '云端模型已生成家庭流程。',
+    'Only local summary was used.': '仅使用本地摘要。',
+    'Use comfort preferences.': '使用舒适偏好。',
+    'Keep actions reversible.': '保持动作可逆。',
+    'Dim lights': '调暗灯光',
+    'Use a warm scene.': '使用暖光场景。',
+    'Agent settled the room.': '智能体已安排房间状态。',
+    'Only edge summaries were used.': '仅使用边缘侧摘要。',
+    'Checked context': '已检查上下文',
+    'Validated actions': '已校验动作',
+    'Warm scene.': '暖光场景。',
     'Simple warm dinner': '简单热晚餐',
     'Use a low-effort pantry option.': '选择低负担的储备食材。',
     'passes edge policy (not yet executed)': '通过边缘策略（尚未执行）',
@@ -1127,6 +1215,11 @@ function translateValue(value: string) {
     'Review project notes at 21:10': '21:10 回顾项目笔记',
     '21:10 回顾项目笔记': '21:10 回顾项目笔记',
     'Cloud planning unavailable; basic home routine active.': '云端规划不可用，已启用基础家庭流程。',
+    'short project review': '短项目复盘',
+    'sleep target': '准备休息',
+    'Raw local data is not sent. This payload is a compact edge-side summary.':
+      '原始本地数据不会上传，这里只传递边缘侧摘要。',
+    '2 evening items; next reminder is a short project review at 21:30': '今晚有 2 个事项；下一项是 21:30 短项目复盘',
     'User appears to be settling in after a tiring day. Prepare a calm, low-effort home routine with warm light and minimal interruptions.':
       '用户像是在疲惫一天后回到家。准备一个安静、低负担、暖光且尽量少打扰的家庭流程。',
     'The room appears to be used by multiple people. Keep suggestions family-safe, explain device changes, and avoid disruptive actions.':
@@ -1135,8 +1228,20 @@ function translateValue(value: string) {
       '使用当前房间上下文和用户偏好摘要，提出一个可逆的舒适流程。',
   }
 
-  if (value.startsWith('text_hint=')) return `文字提示：${value.slice('text_hint='.length)}`
-  return labels[value] ?? value
+  if (normalizedValue.startsWith('text_hint=')) {
+    return `文字提示：${normalizedValue.slice('text_hint='.length)}`
+  }
+  if (normalizedValue.startsWith('room=')) {
+    return `房间：${translateValue(normalizedValue.slice('room='.length))}`
+  }
+  if (normalizedValue.startsWith('camera=')) {
+    return `摄像头：${translateValue(normalizedValue.slice('camera='.length))}`
+  }
+  if (normalizedValue.startsWith('input_camera=')) {
+    return `输入摄像头：${translateValue(normalizedValue.slice('input_camera='.length))}`
+  }
+
+  return labels[normalizedValue] ?? normalizedValue
 }
 
 export default App

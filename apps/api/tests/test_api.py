@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from app.config import Settings
 from app.context import BASE_CONTEXT
 from app.main import app
-from app.planner import agent, service
+from app.planner import agent, qwen, service
 from app.schemas import Routine
 
 
@@ -195,6 +195,18 @@ def test_qwen_provider_success_path(monkeypatch):
     assert routine.provider == "qwen"
     assert routine.mode == "qwen_cloud_reasoning"
     assert routine.actions[0].device == "light"
+
+
+def test_qwen_system_prompt_requires_simplified_chinese_output():
+    assert "Simplified Chinese" in qwen.SYSTEM_PROMPT
+    assert "summary" in qwen.SYSTEM_PROMPT
+    assert "suggestions.title" in qwen.SYSTEM_PROMPT
+
+
+def test_agent_system_prompt_requires_simplified_chinese_output():
+    assert "Simplified Chinese" in agent.AGENT_SYSTEM_PROMPT
+    assert "summary" in agent.AGENT_SYSTEM_PROMPT
+    assert "suggestions.title" in agent.AGENT_SYSTEM_PROMPT
 
 
 def test_agent_mode_runs_tool_loop(monkeypatch):

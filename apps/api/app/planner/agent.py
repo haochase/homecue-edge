@@ -47,6 +47,10 @@ Allowed actions:
 - speaker play: soft ambient, focus, none
 - reminder set: short reminder message
 Only include actions that passed propose_actions. Never request raw private data.
+Write all user-visible JSON text fields in Simplified Chinese: summary,
+privacy_summary, reasoning, suggestions.title, suggestions.detail, and any
+reminder text in actions.value. Keep only enum-like fields and device commands
+in the allowed English tokens above.
 """
 
 

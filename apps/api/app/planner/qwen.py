@@ -22,6 +22,10 @@ Return only strict JSON with this shape:
   ]
 }
 Use only the provided privacy summary. Do not ask for raw private data.
+Write all user-visible JSON text fields in Simplified Chinese: summary,
+privacy_summary, reasoning, suggestions.title, suggestions.detail, and any
+reminder text in actions.value. Keep only enum-like fields and device commands
+in the allowed English tokens below.
 Allowed actions:
 - light set_scene: warm, bright, night
 - ac set_temperature: number

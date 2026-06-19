@@ -152,6 +152,10 @@ textarea {
   object-fit: cover;
 }
 
+.camera-preview.mirror {
+  transform: scaleX(-1);
+}
+
 .camera-surface:not(.active) .camera-preview {
   opacity: 0;
 }
