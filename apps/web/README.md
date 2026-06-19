@@ -150,3 +150,6 @@ separate browser-specific evidence directories. JSON evidence labels and file
 paths must be unique, and raw desktop/Chrome browser identity fields must match
 their manifest role. Windows Chrome evidence must identify `chrome.exe` with
 Google Chrome product metadata and matching runtime / executable major versions.
+Browser environment fields such as user agent, language, viewport,
+headed/channel mode, and raw page origin are cross-checked against the original
+browser JSON evidence.

@@ -499,6 +499,36 @@ async function validateRawDesktopEvidence(
   )
   compareValue(
     errors,
+    checks.browserEnvironment?.userAgent ?? null,
+    loop.browserEnvironment?.userAgent ?? null,
+    `${label}.browserEnvironment.userAgent raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.browserEnvironment?.language ?? null,
+    loop.browserEnvironment?.language ?? null,
+    `${label}.browserEnvironment.language raw evidence`,
+  )
+  compareValue(
+    errors,
+    browserViewportSignature(checks.browserEnvironment?.viewport),
+    browserViewportSignature(loop.browserEnvironment?.viewport),
+    `${label}.browserEnvironment.viewport raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.browserEnvironment?.headed ?? null,
+    loop.browserEnvironment?.headed ?? null,
+    `${label}.browserEnvironment.headed raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.browserEnvironment?.channel ?? null,
+    loop.browserEnvironment?.channel ?? null,
+    `${label}.browserEnvironment.channel raw evidence`,
+  )
+  compareValue(
+    errors,
     checks.browserEnvironment?.executableFileName ?? null,
     loop.browserEnvironment?.executableFileName ?? null,
     `${label}.browserEnvironment.executableFileName raw evidence`,
@@ -551,6 +581,7 @@ async function validateRawDesktopEvidence(
     loop.browserEnvironment?.speechRecognition ?? null,
     `${label}.browserEnvironment.speechRecognition raw evidence`,
   )
+  validateRawBrowserOrigin(errors, checks.browserEnvironment, appUrl, label)
   compareValue(errors, checks.localizedUi?.title ?? null, loop.title ?? null, `${label}.title raw evidence`)
   compareValue(
     errors,
@@ -885,6 +916,11 @@ function screenshotFilesSignature(value) {
   return value.join('|')
 }
 
+function browserViewportSignature(value) {
+  if (!value || typeof value !== 'object') return null
+  return [value.innerWidth ?? null, value.innerHeight ?? null, value.devicePixelRatio ?? null].join(':')
+}
+
 function validateRuntimeHealth(errors, value, label) {
   if (!value || typeof value !== 'object') {
     errors.push(`${label} is missing.`)
@@ -927,6 +963,19 @@ function validateLoopUrls(errors, loop, label, { appUrl, apiBase }) {
   }
   if (page && expectedApiBase && page.searchParams.get('apiBase') !== expectedApiBase) {
     errors.push(`${label}.pageUrl apiBase query must match summary apiBase.`)
+  }
+}
+
+function validateRawBrowserOrigin(errors, value, appUrl, label) {
+  const app = parseUrl(appUrl)
+  const rawOrigin = typeof value?.locationOrigin === 'string' ? value.locationOrigin : null
+
+  if (!rawOrigin) {
+    errors.push(`${label}.browserEnvironment.locationOrigin raw evidence must be present.`)
+    return
+  }
+  if (app && rawOrigin !== app.origin) {
+    errors.push(`${label}.browserEnvironment.locationOrigin raw evidence must match appUrl origin.`)
   }
 }
 

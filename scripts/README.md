@@ -76,6 +76,9 @@ also re-reads every present manifest file and recomputes byte size plus the
 short SHA-256 digest, then cross-checks the desktop, Windows Chrome, and phone
 summary fields against their original JSON evidence so stale or edited evidence
 files are caught.
+Browser environment fields such as user agent, language, viewport,
+headed/channel mode, and raw page origin are cross-checked against the original
+browser JSON evidence.
 
 ```powershell
 .\scripts\check-chrome-loop.ps1
