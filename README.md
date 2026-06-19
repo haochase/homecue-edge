@@ -239,7 +239,8 @@ That result also includes a compact `proofSummary` with the summary run id,
 desktop/Windows Chrome pass flags, browser-parity status, screenshot counts,
 web-readiness strategy, Chinese text-integrity counts
 (`required/missing/mojibake`), external execution source, and the
-report/summary/browser-evidence plus raw desktop/Chrome/web-readiness paths.
+report/summary/browser-evidence paths plus raw desktop/Chrome/web-readiness
+JSON and screenshot directories.
 `npm run computer:result:check` prints that compact proof line after validation
 so a successful saved-result check is readable without manually opening the
 JSON.

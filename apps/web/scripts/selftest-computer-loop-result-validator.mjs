@@ -428,10 +428,10 @@ const cases = [
   {
     name: 'proof-summary-raw-evidence-path-mismatch',
     expectedError:
-      'proofSummary.evidence.webReadinessEvidencePath must match browserEvidence.proofSummary.evidence.webReadinessEvidencePath.',
+      'proofSummary.evidence.windowsChromeScreenshotDir must match browserEvidence.proofSummary.evidence.windowsChromeScreenshotDir.',
     mutate: (result) => {
-      result.proofSummary.evidence.webReadinessEvidencePath =
-        'assets/tmp/computer-loop-result-validator-selftest/other-web-readiness.json'
+      result.proofSummary.evidence.windowsChromeScreenshotDir =
+        'assets/tmp/computer-loop-result-validator-selftest/other-windows-chrome-screens'
     },
   },
   {
@@ -798,6 +798,9 @@ async function attachRunLocalEvidence(result, name, { desktop = {}, chrome = {} 
     result.browserEvidence.proofSummary.evidence.windowsChromeEvidencePath
   result.proofSummary.evidence.webReadinessEvidencePath =
     result.browserEvidence.proofSummary.evidence.webReadinessEvidencePath
+  result.proofSummary.evidence.desktopScreenshotDir = result.browserEvidence.proofSummary.evidence.desktopScreenshotDir
+  result.proofSummary.evidence.windowsChromeScreenshotDir =
+    result.browserEvidence.proofSummary.evidence.windowsChromeScreenshotDir
 
   await writeScreenshotFiles(result.browserEvidence.plan.paths)
   const summary = await createSummary(result.browserEvidence.plan.paths)
@@ -1373,6 +1376,8 @@ function proofSummary(plan) {
       desktopEvidencePath: 'assets/tmp/computer-loop-result-validator-selftest/desktop-loop.json',
       windowsChromeEvidencePath: 'assets/tmp/computer-loop-result-validator-selftest/chrome-loop.json',
       webReadinessEvidencePath: 'assets/tmp/computer-loop-result-validator-selftest/web-readiness.json',
+      desktopScreenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/playwright-chromium-screens',
+      windowsChromeScreenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/windows-chrome-screens',
     },
   }
 }

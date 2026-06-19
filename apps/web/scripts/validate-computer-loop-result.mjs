@@ -612,7 +612,13 @@ function validateProofSummary(errors, proofSummary, summary, browserEvidence, pl
 function validateProofSummaryRawEvidencePaths(errors, evidence, browserEvidence) {
   if (!evidence || typeof evidence !== 'object') return
 
-  for (const key of ['desktopEvidencePath', 'windowsChromeEvidencePath', 'webReadinessEvidencePath']) {
+  for (const key of [
+    'desktopEvidencePath',
+    'windowsChromeEvidencePath',
+    'webReadinessEvidencePath',
+    'desktopScreenshotDir',
+    'windowsChromeScreenshotDir',
+  ]) {
     compareRepoPaths(
       errors,
       evidence[key],
