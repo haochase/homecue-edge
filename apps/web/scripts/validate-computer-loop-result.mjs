@@ -473,6 +473,8 @@ async function validateValidateMode(errors, value) {
     'summary.generatedAt',
   )
   validateNestedBrowserEvidencePaths(errors, browserEvidence.plan, outputs)
+  validateRequiredBrowserEvidencePaths(errors, browserEvidence.plan)
+  validateSkippedBrowserEvidencePaths(errors, browserEvidence.plan)
   validateBrowserEvidenceProofSummary(errors, browserEvidence.proofSummary, summary, browserEvidence.plan)
   await validateSummaryEvidence(errors, summary, browserEvidence.plan, value.plan)
   validateProofSummary(errors, value.proofSummary, summary, browserEvidence, value.plan)
@@ -1406,8 +1408,38 @@ function validateNestedBrowserEvidencePaths(errors, browserEvidencePlan, outputs
     }
   }
 
-  if (paths.phoneEvidence && isInsidePath(paths.phoneEvidence, outputs.outputDir)) {
-    errors.push('browserEvidence.plan.paths.phoneEvidence must not point to run-local phone evidence for computer-only result.')
+  if (paths.phoneEvidence && paths.phoneEvidence !== '__phone_not_run__.json') {
+    errors.push('browserEvidence.plan.paths.phoneEvidence must be __phone_not_run__.json for computer-only result.')
+  }
+}
+
+function validateSkippedBrowserEvidencePaths(errors, browserEvidencePlan) {
+  const skippedPaths = [
+    ['desktop', 'desktopEvidence', '__desktop_not_run__.json'],
+    ['desktop', 'desktopScreenshotDir', '__desktop_screens_not_run__'],
+    ['phone', 'phoneEvidence', '__phone_not_run__.json'],
+    ['windowsChrome', 'windowsChromeEvidence', '__chrome_not_run__.json'],
+    ['windowsChrome', 'windowsChromeScreenshotDir', '__chrome_screens_not_run__'],
+  ]
+  for (const [evidenceName, pathKey, sentinel] of skippedPaths) {
+    if (browserEvidencePlan?.requiredEvidence?.[evidenceName] === false && browserEvidencePlan?.paths?.[pathKey] !== sentinel) {
+      errors.push(`browserEvidence.plan.paths.${pathKey} must be ${sentinel} when ${evidenceName} evidence is not required.`)
+    }
+  }
+}
+
+function validateRequiredBrowserEvidencePaths(errors, browserEvidencePlan) {
+  const requiredPaths = [
+    ['desktop', 'desktopEvidence'],
+    ['desktop', 'desktopScreenshotDir'],
+    ['phone', 'phoneEvidence'],
+    ['windowsChrome', 'windowsChromeEvidence'],
+    ['windowsChrome', 'windowsChromeScreenshotDir'],
+  ]
+  for (const [evidenceName, pathKey] of requiredPaths) {
+    if (browserEvidencePlan?.requiredEvidence?.[evidenceName] === true && isSentinelPath(browserEvidencePlan?.paths?.[pathKey])) {
+      errors.push(`browserEvidence.plan.paths.${pathKey} must be a real evidence path when ${evidenceName} evidence is required.`)
+    }
   }
 }
 
@@ -1478,6 +1510,13 @@ function sortJsonValue(value) {
 }
 
 function compareRepoPaths(errors, left, right, leftLabel, rightLabel) {
+  if (isSentinelPath(left) || isSentinelPath(right)) {
+    if (left !== right) {
+      errors.push(`${leftLabel} must match ${rightLabel}.`)
+    }
+    return
+  }
+
   const leftPath = resolveRepoPath(left)
   const rightPath = resolveRepoPath(right)
   if (!leftPath || !rightPath || leftPath !== rightPath) {
@@ -1550,6 +1589,7 @@ function getCommandArgValue(errors, args, flag, label) {
 }
 
 function validateRepoPath(errors, value, label) {
+  if (isSentinelPath(value)) return
   if (!resolveRepoPath(value)) errors.push(`${label} must stay inside the repository root.`)
 }
 
@@ -1575,6 +1615,7 @@ function isInsidePath(child, parent) {
 
 function resolveRepoPath(value) {
   if (typeof value !== 'string' || value.length === 0) return null
+  if (isSentinelPath(value)) return null
 
   const absolutePath = path.isAbsolute(value) ? path.resolve(value) : path.resolve(repoRoot, value)
   const relativePath = path.relative(repoRoot, absolutePath)
@@ -1583,6 +1624,10 @@ function resolveRepoPath(value) {
   }
 
   return absolutePath
+}
+
+function isSentinelPath(value) {
+  return typeof value === 'string' && value.startsWith('__')
 }
 
 function assertString(errors, value, label) {

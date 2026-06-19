@@ -273,6 +273,39 @@ const cases = [
     },
   },
   {
+    name: 'browser-evidence-skipped-phone-path-uses-demo-evidence',
+    expectedError: 'browserEvidence.plan.paths.phoneEvidence must be __phone_not_run__.json when phone evidence is not required.',
+    mutate: (result) => {
+      result.browserEvidence.plan.paths.phoneEvidence = 'assets/demo/phone-loop.json'
+      result.browserEvidence.proofSummary.evidence.phoneEvidencePath = result.browserEvidence.plan.paths.phoneEvidence
+    },
+  },
+  {
+    name: 'browser-evidence-required-desktop-path-uses-sentinel',
+    expectedError: 'browserEvidence.plan.paths.desktopEvidence must be a real evidence path when desktop evidence is required.',
+    mutate: (result) => {
+      result.browserEvidence.plan.paths.desktopEvidence = '__desktop_not_run__.json'
+      result.browserEvidence.checks.find((check) => check.command === 'npm run desktop:evidence:check').path =
+        result.browserEvidence.plan.paths.desktopEvidence
+      result.browserEvidence.proofSummary.evidence.desktopEvidencePath = result.browserEvidence.plan.paths.desktopEvidence
+      result.proofSummary.evidence.desktopEvidencePath = result.browserEvidence.plan.paths.desktopEvidence
+    },
+  },
+  {
+    name: 'browser-evidence-required-chrome-screenshot-dir-uses-sentinel',
+    expectedError:
+      'browserEvidence.plan.paths.windowsChromeScreenshotDir must be a real evidence path when windowsChrome evidence is required.',
+    mutate: (result) => {
+      result.browserEvidence.plan.paths.windowsChromeScreenshotDir = '__chrome_screens_not_run__'
+      result.browserEvidence.checks.find(
+        (check) => check.command === 'npm run desktop:evidence:check -- --require-installed-chrome',
+      ).screenshotDir = result.browserEvidence.plan.paths.windowsChromeScreenshotDir
+      result.browserEvidence.proofSummary.evidence.windowsChromeScreenshotDir =
+        result.browserEvidence.plan.paths.windowsChromeScreenshotDir
+      result.proofSummary.evidence.windowsChromeScreenshotDir = result.browserEvidence.plan.paths.windowsChromeScreenshotDir
+    },
+  },
+  {
     name: 'browser-evidence-selftest-requested',
     expectedError: 'browserEvidence.plan.selfTest.requested must match plan.options.selfTest for computer-only result.',
     mutate: (result) => {
@@ -1288,7 +1321,7 @@ function createResult({ mode = 'validate', browserEvidence = undefined, selfTest
               paths: {
                 desktopEvidence: 'assets/tmp/computer-loop-result-validator-selftest/desktop-loop.json',
                 desktopScreenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/playwright-chromium-screens',
-                phoneEvidence: 'assets/demo/phone-loop.json',
+                phoneEvidence: '__phone_not_run__.json',
                 windowsChromeEvidence: 'assets/tmp/computer-loop-result-validator-selftest/chrome-loop.json',
                 windowsChromeScreenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/windows-chrome-screens',
               },
@@ -1323,7 +1356,7 @@ function createResult({ mode = 'validate', browserEvidence = undefined, selfTest
               paths: {
                 desktopEvidence: 'assets/tmp/computer-loop-result-validator-selftest/desktop-loop.json',
                 desktopScreenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/playwright-chromium-screens',
-                phoneEvidence: 'assets/demo/phone-loop.json',
+                phoneEvidence: '__phone_not_run__.json',
                 windowsChromeEvidence: 'assets/tmp/computer-loop-result-validator-selftest/chrome-loop.json',
                 windowsChromeScreenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/windows-chrome-screens',
               },

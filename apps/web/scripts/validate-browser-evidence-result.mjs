@@ -71,6 +71,8 @@ function validatePlan(errors, plan, validatedResultFile) {
   validateSelfTestPlan(errors, plan.selfTest)
   validateRequiredEvidenceConsistency(errors, plan)
   validatePaths(errors, plan.paths)
+  validateRequiredEvidencePaths(errors, plan)
+  validateSkippedEvidencePaths(errors, plan)
 }
 
 function validateBooleanGroup(errors, value, label) {
@@ -145,6 +147,36 @@ function validatePaths(errors, paths) {
     assertString(errors, paths[key], `plan.paths.${key}`)
     validateRepoPath(errors, paths[key], `plan.paths.${key}`)
     validatePortableRepoPath(errors, paths[key], `plan.paths.${key}`)
+  }
+}
+
+function validateSkippedEvidencePaths(errors, plan) {
+  const skippedPaths = [
+    ['desktop', 'desktopEvidence', '__desktop_not_run__.json'],
+    ['desktop', 'desktopScreenshotDir', '__desktop_screens_not_run__'],
+    ['phone', 'phoneEvidence', '__phone_not_run__.json'],
+    ['windowsChrome', 'windowsChromeEvidence', '__chrome_not_run__.json'],
+    ['windowsChrome', 'windowsChromeScreenshotDir', '__chrome_screens_not_run__'],
+  ]
+  for (const [evidenceName, pathKey, sentinel] of skippedPaths) {
+    if (plan?.requiredEvidence?.[evidenceName] === false && plan?.paths?.[pathKey] !== sentinel) {
+      errors.push(`plan.paths.${pathKey} must be ${sentinel} when ${evidenceName} evidence is not required.`)
+    }
+  }
+}
+
+function validateRequiredEvidencePaths(errors, plan) {
+  const requiredPaths = [
+    ['desktop', 'desktopEvidence'],
+    ['desktop', 'desktopScreenshotDir'],
+    ['phone', 'phoneEvidence'],
+    ['windowsChrome', 'windowsChromeEvidence'],
+    ['windowsChrome', 'windowsChromeScreenshotDir'],
+  ]
+  for (const [evidenceName, pathKey] of requiredPaths) {
+    if (plan?.requiredEvidence?.[evidenceName] === true && isSentinelPath(plan?.paths?.[pathKey])) {
+      errors.push(`plan.paths.${pathKey} must be a real evidence path when ${evidenceName} evidence is required.`)
+    }
   }
 }
 
@@ -984,6 +1016,13 @@ async function readReferencedJson(errors, value, label) {
 }
 
 function compareRepoPaths(errors, left, right, leftLabel, rightLabel) {
+  if (isSentinelPath(left) || isSentinelPath(right)) {
+    if (left !== right) {
+      errors.push(`${leftLabel} must match ${rightLabel}.`)
+    }
+    return
+  }
+
   const leftPath = resolveRepoPath(left)
   const rightPath = resolveRepoPath(right)
   if (!leftPath || !rightPath || leftPath !== rightPath) {
@@ -1027,6 +1066,7 @@ function sortJsonValue(value) {
 }
 
 function validateRepoPath(errors, value, label) {
+  if (isSentinelPath(value)) return
   if (!resolveRepoPath(value)) errors.push(`${label} must stay inside the repository root.`)
 }
 
@@ -1047,6 +1087,7 @@ function isInsidePath(child, parent) {
 
 function resolveRepoPath(value) {
   if (typeof value !== 'string' || value.length === 0) return null
+  if (isSentinelPath(value)) return null
 
   const absolutePath = path.isAbsolute(value) ? path.resolve(value) : path.resolve(repoRoot, value)
   const relativePath = path.relative(repoRoot, absolutePath)
@@ -1055,6 +1096,10 @@ function resolveRepoPath(value) {
   }
 
   return absolutePath
+}
+
+function isSentinelPath(value) {
+  return typeof value === 'string' && value.startsWith('__')
 }
 
 function assertString(errors, value, label) {

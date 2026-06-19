@@ -163,6 +163,113 @@ const cases = [
     },
   },
   {
+    name: 'skipped-phone-path-uses-demo-evidence',
+    expectedError: 'plan.paths.phoneEvidence must be __phone_not_run__.json when phone evidence is not required.',
+    mutate: (result) => {
+      result.plan.paths.phoneEvidence = 'assets/demo/phone-loop.json'
+      result.proofSummary.evidence.phoneEvidencePath = result.plan.paths.phoneEvidence
+    },
+  },
+  {
+    name: 'required-phone-path-uses-sentinel',
+    expectedError: 'plan.paths.phoneEvidence must be a real evidence path when phone evidence is required.',
+    mutate: (result) => {
+      result.plan.inferredFromSummary.phone = true
+      result.plan.requiredEvidence.phone = true
+      result.plan.paths.phoneEvidence = '__phone_not_run__.json'
+      result.proofSummary.requiredEvidence.phone = true
+      result.proofSummary.loops.phone.run = true
+      result.proofSummary.loops.phone.success = true
+      result.proofSummary.evidence.phoneEvidencePath = result.plan.paths.phoneEvidence
+      result.checks.push({
+        name: 'Android Chrome phone evidence',
+        command: 'npm run phone:evidence:check',
+        required: true,
+        path: result.plan.paths.phoneEvidence,
+      })
+    },
+  },
+  {
+    name: 'skipped-desktop-path-uses-demo-evidence',
+    expectedError: 'plan.paths.desktopEvidence must be __desktop_not_run__.json when desktop evidence is not required.',
+    mutate: (result) => {
+      result.plan.inferredFromSummary.desktop = false
+      result.plan.requiredEvidence.desktop = false
+      result.plan.paths.desktopEvidence = 'assets/demo/desktop-loop.json'
+      result.checks = result.checks.filter((check) => check.name !== 'desktop raw evidence')
+      result.proofSummary.requiredEvidence.desktop = false
+      result.proofSummary.loops.desktop.run = false
+      result.proofSummary.loops.desktop.success = null
+      result.proofSummary.evidence.desktopEvidencePath = result.plan.paths.desktopEvidence
+    },
+  },
+  {
+    name: 'required-desktop-path-uses-sentinel',
+    expectedError: 'plan.paths.desktopEvidence must be a real evidence path when desktop evidence is required.',
+    mutate: (result) => {
+      result.plan.paths.desktopEvidence = '__desktop_not_run__.json'
+      result.checks.find((check) => check.name === 'desktop raw evidence').path = result.plan.paths.desktopEvidence
+      result.proofSummary.evidence.desktopEvidencePath = result.plan.paths.desktopEvidence
+    },
+  },
+  {
+    name: 'skipped-desktop-screenshot-dir-uses-demo-evidence',
+    expectedError: 'plan.paths.desktopScreenshotDir must be __desktop_screens_not_run__ when desktop evidence is not required.',
+    mutate: (result) => {
+      result.plan.inferredFromSummary.desktop = false
+      result.plan.requiredEvidence.desktop = false
+      result.plan.paths.desktopEvidence = '__desktop_not_run__.json'
+      result.plan.paths.desktopScreenshotDir = 'assets/demo/playwright-chromium-screens'
+      result.checks = result.checks.filter((check) => check.name !== 'desktop raw evidence')
+      result.proofSummary.requiredEvidence.desktop = false
+      result.proofSummary.loops.desktop.run = false
+      result.proofSummary.loops.desktop.success = null
+      result.proofSummary.evidence.desktopEvidencePath = result.plan.paths.desktopEvidence
+      result.proofSummary.evidence.desktopScreenshotDir = result.plan.paths.desktopScreenshotDir
+    },
+  },
+  {
+    name: 'skipped-chrome-path-uses-demo-evidence',
+    expectedError: 'plan.paths.windowsChromeEvidence must be __chrome_not_run__.json when windowsChrome evidence is not required.',
+    mutate: (result) => {
+      result.plan.inferredFromSummary.windowsChrome = false
+      result.plan.requiredEvidence.windowsChrome = false
+      result.plan.paths.windowsChromeEvidence = 'assets/demo/chrome-loop.json'
+      result.checks = result.checks.filter((check) => check.name !== 'Windows Chrome raw evidence')
+      result.proofSummary.requiredEvidence.windowsChrome = false
+      result.proofSummary.loops.windowsChrome.run = false
+      result.proofSummary.loops.windowsChrome.success = null
+      result.proofSummary.evidence.windowsChromeEvidencePath = result.plan.paths.windowsChromeEvidence
+    },
+  },
+  {
+    name: 'required-chrome-screenshot-dir-uses-sentinel',
+    expectedError: 'plan.paths.windowsChromeScreenshotDir must be a real evidence path when windowsChrome evidence is required.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, () => {})
+      result.plan.paths.windowsChromeScreenshotDir = '__chrome_screens_not_run__'
+      result.checks.find((check) => check.name === 'Windows Chrome raw evidence').screenshotDir =
+        result.plan.paths.windowsChromeScreenshotDir
+      result.proofSummary.evidence.windowsChromeScreenshotDir = result.plan.paths.windowsChromeScreenshotDir
+    },
+  },
+  {
+    name: 'skipped-chrome-screenshot-dir-uses-demo-evidence',
+    expectedError: 'plan.paths.windowsChromeScreenshotDir must be __chrome_screens_not_run__ when windowsChrome evidence is not required.',
+    mutate: (result) => {
+      result.plan.inferredFromSummary.windowsChrome = false
+      result.plan.requiredEvidence.windowsChrome = false
+      result.plan.paths.windowsChromeEvidence = '__chrome_not_run__.json'
+      result.plan.paths.windowsChromeScreenshotDir = 'assets/demo/windows-chrome-screens'
+      result.checks = result.checks.filter((check) => check.name !== 'Windows Chrome raw evidence')
+      result.proofSummary.requiredEvidence.windowsChrome = false
+      result.proofSummary.loops.windowsChrome.run = false
+      result.proofSummary.loops.windowsChrome.success = null
+      result.proofSummary.evidence.windowsChromeEvidencePath = result.plan.paths.windowsChromeEvidence
+      result.proofSummary.evidence.windowsChromeScreenshotDir = result.plan.paths.windowsChromeScreenshotDir
+    },
+  },
+  {
     name: 'desktop-check-path-mismatch',
     expectedError: 'desktop raw evidence path must match plan path for desktop raw evidence.',
     mutate: (result) => {
@@ -830,7 +937,7 @@ function createResult({ mode = 'validate' } = {}) {
     paths: {
       desktopEvidence: 'assets/tmp/browser-evidence-result-validator-selftest/desktop-loop.json',
       desktopScreenshotDir: 'assets/tmp/browser-evidence-result-validator-selftest/playwright-chromium-screens',
-      phoneEvidence: 'assets/tmp/browser-evidence-result-validator-selftest/phone-loop.json',
+      phoneEvidence: '__phone_not_run__.json',
       windowsChromeEvidence: 'assets/tmp/browser-evidence-result-validator-selftest/chrome-loop.json',
       windowsChromeScreenshotDir: 'assets/tmp/browser-evidence-result-validator-selftest/windows-chrome-screens',
     },
