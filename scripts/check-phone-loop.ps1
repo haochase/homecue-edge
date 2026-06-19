@@ -15,12 +15,67 @@ $ErrorActionPreference = "Stop"
 $Root = Resolve-Path "$PSScriptRoot\.."
 $WebDir = Join-Path $Root "apps\web"
 
-if (-not $AdbPath) {
-  $AdbPath = Join-Path $env:LOCALAPPDATA "Android\Sdk\platform-tools\adb.exe"
+function Resolve-RootedPath {
+  param([string]$Path)
+
+  if (-not $Path) {
+    return ""
+  }
+  if ([System.IO.Path]::IsPathRooted($Path)) {
+    return $Path
+  }
+
+  return Join-Path $Root $Path
 }
+
+function Get-DefaultAdbCandidates {
+  $Candidates = New-Object System.Collections.Generic.List[string]
+  $LocalAppDataValues = @(
+    $env:LOCALAPPDATA,
+    [Environment]::GetFolderPath("LocalApplicationData")
+  ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+
+  foreach ($LocalAppData in $LocalAppDataValues) {
+    $Candidates.Add([System.IO.Path]::Combine($LocalAppData, "Android", "Sdk", "platform-tools", "adb.exe"))
+  }
+
+  $PathAdb = Get-Command "adb.exe" -ErrorAction SilentlyContinue
+  if ($PathAdb -and $PathAdb.Source) {
+    $Candidates.Add($PathAdb.Source)
+  }
+
+  return @($Candidates.ToArray() | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+}
+
+function Resolve-AdbExecutable {
+  param([string]$ExplicitPath)
+
+  $Candidates = if ([string]::IsNullOrWhiteSpace($ExplicitPath)) {
+    @(Get-DefaultAdbCandidates)
+  } else {
+    @($ExplicitPath)
+  }
+
+  foreach ($Candidate in $Candidates) {
+    if (Test-Path -LiteralPath $Candidate) {
+      return (Get-Item -LiteralPath $Candidate).FullName
+    }
+  }
+
+  if ($Candidates.Count -gt 0) {
+    return $Candidates[0]
+  }
+
+  return ""
+}
+
+$AdbPath = Resolve-AdbExecutable -ExplicitPath $AdbPath
 
 if (-not $OutputPath) {
   $OutputPath = Join-Path $Root "assets\demo\phone-loop.json"
+}
+else {
+  $OutputPath = Resolve-RootedPath $OutputPath
 }
 
 if (-not (Test-Path -LiteralPath $AdbPath)) {
@@ -97,12 +152,33 @@ function Expand-JsonArray {
   return @($Value)
 }
 
-$DeviceLines = & $AdbPath devices
-if ($LASTEXITCODE -ne 0) {
-  throw "adb devices failed."
+function Get-ConnectedAndroidDevices {
+  param([string]$Executable)
+
+  try {
+    & $Executable start-server 2>$null | Out-Null
+  }
+  catch {
+    # The retry loop below will still report no authorized device if startup failed.
+  }
+
+  $Deadline = (Get-Date).AddSeconds(15)
+  do {
+    $DeviceLines = & $Executable devices -l
+    if ($LASTEXITCODE -eq 0) {
+      $Devices = @($DeviceLines | Where-Object { [string]$_ -match "^\S+\s+device(?:\s|$)" })
+      if ($Devices.Count -gt 0) {
+        return $Devices
+      }
+    }
+
+    Start-Sleep -Milliseconds 500
+  } while ((Get-Date) -lt $Deadline)
+
+  return @()
 }
 
-$ConnectedDevices = @($DeviceLines | Where-Object { $_ -match "\sdevice$" })
+$ConnectedDevices = @(Get-ConnectedAndroidDevices -Executable $AdbPath)
 if ($ConnectedDevices.Count -eq 0) {
   throw "No authorized Android device found. Unlock the phone and accept the USB debugging prompt."
 }
@@ -155,6 +231,11 @@ try {
   npm run phone:loop -- $AppUrl $ApiBase $CdpEndpoint $OutputPath
   if ($LASTEXITCODE -ne 0) {
     throw "phone:loop failed."
+  }
+
+  npm run phone:evidence:check -- $OutputPath $AppUrl $ApiBase $CdpEndpoint
+  if ($LASTEXITCODE -ne 0) {
+    throw "phone:evidence:check failed."
   }
 }
 finally {

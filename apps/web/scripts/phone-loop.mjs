@@ -146,6 +146,7 @@ async function verifyLocalizedUi(page) {
   const text = await page.locator('body').innerText()
   const requiredText = [labels.title, labels.voiceInput, labels.openFrontCamera, labels.runPlan]
   const missing = requiredText.filter((item) => !text.includes(item))
+  const textIntegrity = verifyChineseTextIntegrity(text)
 
   if (missing.length) {
     throw new Error(`Localized UI text missing: ${missing.join(', ')}`)
@@ -155,6 +156,36 @@ async function verifyLocalizedUi(page) {
     title: await page.locator('h1').innerText(),
     voiceButton: await page.getByRole('button', { name: labels.voiceInput }).innerText(),
     frontCameraButton: await page.getByRole('button', { name: labels.openFrontCamera }).innerText(),
+    textIntegrity,
+  }
+}
+
+function verifyChineseTextIntegrity(bodyText) {
+  const requiredPhrases = [
+    labels.title,
+    labels.voiceInput,
+    labels.openFrontCamera,
+    '本地上下文',
+    '边缘侧保留',
+    '手机视觉摘要',
+    '结构化动作会先通过本地策略校验。',
+  ]
+  const missingPhrases = requiredPhrases.filter((phrase) => !bodyText.includes(phrase))
+  const mojibakeMatches = Array.from(new Set(bodyText.match(/\uFFFD|锟|Ã|Â|â€|âœ|ä¸|å®|ç”|è¾|绛\?|鎽|璇|鍓|寰/g) ?? []))
+
+  if (missingPhrases.length || mojibakeMatches.length) {
+    throw new Error(
+      `Chinese text integrity failed: ${JSON.stringify({
+        missingPhrases,
+        mojibakeMatches,
+      })}`,
+    )
+  }
+
+  return {
+    requiredPhraseCount: requiredPhrases.length,
+    missingPhraseCount: missingPhrases.length,
+    mojibakeCount: mojibakeMatches.length,
   }
 }
 
@@ -215,8 +246,17 @@ async function verifyFrontCamera(page) {
     throw new Error(`Camera did not produce a video frame: ${JSON.stringify(cameraState)}`)
   }
 
-  if (cameraState.facingMode && cameraState.facingMode !== 'user') {
+  if (cameraState.facingMode !== 'user') {
     throw new Error(`Expected front camera facingMode=user, got ${cameraState.facingMode}`)
+  }
+  if (!cameraState.status.includes('前置摄像头已就绪')) {
+    throw new Error(`Expected front camera ready status, got ${cameraState.status}`)
+  }
+  if (cameraState.mirrored !== true) {
+    throw new Error(`Expected mirrored front-camera preview, got ${JSON.stringify(cameraState)}`)
+  }
+  if (cameraState.objectFit !== 'cover') {
+    throw new Error(`Expected camera preview object-fit=cover, got ${cameraState.objectFit}`)
   }
 
   return cameraState
@@ -493,6 +533,8 @@ async function readCameraState(page) {
 
     const track = video.srcObject?.getVideoTracks?.()[0]
     const settings = track?.getSettings?.() ?? {}
+    const classList = Array.from(video.classList)
+    const computedStyle = getComputedStyle(video)
     return {
       ready: video.videoWidth > 0 && video.videoHeight > 0,
       width: video.videoWidth,
@@ -501,6 +543,10 @@ async function readCameraState(page) {
       active: Boolean(video.srcObject),
       trackState: track?.readyState ?? null,
       facingMode: settings.facingMode ?? null,
+      classList,
+      mirrored: classList.includes('mirror'),
+      transform: computedStyle.transform,
+      objectFit: computedStyle.objectFit,
       status,
       error,
     }
