@@ -239,7 +239,7 @@ That result also includes a compact `proofSummary` with the summary run id,
 desktop/Windows Chrome pass flags, browser-parity status, screenshot counts,
 web-readiness strategy, Chinese text-integrity counts
 (`required/missing/mojibake`), external execution source, and the
-report/summary/browser-evidence paths.
+report/summary/browser-evidence plus raw desktop/Chrome/web-readiness paths.
 `npm run computer:result:check` prints that compact proof line after validation
 so a successful saved-result check is readable without manually opening the
 JSON.
@@ -255,8 +255,9 @@ reads the referenced summary JSON directly and verifies desktop + Windows Chrome
 ran, phone did not run, browser parity passed, `proofSummary` matches the
 referenced summary and browser-evidence result, summary manifest paths match the
 browser-evidence plan, browser evidence carries the `Web Readiness JSON`
-manifest path, and the raw desktop/Windows Chrome JSON files share the summary
-run id and expected browser roles. It also verifies that
+manifest path, top-level proof paths match the nested browser evidence, and the
+raw desktop/Windows Chrome JSON files share the summary run id and expected
+browser roles. It also verifies that
 `plan.outputs.resultJsonPath` is the file being checked and that the saved
 command arguments still match the planned output paths, timeout options, and
 browser-evidence gates. Keep custom report, summary, and browser evidence result

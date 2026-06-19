@@ -606,6 +606,21 @@ function validateProofSummary(errors, proofSummary, summary, browserEvidence, pl
     'proofSummary.evidence.browserEvidenceSuccess',
     'browserEvidence.success',
   )
+  validateProofSummaryRawEvidencePaths(errors, proofSummary.evidence, browserEvidence?.proofSummary?.evidence)
+}
+
+function validateProofSummaryRawEvidencePaths(errors, evidence, browserEvidence) {
+  if (!evidence || typeof evidence !== 'object') return
+
+  for (const key of ['desktopEvidencePath', 'windowsChromeEvidencePath', 'webReadinessEvidencePath']) {
+    compareRepoPaths(
+      errors,
+      evidence[key],
+      browserEvidence?.[key],
+      `proofSummary.evidence.${key}`,
+      `browserEvidence.proofSummary.evidence.${key}`,
+    )
+  }
 }
 
 function validateProofSummaryWebReadiness(errors, proof, summary, label = 'proofSummary.webReadiness') {

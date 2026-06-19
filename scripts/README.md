@@ -102,8 +102,9 @@ checker also reads the referenced summary JSON directly and verifies desktop +
 Windows Chrome ran, phone did not run, browser parity passed, `proofSummary`
 matches the referenced summary and browser-evidence result, summary manifest
 paths match the browser-evidence plan, browser evidence carries the
-`Web Readiness JSON` manifest path, and the raw desktop/Windows Chrome JSON
-files share the summary run id and expected browser roles. It also verifies that
+`Web Readiness JSON` manifest path, top-level proof paths match the nested
+browser evidence, and the raw desktop/Windows Chrome JSON files share the
+summary run id and expected browser roles. It also verifies that
 `plan.outputs.resultJsonPath` is the file being checked and that the saved
 command arguments still match the planned output paths, timeout options, and
 browser-evidence gates. Keep custom report, summary, and browser evidence result

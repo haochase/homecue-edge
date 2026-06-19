@@ -322,6 +322,9 @@ function New-ComputerLoopProofSummary {
       summaryPath = $Plan.outputs.summaryPath
       browserEvidenceResultJsonPath = $Plan.outputs.browserEvidenceResultJsonPath
       browserEvidenceSuccess = [bool]($BrowserEvidenceResult.success -eq $true)
+      desktopEvidencePath = $BrowserEvidenceResult.proofSummary.evidence.desktopEvidencePath
+      windowsChromeEvidencePath = $BrowserEvidenceResult.proofSummary.evidence.windowsChromeEvidencePath
+      webReadinessEvidencePath = $BrowserEvidenceResult.proofSummary.evidence.webReadinessEvidencePath
     }
   }
 }
