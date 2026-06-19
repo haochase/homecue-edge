@@ -32,6 +32,22 @@ assertReportIncludes(browserOnly.report, 'Phone proof was not run in this report
 assertReportExcludes(browserOnly.report, 'The phone proof covers front-camera preference')
 console.log('PASS browser-only talking points')
 
+const chromeOnly = await runReporter('chrome-only', {
+  desktopFile: '__desktop_not_run__.json',
+  phoneFile: '__phone_not_run__.json',
+})
+if (chromeOnly.code !== 0) {
+  console.error(chromeOnly.output)
+  throw new Error('Expected Chrome-only full-loop report evidence to pass without desktop or phone evidence.')
+}
+assertReportIncludes(chromeOnly.report, '- Desktop loop: unknown')
+assertReportIncludes(chromeOnly.report, '- Windows Chrome loop: pass')
+assertReportIncludes(chromeOnly.report, `- App URL: ${chromeOnly.summary.appUrl}`)
+assertReportIncludes(chromeOnly.report, `- API base: ${chromeOnly.summary.apiBase}`)
+assertReportExcludes(chromeOnly.report, '- App URL: unknown')
+assertReportIncludes(chromeOnly.report, 'The loop verifies the HomeCue assistant path across Windows Chrome')
+console.log('PASS Chrome-only report summary fallback')
+
 const phoneEvidence = JSON.parse(await readFile(phoneEvidenceFile, 'utf8'))
 const negativeCases = [
   {
@@ -71,9 +87,13 @@ for (const testCase of negativeCases) {
 
 console.log('Full loop reporter self-test passed.')
 
-async function runReporter(name, phoneFile) {
+async function runReporter(name, options = {}) {
+  const reporterOptions = typeof options === 'string' ? { phoneFile: options } : options
   const reportFile = path.join(outputDir, `${name}.md`)
   const summaryFile = path.join(outputDir, `${name}.json`)
+  const inputDesktopFile = reporterOptions.desktopFile ?? desktopEvidenceFile
+  const inputPhoneFile = reporterOptions.phoneFile ?? phoneEvidenceFile
+  const inputChromeFile = reporterOptions.chromeFile ?? chromeEvidenceFile
 
   return new Promise((resolve, reject) => {
     const child = spawn(
@@ -81,10 +101,10 @@ async function runReporter(name, phoneFile) {
       [
         reporterScript,
         reportFile,
-        desktopEvidenceFile,
-        phoneFile,
+        inputDesktopFile,
+        inputPhoneFile,
         legacyScreensArg,
-        chromeEvidenceFile,
+        inputChromeFile,
         summaryFile,
         devEnvEvidenceFile,
       ],
@@ -105,7 +125,8 @@ async function runReporter(name, phoneFile) {
     child.on('close', async (code) => {
       try {
         const report = code === 0 ? await readFile(reportFile, 'utf8') : ''
-        resolve({ code, output, report })
+        const summary = code === 0 ? JSON.parse(await readFile(summaryFile, 'utf8')) : null
+        resolve({ code, output, report, summary })
       } catch (error) {
         reject(error)
       }
