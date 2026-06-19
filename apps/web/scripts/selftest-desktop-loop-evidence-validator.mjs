@@ -56,6 +56,15 @@ const negativeCases = [
     },
   },
   {
+    name: 'desktop-screenshot-steps-mismatch',
+    base: desktopEvidence,
+    argsFor: desktopArgs,
+    expectedError: 'expectedFiles must match the required six-step screenshot set',
+    mutate: (evidence) => {
+      evidence.checks.screenshotEvidence.expectedFiles[0] = 'wrong-step.png'
+    },
+  },
+  {
     name: 'desktop-external-source-mismatch',
     base: desktopEvidence,
     argsFor: desktopArgs,

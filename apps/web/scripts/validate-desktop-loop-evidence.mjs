@@ -6,6 +6,14 @@ import { fileURLToPath } from 'node:url'
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
 const evidenceFile = process.argv[2] ?? path.join(repoRoot, 'assets', 'demo', 'desktop-loop.json')
+const EXPECTED_SCREENSHOT_FILES = [
+  '01-control-console.png',
+  '02-scene-prompt-handoff.png',
+  '03-propose-only.png',
+  '04-web-confirmation.png',
+  '05-offline-fallback.png',
+  '06-external-sync.png',
+]
 const options = parseOptions(process.argv.slice(3))
 const evidence = JSON.parse(await readFile(evidenceFile, 'utf8'))
 const errors = await validateEvidence(evidence, options)
@@ -173,15 +181,25 @@ async function validateScreenshotEvidence(errors, value, options) {
   }
 
   if (screenshotEvidence.count !== 6) errors.push('checks.screenshotEvidence.count must be 6.')
+  if (screenshotFilesSignature(screenshotEvidence.expectedFiles) !== EXPECTED_SCREENSHOT_FILES.join('|')) {
+    errors.push('checks.screenshotEvidence.expectedFiles must match the required six-step screenshot set.')
+  }
   if (screenshotEvidence.uniqueDigestCount !== screenshotEvidence.count) {
     errors.push('checks.screenshotEvidence.uniqueDigestCount must match count.')
   }
   if (screenshots.length !== screenshotEvidence.count) {
     errors.push('screenshots length must match checks.screenshotEvidence.count.')
   }
+  if (Array.isArray(screenshotEvidence.files) && screenshotEvidence.files.length !== screenshots.length) {
+    errors.push('checks.screenshotEvidence.files length must match screenshots length.')
+  }
 
   const evidenceFilesByPath = new Map((screenshotEvidence.files ?? []).map((entry) => [entry?.path, entry]))
-  for (const screenshot of screenshots) {
+  for (const [index, screenshot] of screenshots.entries()) {
+    const expectedFile = EXPECTED_SCREENSHOT_FILES[index]
+    if (path.basename(screenshot) !== expectedFile) {
+      errors.push(`screenshots[${index}] must be ${expectedFile}.`)
+    }
     if (options.expectedScreenshotDir && !screenshot.startsWith(options.expectedScreenshotDir)) {
       errors.push(`screenshots must use ${options.expectedScreenshotDir}: ${screenshot}.`)
     }
@@ -306,6 +324,11 @@ function chromeMajorVersion(value) {
   if (typeof value !== 'string') return null
   const match = value.match(/(?:HeadlessChrome|Chrome|Chromium)\/(\d+)\./u) ?? value.match(/^(\d+)\./u)
   return match ? Number(match[1]) : null
+}
+
+function screenshotFilesSignature(value) {
+  if (!Array.isArray(value)) return null
+  return value.join('|')
 }
 
 function positiveNumber(value) {
