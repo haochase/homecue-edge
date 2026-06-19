@@ -32,7 +32,7 @@ if (positiveResult.code !== 0) {
 }
 assertOutputIncludes(
   positiveResult.output,
-  'Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass parity=pass screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial',
+  'Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass parity=pass web=already-ready screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial',
   'positive proof summary output',
 )
 console.log('PASS positive computer loop result')
@@ -87,7 +87,7 @@ if (selfTestPositiveResult.code !== 0) {
 }
 assertOutputIncludes(
   selfTestPositiveResult.output,
-  'Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass parity=pass screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial',
+  'Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass parity=pass web=already-ready screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial',
   'self-test proof summary output',
 )
 console.log('PASS self-test computer loop result')
@@ -457,6 +457,24 @@ const cases = [
     },
   },
   {
+    name: 'summary-web-readiness-missing',
+    expectedError: 'summary.environment.webReadiness is missing.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        delete summary.environment.webReadiness
+      })
+    },
+  },
+  {
+    name: 'summary-web-readiness-gate-mismatch',
+    expectedError: 'summary.environment.webReadiness.gates.httpProbeBeforePortReuse must be true.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.environment.webReadiness.gates.httpProbeBeforePortReuse = false
+      })
+    },
+  },
+  {
     name: 'summary-generated-after-result',
     expectedError: 'generatedAt must not be earlier than summary.generatedAt.',
     prepare: async (result, name) => {
@@ -817,16 +835,52 @@ async function createSummary(paths) {
       success: true,
       errors: [],
     },
+    environment: {
+      webReadiness: summaryWebReadiness(),
+    },
     evidence: {
       files: [
         { label: 'Desktop JSON', file: paths.desktopEvidence, present: true },
         { label: 'Windows Chrome JSON', file: paths.windowsChromeEvidence, present: true },
         { label: 'Phone JSON', file: null, present: false },
+        {
+          label: 'Web Readiness JSON',
+          file: 'assets/tmp/computer-loop-result-validator-selftest/web-readiness.json',
+          present: true,
+          ...(await writeWebReadinessEvidence()),
+        },
         ...(await screenshotEntries(paths.desktopScreenshotDir)),
         ...(await screenshotEntries(paths.windowsChromeScreenshotDir)),
       ],
     },
   }
+}
+
+function summaryWebReadiness(overrides = {}) {
+  return {
+    run: true,
+    success: true,
+    generatedAt: '2026-06-18T23:59:49.000Z',
+    runId: 'full-loop-selftest',
+    appUrl: 'http://127.0.0.1:5173',
+    webPort: 5173,
+    strategy: 'already-ready',
+    portListeningBefore: true,
+    httpReadyBefore: true,
+    httpReadyAfter: true,
+    duplicateStartAvoided: true,
+    gates: {
+      httpProbeBeforePortReuse: true,
+      stalePortBlocksDuplicateStart: true,
+    },
+    ...overrides,
+  }
+}
+
+async function writeWebReadinessEvidence(overrides = {}) {
+  const file = resolveRepoPath('assets/tmp/computer-loop-result-validator-selftest/web-readiness.json')
+  await writeJson(file, summaryWebReadiness(overrides))
+  return fileDigest(file)
 }
 
 async function writeRawLoopEvidence(paths, { desktop = {}, chrome = {} } = {}) {
@@ -1227,6 +1281,13 @@ function browserEvidenceProofSummary(browserEvidencePlan) {
       success: true,
       errorCount: 0,
     },
+    webReadiness: {
+      run: true,
+      success: true,
+      strategy: 'already-ready',
+      httpReadyAfter: true,
+      duplicateStartAvoided: true,
+    },
     loops: {
       desktop: loopProofSummary(),
       windowsChrome: loopProofSummary(),
@@ -1256,6 +1317,13 @@ function proofSummary(plan) {
       checked: true,
       success: true,
       errorCount: 0,
+    },
+    webReadiness: {
+      run: true,
+      success: true,
+      strategy: 'already-ready',
+      httpReadyAfter: true,
+      duplicateStartAvoided: true,
     },
     loops: {
       desktop: loopProofSummary(),
@@ -1351,11 +1419,26 @@ async function writeReport(file, summary) {
       '- Windows Chrome loop: pass',
       '- Phone loop: not run',
       `- Run ID: ${summary.runId}`,
+      `- Web readiness: ${formatWebReadiness(summary.environment?.webReadiness)}`,
       `- App URL: ${summary.appUrl}`,
       `- API base: ${summary.apiBase}`,
       '',
     ].join('\n'),
   )
+}
+
+function formatWebReadiness(value) {
+  if (!value?.run) return 'not run'
+  const status = value.success === true ? 'pass' : 'fail'
+  return `${status} (${value.strategy ?? 'unknown'}, port before:${formatBoolean(
+    value.portListeningBefore,
+  )}, http before:${formatBoolean(value.httpReadyBefore)})`
+}
+
+function formatBoolean(value) {
+  if (value === true) return 'yes'
+  if (value === false) return 'no'
+  return 'unknown'
 }
 
 async function writeScreenshotFiles(paths) {

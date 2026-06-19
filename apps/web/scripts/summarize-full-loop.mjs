@@ -14,22 +14,35 @@ const phoneFile = process.argv[4] ?? path.join(repoRoot, 'assets', 'demo', 'phon
 const chromeFile = process.argv[6] ?? path.join(repoRoot, 'assets', 'demo', 'chrome-loop.json')
 const summaryFile = process.argv[7] ?? defaultSummaryFile(outputFile)
 const devEnvFile = process.argv[8] ?? path.join(repoRoot, 'assets', 'tmp', 'dev-env-check.json')
+const webReadinessFile = process.argv[9] ?? '__web_readiness_not_run__.json'
 
 const desktop = await readJsonIfExists(desktopFile)
 const phone = await readJsonIfExists(phoneFile)
 const chrome = await readJsonIfExists(chromeFile)
 const devEnv = await readJsonIfExists(devEnvFile)
+const webReadiness = await readJsonIfExists(webReadinessFile)
 const loops = {
   desktop: summarizeDesktopLoop(desktop),
   windowsChrome: summarizeDesktopLoop(chrome),
   phone: summarizePhoneLoop(phone),
 }
 const browserParity = summarizeBrowserParity(loops.desktop, loops.windowsChrome)
-const requiredEvidence = validateEvidence({ desktop, phone, chrome, devEnv, browserParity })
+const requiredEvidence = validateEvidence({ desktop, phone, chrome, devEnv, webReadiness, browserParity })
 const screenshots = collectScreenshots([desktop, chrome])
-const manifest = await buildEvidenceManifest({ desktop, phone, chrome, devEnv, screenshots })
+const manifest = await buildEvidenceManifest({ desktop, phone, chrome, devEnv, webReadiness, screenshots })
 const generatedAt = new Date().toISOString()
-const summary = buildSummary({ generatedAt, desktop, phone, chrome, devEnv, loops, browserParity, requiredEvidence, manifest })
+const summary = buildSummary({
+  generatedAt,
+  desktop,
+  phone,
+  chrome,
+  devEnv,
+  webReadiness,
+  loops,
+  browserParity,
+  requiredEvidence,
+  manifest,
+})
 
 const report = [
   '# Home AI Companion Loop Report',
@@ -43,6 +56,7 @@ const report = [
   `- Phone loop: ${phone ? formatStatus(phone.success) : 'not run'}`,
   `- Run ID: ${requiredEvidence.runId ?? 'not set'}`,
   `- Dev environment preflight: ${formatDevEnvPreflight(devEnv)}`,
+  `- Web readiness: ${formatWebReadiness(webReadiness)}`,
   `- Browser parity: ${formatParity(browserParity)}`,
   `- App URL: ${desktop?.appUrl ?? chrome?.appUrl ?? phone?.appUrl ?? 'unknown'}`,
   `- API base: ${desktop?.apiBase ?? chrome?.apiBase ?? phone?.apiBase ?? 'unknown'}`,
@@ -65,7 +79,7 @@ const report = [
   '',
   '## Demo Talking Points',
   '',
-  ...formatDemoTalkingPoints({ desktop, phone, chrome, devEnv, browserParity }),
+  ...formatDemoTalkingPoints({ desktop, phone, chrome, devEnv, webReadiness, browserParity }),
   '',
 ].join('\n')
 
@@ -95,7 +109,18 @@ function defaultSummaryFile(file) {
   return path.join(parsed.dir, `${baseName}.json`)
 }
 
-function buildSummary({ generatedAt, desktop, phone, chrome, devEnv, loops, browserParity, requiredEvidence, manifest }) {
+function buildSummary({
+  generatedAt,
+  desktop,
+  phone,
+  chrome,
+  devEnv,
+  webReadiness,
+  loops,
+  browserParity,
+  requiredEvidence,
+  manifest,
+}) {
   return {
     generatedAt,
     success: requiredEvidence.success,
@@ -104,6 +129,7 @@ function buildSummary({ generatedAt, desktop, phone, chrome, devEnv, loops, brow
     apiBase: desktop?.apiBase ?? chrome?.apiBase ?? phone?.apiBase ?? null,
     environment: {
       preflight: summarizeDevEnv(devEnv),
+      webReadiness: summarizeWebReadiness(webReadiness),
     },
     loops,
     browserParity,
@@ -385,13 +411,14 @@ function summarizeScreenshotEvidence(value) {
   }
 }
 
-async function buildEvidenceManifest({ desktop, phone, chrome, devEnv, screenshots }) {
+async function buildEvidenceManifest({ desktop, phone, chrome, devEnv, webReadiness, screenshots }) {
   const entries = []
   const jsonFiles = [
     ['Desktop JSON', desktopFile, Boolean(desktop)],
     ['Windows Chrome JSON', chromeFile, Boolean(chrome)],
     ['Phone JSON', phoneFile, Boolean(phone)],
     ['Dev Environment JSON', devEnvFile, Boolean(devEnv)],
+    ['Web Readiness JSON', webReadinessFile, Boolean(webReadiness)],
   ]
 
   for (const [label, file, present] of jsonFiles) {
@@ -429,7 +456,7 @@ function formatManifest(entries) {
   })
 }
 
-function formatDemoTalkingPoints({ desktop, phone, chrome, devEnv, browserParity }) {
+function formatDemoTalkingPoints({ desktop, phone, chrome, devEnv, webReadiness, browserParity }) {
   const points = []
   const runTargets = [
     desktop ? 'desktop web' : null,
@@ -467,6 +494,9 @@ function formatDemoTalkingPoints({ desktop, phone, chrome, devEnv, browserParity
   if (devEnv) {
     points.push('- The environment preflight records host, browser, port, ADB, and authorized-phone readiness before browser automation starts.')
   }
+  if (webReadiness) {
+    points.push('- The web readiness proof records whether the loop reused a ready Vite server or waited on a stale web port before browser automation.')
+  }
 
   return points
 }
@@ -497,7 +527,7 @@ function formatDesktop(value) {
   ]
 }
 
-function validateEvidence({ desktop, phone, chrome, devEnv, browserParity }) {
+function validateEvidence({ desktop, phone, chrome, devEnv, webReadiness, browserParity }) {
   const errors = []
   const requiredItems = []
 
@@ -515,6 +545,9 @@ function validateEvidence({ desktop, phone, chrome, devEnv, browserParity }) {
   }
   if (isRequiredFile(devEnvFile)) {
     validateDevEnvEvidence(devEnv, errors)
+  }
+  if (isRequiredFile(webReadinessFile)) {
+    validateWebReadinessEvidence(webReadiness, errors)
   }
 
   const runIds = requiredItems
@@ -537,6 +570,28 @@ function validateEvidence({ desktop, phone, chrome, devEnv, browserParity }) {
     success: errors.length === 0,
     errors,
     runId: uniqueRunIds[0] ?? null,
+  }
+}
+
+function validateWebReadinessEvidence(value, errors) {
+  if (!value) {
+    errors.push('Web readiness evidence file is missing.')
+    return
+  }
+  if (value.runId !== desktop?.runId && value.runId !== chrome?.runId && value.runId !== phone?.runId) {
+    errors.push('Web readiness run id does not match loop evidence.')
+  }
+  if (value.appUrl !== (desktop?.appUrl ?? chrome?.appUrl ?? phone?.appUrl ?? null)) {
+    errors.push('Web readiness app URL does not match loop evidence.')
+  }
+  if (!['already-ready', 'waited-on-stale-port', 'started-new-server'].includes(value.strategy)) {
+    errors.push(`Web readiness strategy is invalid: ${value.strategy ?? 'missing'}.`)
+  }
+  if (value.httpReadyAfter !== true) {
+    errors.push('Web readiness HTTP probe did not pass after Ensure-Web.')
+  }
+  if (value.gates?.httpProbeBeforePortReuse !== true || value.gates?.stalePortBlocksDuplicateStart !== true) {
+    errors.push('Web readiness gates are incomplete.')
   }
 }
 
@@ -757,6 +812,38 @@ function formatDevEnvPreflight(value) {
   const phone = value.requirePhone ? 'phone required' : 'phone optional'
 
   return `${formatStatus(value.success)} (${okCount} ok, ${warnCount} warn, ${failCount} fail, ${phone})`
+}
+
+function summarizeWebReadiness(value) {
+  if (!value) {
+    return { run: false, success: null }
+  }
+
+  return {
+    run: true,
+    success: value.httpReadyAfter === true,
+    generatedAt: value.generatedAt ?? null,
+    runId: value.runId ?? null,
+    appUrl: value.appUrl ?? null,
+    webPort: value.webPort ?? null,
+    strategy: value.strategy ?? null,
+    portListeningBefore: value.portListeningBefore ?? null,
+    httpReadyBefore: value.httpReadyBefore ?? null,
+    httpReadyAfter: value.httpReadyAfter ?? null,
+    duplicateStartAvoided: value.duplicateStartAvoided ?? null,
+    gates: {
+      httpProbeBeforePortReuse: value.gates?.httpProbeBeforePortReuse ?? null,
+      stalePortBlocksDuplicateStart: value.gates?.stalePortBlocksDuplicateStart ?? null,
+    },
+  }
+}
+
+function formatWebReadiness(value) {
+  if (!value) return 'not run'
+  const status = value.httpReadyAfter === true ? 'pass' : 'fail'
+  return `${status} (${value.strategy ?? 'unknown'}, port before:${formatBoolean(value.portListeningBefore)}, http before:${formatBoolean(
+    value.httpReadyBefore,
+  )})`
 }
 
 function formatPromptHandoff(value) {

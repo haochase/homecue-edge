@@ -67,6 +67,11 @@ async function validateSummary(value, { requirePhone, requireChrome, requireDesk
     generatedAt: value.generatedAt,
     requirePhone: requirePhone || value.loops?.phone?.run === true,
   })
+  validateWebReadiness(errors, value.environment?.webReadiness, 'environment.webReadiness', {
+    generatedAt: value.generatedAt,
+    runId: value.runId,
+    appUrl: value.appUrl,
+  })
   validatePreflightBeforeLoops(errors, value)
   assertArray(errors, value.evidence?.files, 'evidence.files')
   assertArray(errors, value.evidence?.validationErrors, 'evidence.validationErrors')
@@ -107,6 +112,7 @@ async function validateSummary(value, { requirePhone, requireChrome, requireDesk
     requirePhone,
     requireChrome,
     requireDevEnv: value.environment?.preflight?.run === true,
+    requireWebReadiness: value.environment?.webReadiness?.run === true,
   })
   await validateRawEvidence(errors, value, { requireDesktop, requirePhone, requireChrome })
 
@@ -277,7 +283,11 @@ function validateDesktopLocalizedUi(errors, value, label, { title, textIntegrity
   validateTextIntegrity(errors, value.textIntegrity, `${label}.textIntegrity`)
 }
 
-async function validateEvidenceManifest(errors, files, { requireDesktop, requirePhone, requireChrome, requireDevEnv }) {
+async function validateEvidenceManifest(
+  errors,
+  files,
+  { requireDesktop, requirePhone, requireChrome, requireDevEnv, requireWebReadiness },
+) {
   if (!Array.isArray(files)) return
 
   const presentFiles = files.filter((entry) => entry?.present)
@@ -289,6 +299,7 @@ async function validateEvidenceManifest(errors, files, { requireDesktop, require
     'Windows Chrome JSON',
     'Phone JSON',
     'Dev Environment JSON',
+    'Web Readiness JSON',
   ])
 
   for (const entry of presentFiles) {
@@ -308,6 +319,11 @@ async function validateEvidenceManifest(errors, files, { requireDesktop, require
     requireManifestLabel(errors, files, 'Dev Environment JSON')
   } else {
     forbidManifestLabel(errors, files, 'Dev Environment JSON')
+  }
+  if (requireWebReadiness) {
+    requireManifestLabel(errors, files, 'Web Readiness JSON')
+  } else {
+    forbidManifestLabel(errors, files, 'Web Readiness JSON')
   }
   if (requireChrome) requireManifestLabel(errors, files, 'Windows Chrome JSON')
   if (requirePhone) requireManifestLabel(errors, files, 'Phone JSON')
@@ -444,6 +460,14 @@ async function validateRawEvidence(errors, summary, { requireDesktop, requirePho
       summary.environment?.preflight,
       manifest.get('Dev Environment JSON'),
       'environment.preflight',
+    )
+  }
+  if (summary.environment?.webReadiness?.run === true) {
+    await validateRawWebReadinessEvidence(
+      errors,
+      summary.environment?.webReadiness,
+      manifest.get('Web Readiness JSON'),
+      'environment.webReadiness',
     )
   }
 }
@@ -981,6 +1005,49 @@ async function validateRawDevEnvEvidence(errors, preflight, manifestEntry, label
   )
 }
 
+async function validateRawWebReadinessEvidence(errors, webReadiness, manifestEntry, label) {
+  if (!manifestEntry?.present) {
+    errors.push(`${label} manifest entry is missing.`)
+    return
+  }
+  if (!webReadiness?.run) return
+
+  const raw = await readManifestJson(errors, manifestEntry, label)
+  if (!raw) return
+
+  compareValue(errors, raw.generatedAt ?? null, webReadiness.generatedAt ?? null, `${label}.generatedAt raw evidence`)
+  compareValue(errors, raw.runId ?? null, webReadiness.runId ?? null, `${label}.runId raw evidence`)
+  compareValue(errors, raw.appUrl ?? null, webReadiness.appUrl ?? null, `${label}.appUrl raw evidence`)
+  compareValue(errors, raw.webPort ?? null, webReadiness.webPort ?? null, `${label}.webPort raw evidence`)
+  compareValue(errors, raw.strategy ?? null, webReadiness.strategy ?? null, `${label}.strategy raw evidence`)
+  compareValue(
+    errors,
+    raw.portListeningBefore ?? null,
+    webReadiness.portListeningBefore ?? null,
+    `${label}.portListeningBefore raw evidence`,
+  )
+  compareValue(errors, raw.httpReadyBefore ?? null, webReadiness.httpReadyBefore ?? null, `${label}.httpReadyBefore raw evidence`)
+  compareValue(errors, raw.httpReadyAfter ?? null, webReadiness.httpReadyAfter ?? null, `${label}.httpReadyAfter raw evidence`)
+  compareValue(
+    errors,
+    raw.duplicateStartAvoided ?? null,
+    webReadiness.duplicateStartAvoided ?? null,
+    `${label}.duplicateStartAvoided raw evidence`,
+  )
+  compareValue(
+    errors,
+    raw.gates?.httpProbeBeforePortReuse ?? null,
+    webReadiness.gates?.httpProbeBeforePortReuse ?? null,
+    `${label}.gates.httpProbeBeforePortReuse raw evidence`,
+  )
+  compareValue(
+    errors,
+    raw.gates?.stalePortBlocksDuplicateStart ?? null,
+    webReadiness.gates?.stalePortBlocksDuplicateStart ?? null,
+    `${label}.gates.stalePortBlocksDuplicateStart raw evidence`,
+  )
+}
+
 async function readManifestJson(errors, manifestEntry, label) {
   try {
     const absolutePath = path.resolve(repoRoot, manifestEntry.file)
@@ -1116,6 +1183,51 @@ function validateDevEnvPreflight(errors, value, label, { generatedAt, requirePho
     if (check?.required === true && check.ok !== true) {
       errors.push(`${label}.checks ${check.name ?? 'unknown'} is required but not ok.`)
     }
+  }
+}
+
+function validateWebReadiness(errors, value, label, { generatedAt, runId, appUrl }) {
+  if (value === undefined || value === null) return
+  if (!value || typeof value !== 'object') {
+    errors.push(`${label} must be an object when present.`)
+    return
+  }
+
+  if (value.run !== true) {
+    if (value.success !== null) errors.push(`${label}.success must be null when web readiness did not run.`)
+    return
+  }
+
+  if (value.success !== true) errors.push(`${label}.success must be true.`)
+  compareValue(errors, value.runId ?? null, runId ?? null, `${label}.runId`, 'summary.runId')
+  compareValue(errors, value.appUrl ?? null, appUrl ?? null, `${label}.appUrl`, 'summary.appUrl')
+  assertString(errors, value.generatedAt, `${label}.generatedAt`)
+  if (!Number.isInteger(value.webPort) || value.webPort <= 0) errors.push(`${label}.webPort must be a positive integer.`)
+  if (!['already-ready', 'waited-on-stale-port', 'started-new-server'].includes(value.strategy)) {
+    errors.push(`${label}.strategy must be a known Ensure-Web strategy.`)
+  }
+  if (typeof value.portListeningBefore !== 'boolean') errors.push(`${label}.portListeningBefore must be boolean.`)
+  if (typeof value.httpReadyBefore !== 'boolean') errors.push(`${label}.httpReadyBefore must be boolean.`)
+  if (value.httpReadyAfter !== true) errors.push(`${label}.httpReadyAfter must be true.`)
+  if (typeof value.duplicateStartAvoided !== 'boolean') errors.push(`${label}.duplicateStartAvoided must be boolean.`)
+  if (value.strategy === 'already-ready' && value.duplicateStartAvoided !== true) {
+    errors.push(`${label}.duplicateStartAvoided must be true when reusing an already ready web server.`)
+  }
+  if (value.strategy === 'waited-on-stale-port' && value.duplicateStartAvoided !== true) {
+    errors.push(`${label}.duplicateStartAvoided must be true when waiting on a stale web port.`)
+  }
+  if (value.gates?.httpProbeBeforePortReuse !== true) {
+    errors.push(`${label}.gates.httpProbeBeforePortReuse must be true.`)
+  }
+  if (value.gates?.stalePortBlocksDuplicateStart !== true) {
+    errors.push(`${label}.gates.stalePortBlocksDuplicateStart must be true.`)
+  }
+
+  const readinessMs = timestampMs(value.generatedAt)
+  const summaryMs = timestampMs(generatedAt)
+  if (!Number.isFinite(readinessMs)) errors.push(`${label}.generatedAt must be a valid timestamp.`)
+  if (Number.isFinite(readinessMs) && Number.isFinite(summaryMs) && summaryMs < readinessMs) {
+    errors.push(`generatedAt must not be earlier than ${label}.generatedAt.`)
   }
 }
 

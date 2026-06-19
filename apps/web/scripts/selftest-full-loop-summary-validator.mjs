@@ -126,6 +126,21 @@ const cases = [
     },
     args: ['--require-chrome'],
   },
+  {
+    name: 'web-readiness-gate-mismatch',
+    expectedError: 'environment.webReadiness.gates.httpProbeBeforePortReuse must be true.',
+    mutate: async (summary) => {
+      await attachWebReadiness(summary)
+      summary.environment.webReadiness.gates.httpProbeBeforePortReuse = false
+    },
+  },
+  {
+    name: 'web-readiness-raw-app-url-mismatch',
+    expectedError: 'environment.webReadiness.appUrl raw evidence mismatch',
+    mutate: async (summary) => {
+      await attachWebReadiness(summary, { appUrl: 'http://127.0.0.1:9999' })
+    },
+  },
 ]
 
 if (sourceSummary.loops?.phone?.run) {
@@ -274,6 +289,44 @@ async function writeSelfContainedSourceSummary(summary) {
   return result
 }
 
+async function attachWebReadiness(summary, overrides = {}) {
+  const webReadiness = {
+    generatedAt: new Date(Date.parse(summary.loops.desktop.startedAt) - 1000).toISOString(),
+    runId: summary.runId,
+    appUrl: summary.appUrl,
+    webPort: 5173,
+    strategy: 'already-ready',
+    portListeningBefore: true,
+    httpReadyBefore: true,
+    httpReadyAfter: true,
+    duplicateStartAvoided: true,
+    gates: {
+      httpProbeBeforePortReuse: true,
+      stalePortBlocksDuplicateStart: true,
+    },
+    ...overrides,
+  }
+
+  summary.environment.webReadiness = {
+    run: true,
+    success: webReadiness.httpReadyAfter === true,
+    generatedAt: webReadiness.generatedAt,
+    runId: summary.runId,
+    appUrl: summary.appUrl,
+    webPort: webReadiness.webPort,
+    strategy: webReadiness.strategy,
+    portListeningBefore: webReadiness.portListeningBefore,
+    httpReadyBefore: webReadiness.httpReadyBefore,
+    httpReadyAfter: webReadiness.httpReadyAfter,
+    duplicateStartAvoided: webReadiness.duplicateStartAvoided,
+    gates: webReadiness.gates,
+  }
+  if (!summary.evidence.files.some((entry) => entry?.label === 'Web Readiness JSON')) {
+    summary.evidence.files.push({ label: 'Web Readiness JSON', present: true })
+  }
+  await replaceManifestJson(summary, 'Web Readiness JSON', webReadiness, 'web-readiness.json')
+}
+
 async function replaceManifestJson(summary, label, value, fileName) {
   const file = path.join(outputDir, fileName)
   await writeJson(file, value)
@@ -286,6 +339,12 @@ async function replaceManifestJson(summary, label, value, fileName) {
 }
 
 function manifestEntry(summary, label) {
+  const existing = summary.evidence?.files?.find((item) => item?.label === label)
+  if (existing && !existing.present) {
+    existing.present = true
+    return existing
+  }
+
   const entry = summary.evidence?.files?.find((item) => item?.present && item.label === label)
   if (!entry) throw new Error(`Missing present manifest entry: ${label}`)
   return entry
@@ -340,12 +399,35 @@ async function writeChromeOnlySkipPreflightSummary(source) {
   const chromeRaw = JSON.parse(await readFile(path.join(repoRoot, chromeEntry.file), 'utf8'))
   const screenshotEntries = await copyChromeOnlyScreenshots(chromeRaw)
   await replaceManifestJson(summary, 'Windows Chrome JSON', chromeRaw, 'chrome-only-raw.json')
+  if (summary.environment?.webReadiness?.run === true) {
+    await replaceManifestJson(
+      summary,
+      'Web Readiness JSON',
+      {
+        generatedAt: summary.environment.webReadiness.generatedAt,
+        runId: summary.environment.webReadiness.runId,
+        appUrl: summary.environment.webReadiness.appUrl,
+        webPort: summary.environment.webReadiness.webPort,
+        strategy: summary.environment.webReadiness.strategy,
+        portListeningBefore: summary.environment.webReadiness.portListeningBefore,
+        httpReadyBefore: summary.environment.webReadiness.httpReadyBefore,
+        httpReadyAfter: summary.environment.webReadiness.httpReadyAfter,
+        duplicateStartAvoided: summary.environment.webReadiness.duplicateStartAvoided,
+        gates: summary.environment.webReadiness.gates,
+      },
+      'chrome-only-web-readiness.json',
+    )
+  }
 
   summary.loops.desktop = { run: false, success: null }
   summary.loops.phone = { run: false, success: null }
   summary.environment.preflight = { run: false, success: null }
   summary.browserParity = { checked: false, success: null, errors: [] }
-  summary.evidence.files = [manifestEntry(summary, 'Windows Chrome JSON'), ...screenshotEntries]
+  summary.evidence.files = [
+    manifestEntry(summary, 'Windows Chrome JSON'),
+    ...(summary.environment?.webReadiness?.run === true ? [manifestEntry(summary, 'Web Readiness JSON')] : []),
+    ...screenshotEntries,
+  ]
 
   const summaryFile = path.join(outputDir, 'chrome-only-skip-preflight-positive.json')
   await writeJson(summaryFile, summary)

@@ -562,6 +562,7 @@ function validateProofSummary(errors, proofSummary, summary, browserEvidence, pl
     'plan.requestedLoops',
   )
   validateProofSummaryParity(errors, proofSummary.browserParity, summary.browserParity)
+  validateProofSummaryWebReadiness(errors, proofSummary.webReadiness, summary.environment?.webReadiness)
   validateProofSummaryLoop(errors, proofSummary.loops?.desktop, summary.loops?.desktop, 'proofSummary.loops.desktop')
   validateProofSummaryLoop(
     errors,
@@ -604,6 +605,31 @@ function validateProofSummary(errors, proofSummary, summary, browserEvidence, pl
     browserEvidence?.success,
     'proofSummary.evidence.browserEvidenceSuccess',
     'browserEvidence.success',
+  )
+}
+
+function validateProofSummaryWebReadiness(errors, proof, summary, label = 'proofSummary.webReadiness') {
+  if (!proof || typeof proof !== 'object') {
+    errors.push(`${label} is missing.`)
+    return
+  }
+
+  compareValue(errors, proof.run, summary?.run, `${label}.run`, 'summary.environment.webReadiness.run')
+  compareValue(errors, proof.success, summary?.success, `${label}.success`, 'summary.environment.webReadiness.success')
+  compareValue(errors, proof.strategy, summary?.strategy, `${label}.strategy`, 'summary.environment.webReadiness.strategy')
+  compareValue(
+    errors,
+    proof.httpReadyAfter,
+    summary?.httpReadyAfter,
+    `${label}.httpReadyAfter`,
+    'summary.environment.webReadiness.httpReadyAfter',
+  )
+  compareValue(
+    errors,
+    proof.duplicateStartAvoided,
+    summary?.duplicateStartAvoided,
+    `${label}.duplicateStartAvoided`,
+    'summary.environment.webReadiness.duplicateStartAvoided',
   )
 }
 
@@ -759,6 +785,7 @@ function formatProofSummary(proofSummary) {
     `desktop=${formatProofBoolean(proofSummary.loops?.desktop?.success)}`,
     `chrome=${formatProofBoolean(proofSummary.loops?.windowsChrome?.success)}`,
     `parity=${formatProofBoolean(proofSummary.browserParity?.success)}`,
+    `web=${proofSummary.webReadiness?.strategy ?? 'unknown'}`,
     `screenshots=${proofSummary.loops?.desktop?.screenshotCount ?? 'unknown'}+${
       proofSummary.loops?.windowsChrome?.screenshotCount ?? 'unknown'
     }`,
@@ -779,6 +806,20 @@ function formatProofText(loop) {
 function formatProofBoolean(value) {
   if (value === true) return 'pass'
   if (value === false) return 'fail'
+  return 'unknown'
+}
+
+function formatWebReadiness(value) {
+  if (!value?.run) return 'not run'
+  const status = value.success === true ? 'pass' : 'fail'
+  return `${status} (${value.strategy ?? 'unknown'}, port before:${formatBoolean(
+    value.portListeningBefore,
+  )}, http before:${formatBoolean(value.httpReadyBefore)})`
+}
+
+function formatBoolean(value) {
+  if (value === true) return 'yes'
+  if (value === false) return 'no'
   return 'unknown'
 }
 
@@ -860,6 +901,7 @@ function validateReportEvidence(errors, report, summary) {
     ['Windows Chrome loop', 'pass'],
     ['Phone loop', 'not run'],
     ['Run ID', summary.runId],
+    ['Web readiness', formatWebReadiness(summary.environment?.webReadiness)],
     ['App URL', summary.appUrl],
     ['API base', summary.apiBase],
   ]) {
@@ -896,6 +938,7 @@ async function validateSummaryEvidence(errors, summary, browserEvidencePlan, res
   if (summary.browserParity?.checked !== true) errors.push('summary.browserParity.checked must be true.')
   if (summary.browserParity?.success !== true) errors.push('summary.browserParity.success must be true.')
   validateBrowserParity(errors, summary)
+  validateSummaryWebReadiness(errors, summary)
 
   const manifest = manifestByLabel(summary.evidence?.files)
   compareRepoPaths(
@@ -915,8 +958,33 @@ async function validateSummaryEvidence(errors, summary, browserEvidencePlan, res
   if (manifest.get('Phone JSON')?.present === true) {
     errors.push('summary.evidence Phone JSON must not be present for computer-only result.')
   }
+  if (manifest.get('Web Readiness JSON')?.present !== true) {
+    errors.push('summary.evidence Web Readiness JSON must be present for computer-only result.')
+  }
 
   await validateSummaryScreenshots(errors, summary.evidence?.files, browserEvidencePlan?.paths, resultPlan?.outputs)
+}
+
+function validateSummaryWebReadiness(errors, summary) {
+  const value = summary?.environment?.webReadiness
+  if (!value || typeof value !== 'object') {
+    errors.push('summary.environment.webReadiness is missing.')
+    return
+  }
+  if (value.run !== true) errors.push('summary.environment.webReadiness.run must be true.')
+  if (value.success !== true) errors.push('summary.environment.webReadiness.success must be true.')
+  compareValue(errors, value.runId, summary.runId, 'summary.environment.webReadiness.runId', 'summary.runId')
+  compareValue(errors, value.appUrl, summary.appUrl, 'summary.environment.webReadiness.appUrl', 'summary.appUrl')
+  if (!['already-ready', 'waited-on-stale-port', 'started-new-server'].includes(value.strategy)) {
+    errors.push('summary.environment.webReadiness.strategy must be a known Ensure-Web strategy.')
+  }
+  if (value.httpReadyAfter !== true) errors.push('summary.environment.webReadiness.httpReadyAfter must be true.')
+  if (value.gates?.httpProbeBeforePortReuse !== true) {
+    errors.push('summary.environment.webReadiness.gates.httpProbeBeforePortReuse must be true.')
+  }
+  if (value.gates?.stalePortBlocksDuplicateStart !== true) {
+    errors.push('summary.environment.webReadiness.gates.stalePortBlocksDuplicateStart must be true.')
+  }
 }
 
 function validateSummaryLocalizedUi(errors, loop, label) {

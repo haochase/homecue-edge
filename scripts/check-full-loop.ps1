@@ -36,6 +36,7 @@ $PreflightJsonPath = if ($IsPartialEvidenceRun) {
   Join-Path $Root "assets\tmp\dev-env-check.json"
 }
 $PreflightEvidencePath = $PreflightJsonPath
+$WebReadinessEvidencePath = Join-Path $PartialEvidenceDir "web-readiness.json"
 $ReportPathProvided = -not [string]::IsNullOrWhiteSpace($ReportPath)
 $SummaryPathProvided = -not [string]::IsNullOrWhiteSpace($SummaryPath)
 
@@ -167,6 +168,7 @@ function New-FullLoopPlan {
       summaryPath = Convert-ToPlanPath $SummaryPath
       preflightJsonPath = Convert-ToPlanPath $PreflightJsonPath
       preflightEvidencePath = Convert-ToPlanPath $ResolvedPreflightEvidencePath
+      webReadinessEvidencePath = Convert-ToPlanPath $WebReadinessEvidencePath
     }
     evidence = [pscustomobject]@{
       desktopJson = Convert-ToPlanPath $DesktopEvidencePath
@@ -210,6 +212,45 @@ function Test-HttpOk {
   catch {
     return $false
   }
+}
+
+function Write-JsonFile {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)]$Value
+  )
+
+  $ResultDir = Split-Path -Parent $Path
+  if ($ResultDir) {
+    New-Item -ItemType Directory -Force -Path $ResultDir | Out-Null
+  }
+
+  $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($Path, (($Value | ConvertTo-Json -Depth 8) + [Environment]::NewLine), $Utf8NoBom)
+}
+
+function Write-WebReadinessEvidence {
+  param(
+    [Parameter(Mandatory = $true)][string]$Strategy,
+    [Parameter(Mandatory = $true)][bool]$PortListeningBefore,
+    [Parameter(Mandatory = $true)][bool]$HttpReadyBefore
+  )
+
+  Write-JsonFile -Path $WebReadinessEvidencePath -Value ([pscustomobject]@{
+      generatedAt = (Get-Date).ToUniversalTime().ToString("o")
+      runId = $FullLoopRunId
+      appUrl = $AppUrl
+      webPort = $WebPort
+      strategy = $Strategy
+      portListeningBefore = $PortListeningBefore
+      httpReadyBefore = $HttpReadyBefore
+      httpReadyAfter = [bool](Test-HttpOk $AppUrl)
+      duplicateStartAvoided = [bool]($Strategy -in @("already-ready", "waited-on-stale-port"))
+      gates = [pscustomobject]@{
+        httpProbeBeforePortReuse = $true
+        stalePortBlocksDuplicateStart = $true
+      }
+    })
 }
 
 function Wait-HttpOk {
@@ -407,14 +448,19 @@ function Ensure-Api {
 }
 
 function Ensure-Web {
-  if (Test-HttpOk $AppUrl) {
+  $PortListeningBefore = Test-PortListening $WebPort
+  $HttpReadyBefore = Test-HttpOk $AppUrl
+
+  if ($HttpReadyBefore) {
     Write-Host "Web already ready: $AppUrl"
+    Write-WebReadinessEvidence -Strategy "already-ready" -PortListeningBefore $PortListeningBefore -HttpReadyBefore $HttpReadyBefore
     return
   }
 
-  if (Test-PortListening $WebPort) {
+  if ($PortListeningBefore) {
     Write-Warning "Web port $WebPort is listening, but $AppUrl is not HTTP-ready; waiting instead of starting a duplicate server."
     Wait-HttpOk $AppUrl "Web"
+    Write-WebReadinessEvidence -Strategy "waited-on-stale-port" -PortListeningBefore $PortListeningBefore -HttpReadyBefore $HttpReadyBefore
     return
   }
 
@@ -426,6 +472,7 @@ function Ensure-Web {
     -WindowStyle Hidden
 
   Wait-HttpOk $AppUrl "Web"
+  Write-WebReadinessEvidence -Strategy "started-new-server" -PortListeningBefore $PortListeningBefore -HttpReadyBefore $HttpReadyBefore
 }
 
 if (-not $SkipPreflight) {
@@ -503,6 +550,7 @@ try {
   }
   $ReportArgs += $SummaryPath
   $ReportArgs += $PreflightEvidencePath
+  $ReportArgs += $WebReadinessEvidencePath
 
   npm run report:loop -- @ReportArgs
   if ($LASTEXITCODE -ne 0) {

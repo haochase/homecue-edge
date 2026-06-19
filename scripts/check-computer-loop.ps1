@@ -302,6 +302,13 @@ function New-ComputerLoopProofSummary {
       success = [bool]($Summary.browserParity.success -eq $true)
       errorCount = @($Summary.browserParity.errors).Count
     }
+    webReadiness = [pscustomobject]@{
+      run = [bool]($Summary.environment.webReadiness.run -eq $true)
+      success = [bool]($Summary.environment.webReadiness.success -eq $true)
+      strategy = $Summary.environment.webReadiness.strategy
+      httpReadyAfter = [bool]($Summary.environment.webReadiness.httpReadyAfter -eq $true)
+      duplicateStartAvoided = $Summary.environment.webReadiness.duplicateStartAvoided
+    }
     loops = [pscustomobject]@{
       desktop = New-LoopProofSummary -Loop $Summary.loops.desktop
       windowsChrome = New-LoopProofSummary -Loop $Summary.loops.windowsChrome
@@ -459,5 +466,5 @@ Invoke-CheckedScriptWithResult -Name "saved browser evidence recheck" -Command $
 
 $ProofSummary = Invoke-PostProcessWithResult -Plan $Plan
 Write-Host ("Computer loop check JSON: {0}" -f $ResultJsonPath)
-Write-Host ("Computer loop proof summary: desktop={0}, chrome={1}, parity={2}, text={3}/{4}/{5}+{6}/{7}/{8}, screenshots={9}+{10}" -f (Format-ProofStatus $ProofSummary.loops.desktop.success), (Format-ProofStatus $ProofSummary.loops.windowsChrome.success), (Format-ProofStatus $ProofSummary.browserParity.success), $ProofSummary.loops.desktop.textRequiredPhrases, $ProofSummary.loops.desktop.textMissingPhrases, $ProofSummary.loops.desktop.textMojibake, $ProofSummary.loops.windowsChrome.textRequiredPhrases, $ProofSummary.loops.windowsChrome.textMissingPhrases, $ProofSummary.loops.windowsChrome.textMojibake, $ProofSummary.loops.desktop.screenshotCount, $ProofSummary.loops.windowsChrome.screenshotCount)
+Write-Host ("Computer loop proof summary: desktop={0}, chrome={1}, parity={2}, web={3}, text={4}/{5}/{6}+{7}/{8}/{9}, screenshots={10}+{11}" -f (Format-ProofStatus $ProofSummary.loops.desktop.success), (Format-ProofStatus $ProofSummary.loops.windowsChrome.success), (Format-ProofStatus $ProofSummary.browserParity.success), $ProofSummary.webReadiness.strategy, $ProofSummary.loops.desktop.textRequiredPhrases, $ProofSummary.loops.desktop.textMissingPhrases, $ProofSummary.loops.desktop.textMojibake, $ProofSummary.loops.windowsChrome.textRequiredPhrases, $ProofSummary.loops.windowsChrome.textMissingPhrases, $ProofSummary.loops.windowsChrome.textMojibake, $ProofSummary.loops.desktop.screenshotCount, $ProofSummary.loops.windowsChrome.screenshotCount)
 Write-Host "Computer loop check passed."
