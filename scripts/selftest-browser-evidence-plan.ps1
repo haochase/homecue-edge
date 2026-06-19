@@ -281,6 +281,9 @@ $DesktopOnlyPlan = Read-Plan @("-SummaryPath", $DesktopOnlySummary)
 Assert-Equal $DesktopOnlyPlan.requiredEvidence.desktop $true "desktop-only desktop required"
 Assert-Equal $DesktopOnlyPlan.requiredEvidence.phone $false "desktop-only phone required"
 Assert-Equal $DesktopOnlyPlan.requiredEvidence.windowsChrome $false "desktop-only Chrome required"
+Assert-Equal $DesktopOnlyPlan.paths.phoneEvidence "__phone_not_run__.json" "desktop-only phone path should use sentinel"
+Assert-Equal $DesktopOnlyPlan.paths.windowsChromeEvidence "__chrome_not_run__.json" "desktop-only Chrome path should use sentinel"
+Assert-Equal $DesktopOnlyPlan.paths.windowsChromeScreenshotDir "__chrome_screens_not_run__" "desktop-only Chrome screenshot dir should use sentinel"
 
 $ChromeOnlyPlan = Read-Plan @("-SummaryPath", $ChromeOnlySummary, "-SelfTest")
 Assert-Equal $ChromeOnlyPlan.requiredEvidence.desktop $false "chrome-only desktop required"
@@ -289,10 +292,14 @@ Assert-Equal $ChromeOnlyPlan.requiredEvidence.windowsChrome $true "chrome-only C
 Assert-Equal $ChromeOnlyPlan.selfTest.desktopEvidence $false "chrome-only desktop self-test"
 Assert-Equal $ChromeOnlyPlan.selfTest.summary $false "chrome-only summary self-test"
 Assert-Equal $ChromeOnlyPlan.selfTest.report $false "chrome-only report self-test"
+Assert-Equal $ChromeOnlyPlan.paths.desktopEvidence "__desktop_not_run__.json" "chrome-only desktop path should use sentinel"
+Assert-Equal $ChromeOnlyPlan.paths.desktopScreenshotDir "__desktop_screens_not_run__" "chrome-only desktop screenshot dir should use sentinel"
+Assert-Equal $ChromeOnlyPlan.paths.phoneEvidence "__phone_not_run__.json" "chrome-only phone path should use sentinel"
 
 $JsonOnlyPlan = Read-Plan @("-SummaryPath", $JsonOnlySummary)
 Assert-Equal $JsonOnlyPlan.requiredEvidence.desktop $true "json-only desktop required"
 Assert-Equal $JsonOnlyPlan.requiredEvidence.windowsChrome $true "json-only Chrome required"
+Assert-Equal $JsonOnlyPlan.paths.phoneEvidence "__phone_not_run__.json" "json-only phone path should use sentinel"
 Assert-PathEndsWith $JsonOnlyPlan.paths.desktopScreenshotDir "assets/tmp/browser-evidence-plan-selftest/json-only/raw-desktop-screens" "json-only desktop screenshot dir was not inferred from raw JSON"
 Assert-PathEndsWith $JsonOnlyPlan.paths.windowsChromeScreenshotDir "assets/tmp/browser-evidence-plan-selftest/json-only/raw-chrome-screens" "json-only Chrome screenshot dir was not inferred from raw JSON"
 

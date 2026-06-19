@@ -128,6 +128,9 @@ function Convert-ToEvidencePath {
   if ([string]::IsNullOrWhiteSpace($Path)) {
     return ""
   }
+  if ($Path.StartsWith("__")) {
+    return $Path
+  }
 
   return Convert-ToRepoRelativePath $Path
 }
@@ -295,34 +298,45 @@ if ((-not $AllowSkipDesktop) -and $Summary.loops.desktop.run -ne $true) {
   throw "Desktop evidence was required, but loops.desktop.run is not true in the summary: $SummaryPath"
 }
 
-if (-not $DesktopEvidencePath) {
+if ($AllowSkipDesktop) {
+  $DesktopEvidencePath = "__desktop_not_run__.json"
+  $DesktopScreenshotDir = "__desktop_screens_not_run__"
+}
+elseif (-not $DesktopEvidencePath) {
   $DesktopEvidencePath = Get-ManifestFile "Desktop JSON"
 }
-if (-not $DesktopEvidencePath) {
+if ((-not $AllowSkipDesktop) -and -not $DesktopEvidencePath) {
   $DesktopEvidencePath = Join-Path $Root "assets\demo\desktop-loop.json"
 }
-if (-not $DesktopScreenshotDir) {
+if ((-not $AllowSkipDesktop) -and -not $DesktopScreenshotDir) {
   $DesktopScreenshotDir = Get-ScreenshotDirFromLoop $Summary.loops.desktop "playwright-chromium-screens" $DesktopEvidencePath
 }
-if (-not $DesktopScreenshotDir) {
+if ((-not $AllowSkipDesktop) -and -not $DesktopScreenshotDir) {
   $DesktopScreenshotDir = Join-Path $Root "assets\demo\playwright-chromium-screens"
 }
-if (-not $ChromeEvidencePath) {
+if (-not $RequireChrome) {
+  $ChromeEvidencePath = "__chrome_not_run__.json"
+  $ChromeScreenshotDir = "__chrome_screens_not_run__"
+}
+elseif (-not $ChromeEvidencePath) {
   $ChromeEvidencePath = Get-ManifestFile "Windows Chrome JSON"
 }
-if (-not $ChromeEvidencePath) {
+if ($RequireChrome -and -not $ChromeEvidencePath) {
   $ChromeEvidencePath = Join-Path $Root "assets\demo\chrome-loop.json"
 }
-if (-not $ChromeScreenshotDir) {
+if ($RequireChrome -and -not $ChromeScreenshotDir) {
   $ChromeScreenshotDir = Get-ScreenshotDirFromLoop $Summary.loops.windowsChrome "windows-chrome-screens" $ChromeEvidencePath
 }
-if (-not $ChromeScreenshotDir) {
+if ($RequireChrome -and -not $ChromeScreenshotDir) {
   $ChromeScreenshotDir = Join-Path $Root "assets\demo\windows-chrome-screens"
 }
-if (-not $PhoneEvidencePath) {
+if (-not $RequirePhone) {
+  $PhoneEvidencePath = "__phone_not_run__.json"
+}
+elseif (-not $PhoneEvidencePath) {
   $PhoneEvidencePath = Get-ManifestFile "Phone JSON"
 }
-if (-not $PhoneEvidencePath) {
+if ($RequirePhone -and -not $PhoneEvidencePath) {
   $PhoneEvidencePath = Join-Path $Root "assets\demo\phone-loop.json"
 }
 
