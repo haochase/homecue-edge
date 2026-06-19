@@ -278,6 +278,7 @@ const cases = [
     mutate: (result) => {
       result.browserEvidence.plan.paths.phoneEvidence = 'assets/demo/phone-loop.json'
       result.browserEvidence.proofSummary.evidence.phoneEvidencePath = result.browserEvidence.plan.paths.phoneEvidence
+      result.proofSummary.evidence.phoneEvidencePath = result.browserEvidence.plan.paths.phoneEvidence
     },
   },
   {
@@ -498,6 +499,13 @@ const cases = [
     mutate: (result) => {
       result.proofSummary.evidence.windowsChromeScreenshotDir =
         'assets/tmp/computer-loop-result-validator-selftest/other-windows-chrome-screens'
+    },
+  },
+  {
+    name: 'proof-summary-phone-evidence-path-mismatch',
+    expectedError: 'proofSummary.evidence.phoneEvidencePath must match browserEvidence.proofSummary.evidence.phoneEvidencePath.',
+    mutate: (result) => {
+      result.proofSummary.evidence.phoneEvidencePath = 'assets/demo/phone-loop.json'
     },
   },
   {
@@ -862,6 +870,7 @@ async function attachRunLocalEvidence(result, name, { desktop = {}, chrome = {} 
   result.proofSummary.evidence.desktopEvidencePath = result.browserEvidence.proofSummary.evidence.desktopEvidencePath
   result.proofSummary.evidence.windowsChromeEvidencePath =
     result.browserEvidence.proofSummary.evidence.windowsChromeEvidencePath
+  result.proofSummary.evidence.phoneEvidencePath = result.browserEvidence.proofSummary.evidence.phoneEvidencePath
   result.proofSummary.evidence.webReadinessEvidencePath =
     result.browserEvidence.proofSummary.evidence.webReadinessEvidencePath
   result.proofSummary.evidence.desktopScreenshotDir = result.browserEvidence.proofSummary.evidence.desktopScreenshotDir
@@ -1441,6 +1450,7 @@ function proofSummary(plan) {
       browserEvidenceSuccess: true,
       desktopEvidencePath: 'assets/tmp/computer-loop-result-validator-selftest/desktop-loop.json',
       windowsChromeEvidencePath: 'assets/tmp/computer-loop-result-validator-selftest/chrome-loop.json',
+      phoneEvidencePath: '__phone_not_run__.json',
       webReadinessEvidencePath: 'assets/tmp/computer-loop-result-validator-selftest/web-readiness.json',
       desktopScreenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/playwright-chromium-screens',
       windowsChromeScreenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/windows-chrome-screens',

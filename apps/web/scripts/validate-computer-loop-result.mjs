@@ -625,6 +625,7 @@ function validateProofSummaryRawEvidencePaths(errors, evidence, browserEvidence)
   for (const key of [
     'desktopEvidencePath',
     'windowsChromeEvidencePath',
+    'phoneEvidencePath',
     'webReadinessEvidencePath',
     'desktopScreenshotDir',
     'windowsChromeScreenshotDir',

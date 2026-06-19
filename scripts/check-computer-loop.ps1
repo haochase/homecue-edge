@@ -324,6 +324,7 @@ function New-ComputerLoopProofSummary {
       browserEvidenceSuccess = [bool]($BrowserEvidenceResult.success -eq $true)
       desktopEvidencePath = $BrowserEvidenceResult.proofSummary.evidence.desktopEvidencePath
       windowsChromeEvidencePath = $BrowserEvidenceResult.proofSummary.evidence.windowsChromeEvidencePath
+      phoneEvidencePath = $BrowserEvidenceResult.proofSummary.evidence.phoneEvidencePath
       webReadinessEvidencePath = $BrowserEvidenceResult.proofSummary.evidence.webReadinessEvidencePath
       desktopScreenshotDir = $BrowserEvidenceResult.proofSummary.evidence.desktopScreenshotDir
       windowsChromeScreenshotDir = $BrowserEvidenceResult.proofSummary.evidence.windowsChromeScreenshotDir
