@@ -86,10 +86,12 @@ That result also includes a compact `proofSummary` with the summary run id,
 desktop/Windows Chrome pass flags, browser-parity status, screenshot counts,
 Chinese text-integrity counts (`required/missing/mojibake`), external execution
 source, and the report/summary/browser-evidence paths plus raw
-desktop/Chrome/web-readiness JSON and screenshot directories.
+desktop/Chrome/phone/web-readiness JSON and screenshot directories.
+Computer-only runs record the skipped phone path as `__phone_not_run__.json`.
 `npm run computer:result:check` prints that compact proof line after validation
-so a successful saved-result check is readable without manually opening the
-JSON.
+so a successful saved-result check is readable without manually opening the JSON;
+the line includes `phone=not-run`, `phoneEvidence=__phone_not_run__.json`, and
+the checked summary path.
 The wrapper validates that result JSON before returning success. Use `-DryRun`
 to inspect those paths and commands without starting services or opening
 browsers. By default dry-run only prints the plan and does not overwrite the
@@ -97,15 +99,17 @@ stable `assets/tmp/computer-loop-check.json`; pass `-ResultJsonPath` when you
 want a dry-run result JSON for automation. `selftest-computer-loop-plan.ps1`
 covers that dry-run contract without hardware, and `computer:result:selftest`
 replays positive and negative result JSON cases so phone-only drift, missing
-nested browser evidence, mismatched summary paths, or embedded browser-evidence
-content that differs from the referenced JSON file fail closed. The result
+nested browser evidence, mismatched summary paths, missing computer-only
+`expectedEvidence.phoneEvidence` sentinels, or embedded browser-evidence content
+that differs from the referenced JSON file fail closed. The result
 checker also reads the referenced summary JSON directly and verifies desktop +
 Windows Chrome ran, phone did not run, browser parity passed, `proofSummary`
 matches the referenced summary and browser-evidence result, summary manifest
 paths match the browser-evidence plan, browser evidence carries the
 `Web Readiness JSON` manifest path, top-level proof paths match the nested
-browser evidence, and the raw desktop/Windows Chrome JSON files share the
-summary run id and expected browser roles. It also verifies that
+browser evidence, and the skipped phone evidence sentinel matches across layers.
+The raw desktop/Windows Chrome JSON files must also share the summary run id and
+expected browser roles. It also verifies that
 `plan.outputs.resultJsonPath` is the file being checked and that the saved
 command arguments still match the planned output paths, timeout options, and
 browser-evidence gates. Keep custom report, summary, and browser evidence result
