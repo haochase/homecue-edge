@@ -65,6 +65,78 @@ const negativeCases = [
     },
   },
   {
+    name: 'desktop-text-integrity-mismatch',
+    base: desktopEvidence,
+    argsFor: desktopArgs,
+    expectedError: 'localizedUi.textIntegrity.mojibakeCount must be 0',
+    mutate: (evidence) => {
+      evidence.checks.localizedUi.textIntegrity.mojibakeCount = 1
+    },
+  },
+  {
+    name: 'desktop-text-integrity-weak-coverage',
+    base: desktopEvidence,
+    argsFor: desktopArgs,
+    expectedError: 'localizedUi.textIntegrity.requiredPhraseCount must be at least 7',
+    mutate: (evidence) => {
+      evidence.checks.localizedUi.textIntegrity.requiredPhraseCount = 1
+    },
+  },
+  {
+    name: 'desktop-localized-title-mismatch',
+    base: desktopEvidence,
+    argsFor: desktopArgs,
+    expectedError: 'localizedUi.title must be 家庭智能管家',
+    mutate: (evidence) => {
+      evidence.checks.localizedUi.title = 'HomeCue Edge'
+    },
+  },
+  {
+    name: 'desktop-localized-run-button-mismatch',
+    base: desktopEvidence,
+    argsFor: desktopArgs,
+    expectedError: 'localizedUi.runButton must be 生成计划',
+    mutate: (evidence) => {
+      evidence.checks.localizedUi.runButton = 'Run plan'
+    },
+  },
+  {
+    name: 'desktop-localized-reset-button-missing',
+    base: desktopEvidence,
+    argsFor: desktopArgs,
+    expectedError: 'localizedUi.resetButtonCount must be at least 1',
+    mutate: (evidence) => {
+      evidence.checks.localizedUi.resetButtonCount = 0
+    },
+  },
+  {
+    name: 'desktop-host-environment-mismatch',
+    base: desktopEvidence,
+    argsFor: desktopArgs,
+    expectedError: 'hostEnvironment.nodeMajorVersion must be at least 20',
+    mutate: (evidence) => {
+      evidence.checks.hostEnvironment.nodeMajorVersion = 18
+    },
+  },
+  {
+    name: 'desktop-first-viewport-visibility-mismatch',
+    base: desktopEvidence,
+    argsFor: desktopArgs,
+    expectedError: 'firstViewportVisibility.topbar visibleRatio must be between 0.9 and 1',
+    mutate: (evidence) => {
+      evidence.checks.firstViewportVisibility.panels[0].visibleRatio = 0.5
+    },
+  },
+  {
+    name: 'desktop-responsive-overflow-mismatch',
+    base: desktopEvidence,
+    argsFor: desktopArgs,
+    expectedError: 'responsiveLayout.mobile.overflowX must be 0',
+    mutate: (evidence) => {
+      evidence.checks.responsiveLayout[0].overflowX = 12
+    },
+  },
+  {
     name: 'desktop-external-source-mismatch',
     base: desktopEvidence,
     argsFor: desktopArgs,
@@ -84,6 +156,13 @@ for (const testCase of positiveCases) {
 
   console.log(`PASS source evidence: ${testCase.name}`)
 }
+
+const defaultFileWithFlags = await runValidator(desktopArgs())
+if (defaultFileWithFlags.code !== 0) {
+  console.error(defaultFileWithFlags.output)
+  throw new Error('Expected default desktop evidence path with flags-only arguments to pass validation.')
+}
+console.log('PASS default desktop evidence path with flags-only arguments')
 
 for (const testCase of negativeCases) {
   const evidence = structuredClone(testCase.base)
@@ -109,7 +188,7 @@ console.log('Desktop loop evidence validator self-test passed.')
 function desktopArgs(file) {
   return [
     validatorScript,
-    file,
+    ...(file ? [file] : []),
     '--browser-name',
     'playwright-chromium',
     '--executable-path',

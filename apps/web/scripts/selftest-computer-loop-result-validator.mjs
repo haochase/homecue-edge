@@ -1,0 +1,1371 @@
+import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const repoRoot = path.resolve(scriptDir, '..', '..', '..')
+const validatorScript = path.join(scriptDir, 'validate-computer-loop-result.mjs')
+const outputDir = path.join(repoRoot, 'assets', 'tmp', 'computer-loop-result-validator-selftest')
+
+await mkdir(outputDir, { recursive: true })
+await writeScreenshotFiles({
+  desktopScreenshotDir: path.join(outputDir, 'playwright-chromium-screens'),
+  windowsChromeScreenshotDir: path.join(outputDir, 'windows-chrome-screens'),
+})
+
+const positive = createResult()
+const positiveSummary = await createSummary(positive.browserEvidence.plan.paths)
+await writeReport(path.join(outputDir, 'computer-loop-report.md'), positiveSummary)
+await writeJson(path.join(outputDir, 'computer-loop-report.json'), positiveSummary)
+await writeJson(path.join(outputDir, 'browser-evidence-check.json'), positive.browserEvidence)
+await writeRawLoopEvidence(positive.browserEvidence.plan.paths)
+
+const positiveFile = path.join(outputDir, 'positive.json')
+setResultJsonPath(positive, positiveFile)
+await writeJson(positiveFile, positive)
+const positiveResult = await runValidator(positiveFile)
+if (positiveResult.code !== 0) {
+  console.error(positiveResult.output)
+  throw new Error('Expected positive computer loop result to pass validation.')
+}
+assertOutputIncludes(
+  positiveResult.output,
+  'Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass parity=pass screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial',
+  'positive proof summary output',
+)
+console.log('PASS positive computer loop result')
+
+const dryRun = createResult({ mode: 'dry-run', browserEvidence: null })
+const dryRunFile = path.join(outputDir, 'dry-run.json')
+setResultJsonPath(dryRun, dryRunFile)
+await writeJson(dryRunFile, dryRun)
+const dryRunResult = await runValidator(dryRunFile)
+if (dryRunResult.code !== 0) {
+  console.error(dryRunResult.output)
+  throw new Error('Expected dry-run computer loop result to pass validation.')
+}
+assertOutputExcludes(dryRunResult.output, 'Computer loop proof summary:', 'dry-run proof summary output')
+console.log('PASS dry-run computer loop result')
+
+const failed = createResult({ mode: 'failed', browserEvidence: null })
+failed.success = false
+failed.proofSummary = null
+failed.failure = {
+  stage: 'computer full loop',
+  checkName: 'computer full loop',
+  command: failed.plan.commands.fullLoop.display,
+  exitCode: 1,
+  message: 'simulated computer full loop failure',
+}
+const failedFile = path.join(outputDir, 'failed.json')
+setResultJsonPath(failed, failedFile)
+await writeJson(failedFile, failed)
+const failedResult = await runValidator(failedFile)
+if (failedResult.code !== 0) {
+  console.error(failedResult.output)
+  throw new Error('Expected failed computer loop result to pass validation.')
+}
+assertOutputExcludes(failedResult.output, 'Computer loop proof summary:', 'failed result proof summary output')
+console.log('PASS failed computer loop result')
+
+const selfTestPositive = createResult({ selfTest: true })
+const selfTestPositiveSummary = await createSummary(selfTestPositive.browserEvidence.plan.paths)
+await writeReport(path.join(outputDir, 'selftest-computer-loop-report.md'), selfTestPositiveSummary)
+await writeJson(path.join(outputDir, 'selftest-computer-loop-report.json'), selfTestPositiveSummary)
+await writeJson(path.join(outputDir, 'selftest-browser-evidence-check.json'), selfTestPositive.browserEvidence)
+await writeRawLoopEvidence(selfTestPositive.browserEvidence.plan.paths)
+
+const selfTestPositiveFile = path.join(outputDir, 'selftest-positive.json')
+setResultJsonPath(selfTestPositive, selfTestPositiveFile)
+await writeJson(selfTestPositiveFile, selfTestPositive)
+const selfTestPositiveResult = await runValidator(selfTestPositiveFile)
+if (selfTestPositiveResult.code !== 0) {
+  console.error(selfTestPositiveResult.output)
+  throw new Error('Expected self-test computer loop result to pass validation.')
+}
+assertOutputIncludes(
+  selfTestPositiveResult.output,
+  'Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass parity=pass screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial',
+  'self-test proof summary output',
+)
+console.log('PASS self-test computer loop result')
+
+const cases = [
+  {
+    name: 'result-path-mismatch',
+    expectedError: 'plan.outputs.resultJsonPath must match validated result file.',
+    mutate: (result) => {
+      result.plan.outputs.resultJsonPath = 'assets/tmp/computer-loop-result-validator-selftest/other-result.json'
+    },
+  },
+  {
+    name: 'failed-success-true',
+    expectedError: 'success must be false in failed mode.',
+    mutate: (result) => {
+      result.mode = 'failed'
+      result.failure = {
+        stage: 'computer full loop',
+        checkName: 'computer full loop',
+        command: result.plan.commands.fullLoop.display,
+        exitCode: 1,
+        message: 'simulated failure',
+      }
+      result.proofSummary = null
+      result.browserEvidence = null
+    },
+  },
+  {
+    name: 'failed-missing-failure',
+    expectedError: 'failure is missing in failed mode.',
+    mutate: (result) => {
+      result.mode = 'failed'
+      result.success = false
+      result.proofSummary = null
+      result.browserEvidence = null
+    },
+  },
+  {
+    name: 'failed-invalid-stage',
+    expectedError: 'failure.stage must identify a computer loop stage.',
+    mutate: (result) => {
+      result.mode = 'failed'
+      result.success = false
+      result.proofSummary = null
+      result.browserEvidence = null
+      result.failure = {
+        stage: 'other stage',
+        checkName: 'other stage',
+        command: result.plan.commands.fullLoop.display,
+        exitCode: 1,
+        message: 'simulated failure',
+      }
+    },
+  },
+  {
+    name: 'failed-check-name-mismatch',
+    expectedError: 'failure.checkName must match failure.stage.',
+    mutate: (result) => {
+      result.mode = 'failed'
+      result.success = false
+      result.proofSummary = null
+      result.browserEvidence = null
+      result.failure = {
+        stage: 'computer full loop',
+        checkName: 'saved browser evidence recheck',
+        command: result.plan.commands.fullLoop.display,
+        exitCode: 1,
+        message: 'simulated failure',
+      }
+    },
+  },
+  {
+    name: 'failed-command-mismatch',
+    expectedError: 'failure.command must match the command for failure.stage.',
+    mutate: (result) => {
+      result.mode = 'failed'
+      result.success = false
+      result.proofSummary = null
+      result.browserEvidence = null
+      result.failure = {
+        stage: 'saved browser evidence recheck',
+        checkName: 'saved browser evidence recheck',
+        command: result.plan.commands.fullLoop.display,
+        exitCode: 1,
+        message: 'simulated failure',
+      }
+    },
+  },
+  {
+    name: 'full-loop-report-arg-mismatch',
+    expectedError: 'plan.commands.fullLoop -ReportPath must match plan.outputs.reportPath.',
+    mutate: (result) => {
+      const reportPathIndex = result.plan.commands.fullLoop.args.indexOf('-ReportPath') + 1
+      result.plan.commands.fullLoop.args[reportPathIndex] =
+        'assets/tmp/computer-loop-result-validator-selftest/other-report.md'
+    },
+  },
+  {
+    name: 'browser-evidence-result-arg-mismatch',
+    expectedError: 'plan.commands.browserEvidence -ResultJsonPath must match plan.outputs.browserEvidenceResultJsonPath.',
+    mutate: (result) => {
+      const resultPathIndex = result.plan.commands.browserEvidence.args.indexOf('-ResultJsonPath') + 1
+      result.plan.commands.browserEvidence.args[resultPathIndex] =
+        'assets/tmp/computer-loop-result-validator-selftest/other-browser-evidence.json'
+    },
+  },
+  {
+    name: 'full-loop-browser-wrapper-lock-timeout-arg-mismatch',
+    expectedError:
+      'plan.commands.fullLoop -BrowserWrapperSharedStateLockTimeoutSeconds must match plan.options.browserWrapperSharedStateLockTimeoutSeconds.',
+    mutate: (result) => {
+      const lockTimeoutIndex = result.plan.commands.fullLoop.args.indexOf('-BrowserWrapperSharedStateLockTimeoutSeconds') + 1
+      result.plan.commands.fullLoop.args[lockTimeoutIndex] = '99'
+    },
+  },
+  {
+    name: 'full-loop-display-mismatch',
+    expectedError: 'computer full loop command must match plan.commands.fullLoop.display.',
+    mutate: (result) => {
+      result.checks[0].command = 'powershell -File scripts/check-full-loop.ps1'
+    },
+  },
+  {
+    name: 'phone-loop-requested',
+    expectedError: 'plan.requestedLoops.phone must be false.',
+    mutate: (result) => {
+      result.plan.requestedLoops.phone = true
+    },
+  },
+  {
+    name: 'full-loop-includes-phone',
+    expectedError: 'plan.commands.fullLoop.args must not include -IncludePhone',
+    mutate: (result) => {
+      result.plan.commands.fullLoop.args.push('-IncludePhone')
+    },
+  },
+  {
+    name: 'browser-evidence-phone-required',
+    expectedError: 'browserEvidence.plan.requiredEvidence.phone must be false.',
+    mutate: (result) => {
+      result.browserEvidence.plan.requiredEvidence.phone = true
+    },
+  },
+  {
+    name: 'browser-evidence-phone-inferred',
+    expectedError: 'browserEvidence.plan.inferredFromSummary.phone must be false.',
+    mutate: (result) => {
+      result.browserEvidence.plan.inferredFromSummary.phone = true
+    },
+  },
+  {
+    name: 'browser-evidence-selftest-requested',
+    expectedError: 'browserEvidence.plan.selfTest.requested must match plan.options.selfTest for computer-only result.',
+    mutate: (result) => {
+      result.browserEvidence.plan.selfTest.requested = true
+    },
+  },
+  {
+    name: 'browser-wrapper-lock-name-mismatch',
+    expectedError: 'plan.gates.browserWrapperSharedStateLock.name must be Global\\HCEdgeBrowserLoopGate.',
+    mutate: (result) => {
+      result.plan.gates.browserWrapperSharedStateLock.name = 'Global\\OtherLock'
+    },
+  },
+  {
+    name: 'browser-wrapper-lock-timeout-mismatch',
+    expectedError:
+      'plan.gates.browserWrapperSharedStateLock.timeoutSeconds must match plan.options.browserWrapperSharedStateLockTimeoutSeconds.',
+    mutate: (result) => {
+      result.plan.gates.browserWrapperSharedStateLock.timeoutSeconds = 99
+    },
+  },
+  {
+    name: 'browser-evidence-selftest-summary-mismatch',
+    expectedError: 'browserEvidence.plan.selfTest.summary must match plan.options.selfTest for computer-only result.',
+    mutate: (result) => {
+      applySelfTestMode(result)
+      result.browserEvidence.plan.selfTest.summary = false
+    },
+  },
+  {
+    name: 'browser-evidence-selftest-command-missing',
+    expectedError: 'browserEvidence.checks missing self-test command: npm run summary:selftest',
+    mutate: (result) => {
+      applySelfTestMode(result)
+      result.browserEvidence.checks = result.browserEvidence.checks.filter(
+        (check) => !check.command.startsWith('npm run summary:selftest'),
+      )
+    },
+  },
+  {
+    name: 'browser-evidence-desktop-check-not-required',
+    expectedError: 'browserEvidence.checks npm run desktop:evidence:check must be required.',
+    mutate: (result) => {
+      result.browserEvidence.checks.find((check) => check.command === 'npm run desktop:evidence:check').required = false
+    },
+  },
+  {
+    name: 'browser-evidence-desktop-check-path-mismatch',
+    expectedError:
+      'browserEvidence.checks npm run desktop:evidence:check path must match browserEvidence.plan npm run desktop:evidence:check path.',
+    mutate: (result) => {
+      result.browserEvidence.checks.find((check) => check.command === 'npm run desktop:evidence:check').path =
+        'assets/tmp/computer-loop-result-validator-selftest/other-desktop-loop.json'
+    },
+  },
+  {
+    name: 'browser-evidence-chrome-check-screenshot-dir-mismatch',
+    expectedError:
+      'browserEvidence.checks npm run desktop:evidence:check -- --require-installed-chrome screenshotDir must match browserEvidence.plan npm run desktop:evidence:check -- --require-installed-chrome screenshotDir.',
+    mutate: (result) => {
+      result.browserEvidence.checks.find(
+        (check) => check.command === 'npm run desktop:evidence:check -- --require-installed-chrome',
+      ).screenshotDir = 'assets/tmp/computer-loop-result-validator-selftest/other-windows-chrome-screens'
+    },
+  },
+  {
+    name: 'browser-evidence-summary-check-path-mismatch',
+    expectedError:
+      'browserEvidence.checks npm run summary:check path must match browserEvidence.plan npm run summary:check path.',
+    mutate: (result) => {
+      result.browserEvidence.checks.find((check) => check.command === 'npm run summary:check').path =
+        'assets/tmp/computer-loop-result-validator-selftest/other-summary.json'
+    },
+  },
+  {
+    name: 'browser-evidence-selftest-command-not-required',
+    expectedError: 'browserEvidence.checks self-test command must be required: npm run summary:selftest',
+    mutate: (result) => {
+      applySelfTestMode(result)
+      result.browserEvidence.checks.find((check) => check.command.startsWith('npm run summary:selftest')).required = false
+    },
+  },
+  {
+    name: 'browser-evidence-selftest-command-unexpected',
+    expectedError: 'browserEvidence.checks must not include self-test command: npm run report:selftest',
+    mutate: (result) => {
+      result.browserEvidence.checks.push({ command: 'npm run report:selftest', required: true })
+    },
+  },
+  {
+    name: 'browser-evidence-summary-mismatch',
+    expectedError: 'browserEvidence.plan.summaryPath must match plan.outputs.summaryPath.',
+    mutate: (result) => {
+      result.browserEvidence.plan.summaryPath = 'assets/tmp/computer-loop-result-validator-selftest/other-summary.json'
+    },
+  },
+  {
+    name: 'browser-evidence-result-path-mismatch',
+    expectedError: 'browserEvidence.plan.resultJsonPath must match plan.outputs.browserEvidenceResultJsonPath.',
+    mutate: (result) => {
+      result.browserEvidence.plan.resultJsonPath =
+        'assets/tmp/computer-loop-result-validator-selftest/other-browser-evidence.json'
+    },
+  },
+  {
+    name: 'missing-browser-evidence',
+    expectedError: 'browserEvidence is missing in validate mode.',
+    mutate: (result) => {
+      result.browserEvidence = null
+    },
+  },
+  {
+    name: 'missing-browser-evidence-proof-summary',
+    expectedError: 'browserEvidence.proofSummary is missing in validate mode.',
+    mutate: (result) => {
+      result.browserEvidence.proofSummary = null
+    },
+  },
+  {
+    name: 'browser-evidence-proof-summary-run-id-mismatch',
+    expectedError: 'browserEvidence.proofSummary.summaryRunId must match summary.runId.',
+    mutate: (result) => {
+      result.browserEvidence.proofSummary.summaryRunId = 'different-full-loop'
+    },
+  },
+  {
+    name: 'browser-evidence-proof-summary-path-mismatch',
+    expectedError: 'browserEvidence.proofSummary.evidence.desktopEvidencePath must match browserEvidence.plan desktopEvidencePath.',
+    mutate: (result) => {
+      result.browserEvidence.proofSummary.evidence.desktopEvidencePath =
+        'assets/tmp/computer-loop-result-validator-selftest/other-desktop-loop.json'
+    },
+  },
+  {
+    name: 'missing-proof-summary',
+    expectedError: 'proofSummary is missing in validate mode.',
+    mutate: (result) => {
+      result.proofSummary = null
+    },
+  },
+  {
+    name: 'proof-summary-screenshot-count-mismatch',
+    expectedError: 'proofSummary.loops.windowsChrome.screenshotCount must match summary loop screenshot count.',
+    mutate: (result) => {
+      result.proofSummary.loops.windowsChrome.screenshotCount = 5
+    },
+  },
+  {
+    name: 'proof-summary-text-required-count-mismatch',
+    expectedError: 'proofSummary.loops.desktop.textRequiredPhrases must match summary loop required phrase count.',
+    mutate: (result) => {
+      result.proofSummary.loops.desktop.textRequiredPhrases = 1
+    },
+  },
+  {
+    name: 'summary-outside-output-dir',
+    expectedError: 'plan.outputs.summaryPath must be inside plan.outputs.outputDir.',
+    mutate: (result) => {
+      result.plan.outputs.summaryPath = 'assets/demo/full-loop-report.json'
+      result.checks[0].summaryPath = result.plan.outputs.summaryPath
+      result.browserEvidence.plan.summaryPath = result.plan.outputs.summaryPath
+    },
+  },
+  {
+    name: 'desktop-evidence-outside-output-dir',
+    expectedError: 'browserEvidence.plan.paths.desktopEvidence must be inside plan.outputs.outputDir.',
+    mutate: (result) => {
+      result.browserEvidence.plan.paths.desktopEvidence = 'assets/demo/desktop-loop.json'
+    },
+  },
+  {
+    name: 'chrome-screenshots-outside-output-dir',
+    expectedError: 'browserEvidence.plan.paths.windowsChromeScreenshotDir must be inside plan.outputs.outputDir.',
+    mutate: (result) => {
+      result.browserEvidence.plan.paths.windowsChromeScreenshotDir = 'assets/demo/windows-chrome-screens'
+    },
+  },
+  {
+    name: 'embedded-browser-evidence-mismatch',
+    expectedError: 'browserEvidence must exactly match plan.outputs.browserEvidenceResultJsonPath content.',
+    mutate: (result) => {
+      result.browserEvidence.plan.requiredEvidence.windowsChrome = false
+    },
+    skipBrowserEvidenceRewrite: true,
+  },
+  {
+    name: 'browser-evidence-generated-after-result',
+    expectedError: 'generatedAt must not be earlier than browserEvidence.generatedAt.',
+    mutate: (result) => {
+      result.browserEvidence.generatedAt = '2026-06-19T00:00:03.000Z'
+    },
+  },
+  {
+    name: 'summary-phone-run-mismatch',
+    expectedError: 'summary.loops.phone.run must be false for computer-only result.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.loops.phone.run = true
+        summary.loops.phone.success = true
+      })
+    },
+  },
+  {
+    name: 'summary-generated-after-result',
+    expectedError: 'generatedAt must not be earlier than summary.generatedAt.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.generatedAt = '2026-06-19T00:00:03.000Z'
+      })
+    },
+  },
+  {
+    name: 'summary-generated-after-browser-evidence',
+    expectedError: 'browserEvidence.generatedAt must not be earlier than summary.generatedAt.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.generatedAt = '2026-06-19T00:00:01.500Z'
+      })
+    },
+  },
+  {
+    name: 'summary-localized-run-button-mismatch',
+    expectedError: 'summary.loops.desktop.localizedUi.runButton must be 生成计划.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.loops.desktop.localizedUi.runButton = 'Run plan'
+      })
+    },
+  },
+  {
+    name: 'summary-browser-parity-recomputed-mismatch',
+    expectedError: 'summary.browserParity.success must match recomputed browser parity.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.loops.windowsChrome.localizedUi.resetButtonCount = 2
+      })
+    },
+  },
+  {
+    name: 'summary-browser-parity-input-missing',
+    expectedError: 'summary.loops.windowsChrome.responsiveLayout is required for browser parity.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.loops.windowsChrome.responsiveLayout = []
+      })
+    },
+  },
+  {
+    name: 'summary-text-integrity-weak-coverage',
+    expectedError: 'summary.loops.desktop.textIntegrity.requiredPhraseCount must be at least 7',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.loops.desktop.textIntegrity.requiredPhraseCount = 1
+        summary.loops.desktop.localizedUi.textIntegrity.requiredPhraseCount = 1
+      })
+    },
+  },
+  {
+    name: 'summary-browser-parity-screenshot-mismatch',
+    expectedError: 'summary.browserParity.success must match recomputed browser parity.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.loops.windowsChrome.screenshotEvidence.uniqueDigestCount = 5
+      })
+    },
+  },
+  {
+    name: 'summary-desktop-manifest-mismatch',
+    expectedError: 'summary.evidence Desktop JSON must match browserEvidence.plan.paths.desktopEvidence.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.evidence.files.find((entry) => entry.label === 'Desktop JSON').file = 'assets/demo/desktop-loop.json'
+      })
+    },
+  },
+  {
+    name: 'screenshot-digest-mismatch',
+    expectedError: 'summary.evidence screenshot',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        const screenshot = summary.evidence.files.find(
+          (entry) =>
+            entry.label === 'Screenshot' &&
+            entry.file.startsWith(result.browserEvidence.plan.paths.desktopScreenshotDir),
+        )
+        screenshot.sha256 = '000000000000'
+      })
+    },
+  },
+  {
+    name: 'report-run-id-mismatch',
+    expectedError: 'report must include "- Run ID: full-loop-selftest".',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, async (summary) => {
+        await writeReport(resolveRepoPath(result.plan.outputs.reportPath), {
+          ...summary,
+          runId: 'different-full-loop',
+        })
+      })
+    },
+  },
+  {
+    name: 'raw-desktop-run-id-mismatch',
+    expectedError: 'desktop raw evidence.runId must match summary.runId.',
+    prepare: async (result, name) => {
+      await attachRunLocalEvidence(result, name, {
+        desktop: { runId: 'different-full-loop' },
+      })
+    },
+  },
+  {
+    name: 'raw-desktop-app-url-mismatch',
+    expectedError: 'desktop raw evidence.appUrl must match summary.appUrl.',
+    prepare: async (result, name) => {
+      await attachRunLocalEvidence(result, name, {
+        desktop: { appUrl: 'http://127.0.0.1:9999' },
+      })
+    },
+  },
+  {
+    name: 'raw-desktop-finished-at-summary-mismatch',
+    expectedError: 'desktop raw evidence.finishedAt must match summary loop.',
+    prepare: async (result, name) => {
+      await attachRunLocalEvidence(result, name, {
+        desktop: { finishedAt: '2026-06-18T23:59:57.000Z' },
+      })
+    },
+  },
+  {
+    name: 'raw-desktop-text-integrity-mismatch',
+    expectedError: 'desktop raw evidence.textIntegrity.missingPhraseCount must match summary loop.',
+    prepare: async (result, name) => {
+      await attachRunLocalEvidence(result, name, {
+        desktop: { checks: rawChecks({ textIntegrity: { missingPhraseCount: 1 } }) },
+      })
+    },
+  },
+  {
+    name: 'raw-desktop-text-integrity-weak-coverage',
+    expectedError: 'desktop raw evidence.textIntegrity.requiredPhraseCount must be at least 7',
+    prepare: async (result, name) => {
+      await attachRunLocalEvidence(result, name, {
+        desktop: { checks: rawChecks({ textIntegrity: { requiredPhraseCount: 1 } }) },
+      })
+    },
+  },
+  {
+    name: 'raw-desktop-localized-reset-count-mismatch',
+    expectedError: 'desktop raw evidence.localizedUi.resetButtonCount must match summary loop.',
+    prepare: async (result, name) => {
+      await attachRunLocalEvidence(result, name, {
+        desktop: { checks: rawChecks({ localizedUi: { resetButtonCount: 2 } }) },
+      })
+    },
+  },
+  {
+    name: 'raw-desktop-runtime-health-mismatch',
+    expectedError: 'desktop raw evidence.runtimeHealth.counts must match summary loop.',
+    prepare: async (result, name) => {
+      await attachRunLocalEvidence(result, name, {
+        desktop: { checks: rawChecks({ runtimeHealth: { counts: { failedRequests: 1 } } }) },
+      })
+    },
+  },
+  {
+    name: 'raw-desktop-screenshot-expected-files-mismatch',
+    expectedError: 'desktop raw evidence.screenshotEvidence.expectedFiles must match summary loop.',
+    prepare: async (result, name) => {
+      await attachRunLocalEvidence(result, name, {
+        desktop: {
+          checks: await rawChecksForDirectory(result.browserEvidence.plan.paths.desktopScreenshotDir, {
+            expectedFiles: [...screenshotFiles().slice(1), screenshotFiles()[0]],
+          }),
+        },
+      })
+    },
+  },
+  {
+    name: 'raw-desktop-screenshot-manifest-mismatch',
+    expectedError: 'desktop raw evidence.screenshotEvidence.files',
+    prepare: async (result, name) => {
+      const checks = await rawChecksForDirectory(result.browserEvidence.plan.paths.desktopScreenshotDir)
+      checks.screenshotEvidence.files[0].bytes += 1
+      await attachRunLocalEvidence(result, name, {
+        desktop: { checks },
+      })
+    },
+  },
+  {
+    name: 'raw-desktop-screenshot-path-list-mismatch',
+    expectedError: 'desktop raw evidence.screenshotEvidence.files paths must match raw screenshots.',
+    prepare: async (result, name) => {
+      const checks = await rawChecksForDirectory(result.browserEvidence.plan.paths.desktopScreenshotDir)
+      checks.screenshotEvidence.files[0].path = `${result.browserEvidence.plan.paths.desktopScreenshotDir}/unexpected.png`
+      await attachRunLocalEvidence(result, name, {
+        desktop: { checks },
+      })
+    },
+  },
+  {
+    name: 'raw-desktop-finished-after-result',
+    expectedError: 'generatedAt must not be earlier than desktop raw evidence.finishedAt.',
+    prepare: async (result, name) => {
+      await attachRunLocalEvidence(result, name, {
+        desktop: { finishedAt: '2026-06-19T00:00:03.000Z' },
+      })
+    },
+  },
+  {
+    name: 'raw-chrome-browser-name-mismatch',
+    expectedError: 'Windows Chrome raw evidence.browserName must be windows-chrome.',
+    prepare: async (result, name) => {
+      await attachRunLocalEvidence(result, name, {
+        chrome: { browserName: 'playwright-chromium' },
+      })
+    },
+  },
+]
+
+for (const testCase of cases) {
+  const result = createResult()
+  const file = path.join(outputDir, `${testCase.name}.json`)
+  setResultJsonPath(result, file)
+  await writeJson(resolveRepoPath(result.plan.outputs.browserEvidenceResultJsonPath), result.browserEvidence)
+  await writeRawLoopEvidence(result.browserEvidence.plan.paths)
+  testCase.mutate?.(result)
+  await testCase.prepare?.(result, testCase.name)
+  if (!testCase.skipBrowserEvidenceRewrite && result.browserEvidence) {
+    await writeJson(resolveRepoPath(result.plan.outputs.browserEvidenceResultJsonPath), result.browserEvidence)
+  }
+
+  await writeJson(file, result)
+
+  const validation = await runValidator(file)
+  if (validation.code === 0) {
+    throw new Error(`Expected ${testCase.name} to fail validation.`)
+  }
+  if (!validation.output.includes(testCase.expectedError)) {
+    console.error(validation.output)
+    throw new Error(`Expected ${testCase.name} failure to include: ${testCase.expectedError}`)
+  }
+
+  console.log(`PASS negative case: ${testCase.name}`)
+}
+
+console.log('Computer loop result validator self-test passed.')
+
+function assertOutputIncludes(output, expected, label) {
+  if (!output.includes(expected)) {
+    console.error(output)
+    throw new Error(`Expected ${label} to include: ${expected}`)
+  }
+}
+
+function assertOutputExcludes(output, unexpected, label) {
+  if (output.includes(unexpected)) {
+    console.error(output)
+    throw new Error(`Expected ${label} to exclude: ${unexpected}`)
+  }
+}
+
+async function attachSummary(result, name, mutate) {
+  const summaryPath = `assets/tmp/computer-loop-result-validator-selftest/${name}-summary.json`
+  result.plan.outputs.summaryPath = summaryPath
+  result.checks[0].summaryPath = summaryPath
+  result.browserEvidence.plan.summaryPath = summaryPath
+  result.proofSummary.evidence.summaryPath = summaryPath
+
+  const summary = await createSummary(result.browserEvidence.plan.paths)
+  await mutate(summary)
+  await writeJson(resolveRepoPath(summaryPath), summary)
+}
+
+async function attachRunLocalEvidence(result, name, { desktop = {}, chrome = {} } = {}) {
+  const baseDir = `assets/tmp/computer-loop-result-validator-selftest/${name}`
+  result.plan.outputs.outputDir = baseDir
+  result.plan.outputs.reportPath = `${baseDir}/computer-loop-report.md`
+  result.plan.outputs.summaryPath = `${baseDir}/computer-loop-report.json`
+  result.plan.outputs.browserEvidenceResultJsonPath = `${baseDir}/browser-evidence-check.json`
+  result.checks[0].reportPath = result.plan.outputs.reportPath
+  result.checks[0].summaryPath = result.plan.outputs.summaryPath
+  result.checks[1].resultJsonPath = result.plan.outputs.browserEvidenceResultJsonPath
+  result.browserEvidence.plan.summaryPath = result.plan.outputs.summaryPath
+  result.browserEvidence.plan.paths.desktopEvidence = `${baseDir}/desktop-loop.json`
+  result.browserEvidence.plan.paths.desktopScreenshotDir = `${baseDir}/playwright-chromium-screens`
+  result.browserEvidence.plan.paths.windowsChromeEvidence = `${baseDir}/chrome-loop.json`
+  result.browserEvidence.plan.paths.windowsChromeScreenshotDir = `${baseDir}/windows-chrome-screens`
+  result.browserEvidence.proofSummary.evidence.summaryPath = result.plan.outputs.summaryPath
+  result.browserEvidence.proofSummary.evidence.desktopEvidencePath = result.browserEvidence.plan.paths.desktopEvidence
+  result.browserEvidence.proofSummary.evidence.desktopScreenshotDir = result.browserEvidence.plan.paths.desktopScreenshotDir
+  result.browserEvidence.proofSummary.evidence.windowsChromeEvidencePath = result.browserEvidence.plan.paths.windowsChromeEvidence
+  result.browserEvidence.proofSummary.evidence.windowsChromeScreenshotDir = result.browserEvidence.plan.paths.windowsChromeScreenshotDir
+  result.proofSummary.evidence.reportPath = result.plan.outputs.reportPath
+  result.proofSummary.evidence.summaryPath = result.plan.outputs.summaryPath
+  result.proofSummary.evidence.browserEvidenceResultJsonPath = result.plan.outputs.browserEvidenceResultJsonPath
+
+  await writeScreenshotFiles(result.browserEvidence.plan.paths)
+  const summary = await createSummary(result.browserEvidence.plan.paths)
+  await writeReport(resolveRepoPath(result.plan.outputs.reportPath), summary)
+  await writeJson(resolveRepoPath(result.plan.outputs.summaryPath), summary)
+  await writeRawLoopEvidence(result.browserEvidence.plan.paths, { desktop, chrome })
+}
+
+function setResultJsonPath(result, file) {
+  result.plan.outputs.resultJsonPath = toRepoPath(file)
+}
+
+async function createSummary(paths) {
+  return {
+    generatedAt: '2026-06-18T23:59:59.000Z',
+    success: true,
+    runId: 'full-loop-selftest',
+    appUrl: 'http://127.0.0.1:5173',
+    apiBase: 'http://127.0.0.1:8723',
+    loops: {
+      desktop: {
+        run: true,
+        success: true,
+        runId: 'full-loop-selftest',
+        startedAt: '2026-06-18T23:59:50.000Z',
+        finishedAt: '2026-06-18T23:59:58.000Z',
+        pageUrl: 'http://127.0.0.1:5173/?apiBase=http%3A%2F%2F127.0.0.1%3A8723',
+        title: '\u5bb6\u5ead\u667a\u80fd\u7ba1\u5bb6',
+        textIntegrity: summaryTextIntegrity(),
+        localizedUi: summaryLocalizedUi(),
+        firstViewportVisibility: summaryFirstViewportVisibility(),
+        responsiveLayout: summaryResponsiveLayout(),
+        runtimeHealth: summaryRuntimeHealth(),
+        screenshotEvidence: summaryScreenshotEvidence(),
+        scenePromptHandoff: summaryScenePromptHandoff(),
+        webConfirmExecute: summaryWebConfirmExecute(),
+        offlineFallback: summaryOfflineFallback(),
+        externalExecutionSync: summaryExternalExecutionSync(),
+      },
+      phone: {
+        run: false,
+        success: null,
+      },
+      windowsChrome: {
+        run: true,
+        success: true,
+        runId: 'full-loop-selftest',
+        startedAt: '2026-06-18T23:59:50.000Z',
+        finishedAt: '2026-06-18T23:59:58.000Z',
+        pageUrl: 'http://127.0.0.1:5173/?apiBase=http%3A%2F%2F127.0.0.1%3A8723',
+        title: '\u5bb6\u5ead\u667a\u80fd\u7ba1\u5bb6',
+        textIntegrity: summaryTextIntegrity(),
+        localizedUi: summaryLocalizedUi(),
+        firstViewportVisibility: summaryFirstViewportVisibility(),
+        responsiveLayout: summaryResponsiveLayout(),
+        runtimeHealth: summaryRuntimeHealth(),
+        screenshotEvidence: summaryScreenshotEvidence(),
+        scenePromptHandoff: summaryScenePromptHandoff(),
+        webConfirmExecute: summaryWebConfirmExecute(),
+        offlineFallback: summaryOfflineFallback(),
+        externalExecutionSync: summaryExternalExecutionSync(),
+      },
+    },
+    browserParity: {
+      checked: true,
+      success: true,
+      errors: [],
+    },
+    evidence: {
+      files: [
+        { label: 'Desktop JSON', file: paths.desktopEvidence, present: true },
+        { label: 'Windows Chrome JSON', file: paths.windowsChromeEvidence, present: true },
+        { label: 'Phone JSON', file: null, present: false },
+        ...(await screenshotEntries(paths.desktopScreenshotDir)),
+        ...(await screenshotEntries(paths.windowsChromeScreenshotDir)),
+      ],
+    },
+  }
+}
+
+async function writeRawLoopEvidence(paths, { desktop = {}, chrome = {} } = {}) {
+  const desktopScreenshots = screenshotFiles().map((file) => `${paths.desktopScreenshotDir}/${file}`)
+  const chromeScreenshots = screenshotFiles().map((file) => `${paths.windowsChromeScreenshotDir}/${file}`)
+  await writeJson(resolveRepoPath(paths.desktopEvidence), {
+    success: true,
+    runId: 'full-loop-selftest',
+    appUrl: 'http://127.0.0.1:5173',
+    apiBase: 'http://127.0.0.1:8723',
+    pageUrl: 'http://127.0.0.1:5173/?apiBase=http%3A%2F%2F127.0.0.1%3A8723',
+    browserName: 'playwright-chromium',
+    startedAt: '2026-06-18T23:59:50.000Z',
+    finishedAt: '2026-06-18T23:59:58.000Z',
+    screenshots: desktopScreenshots,
+    checks: await rawChecksForDirectory(paths.desktopScreenshotDir),
+    ...desktop,
+  })
+  await writeJson(resolveRepoPath(paths.windowsChromeEvidence), {
+    success: true,
+    runId: 'full-loop-selftest',
+    appUrl: 'http://127.0.0.1:5173',
+    apiBase: 'http://127.0.0.1:8723',
+    pageUrl: 'http://127.0.0.1:5173/?apiBase=http%3A%2F%2F127.0.0.1%3A8723',
+    browserName: 'windows-chrome',
+    startedAt: '2026-06-18T23:59:50.000Z',
+    finishedAt: '2026-06-18T23:59:58.000Z',
+    screenshots: chromeScreenshots,
+    checks: await rawChecksForDirectory(paths.windowsChromeScreenshotDir),
+    ...chrome,
+  })
+}
+
+function summaryTextIntegrity(overrides = {}) {
+  return {
+    requiredPhraseCount: 7,
+    missingPhraseCount: 0,
+    mojibakeCount: 0,
+    ...overrides,
+  }
+}
+
+function summaryLocalizedUi(overrides = {}) {
+  const textIntegrity = overrides.textIntegrity ?? {}
+  return {
+    title: '\u5bb6\u5ead\u667a\u80fd\u7ba1\u5bb6',
+    runButton: '\u751f\u6210\u8ba1\u5212',
+    resetButtonCount: 1,
+    ...overrides,
+    textIntegrity: summaryTextIntegrity(textIntegrity),
+  }
+}
+
+function summaryFirstViewportVisibility(overrides = {}) {
+  return {
+    minVisibleRatio: 1,
+    panelCount: 5,
+    hiddenPanelCount: 0,
+    ...overrides,
+  }
+}
+
+function summaryRuntimeHealth(overrides = {}) {
+  return {
+    success: true,
+    issueCount: 0,
+    counts: {},
+    ...overrides,
+  }
+}
+
+function summaryResponsiveLayout(overrides = []) {
+  return [
+    {
+      label: 'mobile',
+      overflowX: 0,
+      overflowingButtonCount: 0,
+      overlappingPanelPairCount: 0,
+      panelCount: 7,
+    },
+    ...overrides,
+  ]
+}
+
+function summaryScreenshotEvidence(overrides = {}) {
+  return {
+    success: true,
+    count: 6,
+    expectedFiles: screenshotFiles(),
+    uniqueDigestCount: 6,
+    minWidth: null,
+    minHeight: null,
+    minBytes: null,
+    minImageDataBytes: null,
+    ...overrides,
+  }
+}
+
+function summaryScenePromptHandoff(overrides = {}) {
+  return {
+    ready: true,
+    proposeOnly: true,
+    promptPresent: true,
+    scene: 'low-energy evening arrival',
+    rawImageRetained: false,
+    rawImageEchoed: false,
+    ...overrides,
+  }
+}
+
+function summaryWebConfirmExecute(overrides = {}) {
+  return {
+    latestSource: 'web',
+    latestSequence: 10,
+    acceptedRows: 5,
+    ...overrides,
+  }
+}
+
+function summaryOfflineFallback(overrides = {}) {
+  return {
+    latestSource: 'plan',
+    latestSequence: 11,
+    executionCount: 3,
+    ...overrides,
+  }
+}
+
+function summaryExternalExecutionSync(overrides = {}) {
+  return {
+    latestSource: 'esp32-serial',
+    latestSequence: 12,
+    acceptedActionCount: 5,
+    ...overrides,
+  }
+}
+
+async function rawChecksForDirectory(directory, screenshotEvidence = {}) {
+  return {
+    localizedUi: summaryLocalizedUi(),
+    runtimeHealth: summaryRuntimeHealth(),
+    screenshotEvidence: {
+      ...summaryScreenshotEvidence(),
+      files: await screenshotFileEntries(directory),
+      ...screenshotEvidence,
+    },
+  }
+}
+
+function rawChecks({ localizedUi = {}, textIntegrity = {}, runtimeHealth = {}, screenshotEvidence = {} } = {}) {
+  return {
+    localizedUi: summaryLocalizedUi({ ...localizedUi, textIntegrity }),
+    runtimeHealth: summaryRuntimeHealth(runtimeHealth),
+    screenshotEvidence: {
+      ...summaryScreenshotEvidence(),
+      files: [],
+      ...screenshotEvidence,
+    },
+  }
+}
+
+async function screenshotFileEntries(directory) {
+  const entries = []
+  for (const file of screenshotFiles()) {
+    const entryPath = `${directory}/${file}`
+    entries.push({
+      path: entryPath,
+      ...(await fileDigest(resolveRepoPath(entryPath))),
+    })
+  }
+  return entries
+}
+
+async function screenshotEntries(directory) {
+  const entries = []
+  for (const file of screenshotFiles()) {
+    const entryPath = `${directory}/${file}`
+    entries.push({
+      label: 'Screenshot',
+      file: entryPath,
+      present: true,
+      ...(await fileDigest(resolveRepoPath(entryPath))),
+    })
+  }
+  return entries
+}
+
+function screenshotFiles() {
+  return [
+    '01-control-console.png',
+    '02-scene-prompt-handoff.png',
+    '03-propose-only.png',
+    '04-web-confirmation.png',
+    '05-offline-fallback.png',
+    '06-external-sync.png',
+  ]
+}
+
+function createResult({ mode = 'validate', browserEvidence = undefined, selfTest = false } = {}) {
+  const prefix = selfTest ? 'selftest-' : ''
+  const summaryPath = `assets/tmp/computer-loop-result-validator-selftest/${prefix}computer-loop-report.json`
+  const reportPath = `assets/tmp/computer-loop-result-validator-selftest/${prefix}computer-loop-report.md`
+  const browserEvidencePath = `assets/tmp/computer-loop-result-validator-selftest/${prefix}browser-evidence-check.json`
+  const fullLoopArgs = [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    'scripts/check-full-loop.ps1',
+    '-IncludeChrome',
+    '-StartupTimeoutSeconds',
+    '60',
+    '-StepTimeoutSeconds',
+    '180',
+    '-BrowserWrapperSharedStateLockTimeoutSeconds',
+    '1200',
+    '-PartialEvidenceDir',
+    'assets/tmp/computer-loop-result-validator-selftest',
+    '-ReportPath',
+    reportPath,
+    '-SummaryPath',
+    summaryPath,
+  ]
+  const browserEvidenceArgs = [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    'scripts/check-browser-evidence.ps1',
+    '-SummaryPath',
+    summaryPath,
+    '-RequireDesktop',
+    '-RequireChrome',
+    '-ResultJsonPath',
+    browserEvidencePath,
+    ...(selfTest ? ['-SelfTest'] : []),
+  ]
+
+  const plan = {
+    runId: 'computer-loop-selftest',
+    requestedLoops: {
+      desktop: true,
+      phone: false,
+      windowsChrome: true,
+    },
+    options: {
+      skipPreflight: false,
+      selfTest,
+      startupTimeoutSeconds: 60,
+      stepTimeoutSeconds: 180,
+      browserWrapperSharedStateLockTimeoutSeconds: 1200,
+    },
+    outputs: {
+      outputDir: 'assets/tmp/computer-loop-result-validator-selftest',
+      reportPath,
+      summaryPath,
+      resultJsonPath: 'assets/tmp/computer-loop-result-validator-selftest/computer-loop-check.json',
+      browserEvidenceResultJsonPath: browserEvidencePath,
+    },
+    gates: {
+      fullLoopIncludeChrome: true,
+      fullLoopIncludePhone: false,
+      browserEvidenceRequireDesktop: true,
+      browserEvidenceRequireChrome: true,
+      browserEvidenceRequirePhone: false,
+      browserEvidenceSelfTest: selfTest,
+      browserWrapperSharedStateLock: {
+        name: 'Global\\HCEdgeBrowserLoopGate',
+        timeoutSeconds: 1200,
+      },
+    },
+    commands: {
+      fullLoop: {
+        executable: 'powershell',
+        args: fullLoopArgs,
+        display: displayCommand('powershell', fullLoopArgs),
+      },
+      browserEvidence: {
+        executable: 'powershell',
+        args: browserEvidenceArgs,
+        display: displayCommand('powershell', browserEvidenceArgs),
+      },
+    },
+  }
+
+  return {
+    generatedAt: '2026-06-19T00:00:02.000Z',
+    success: true,
+    mode,
+    runId: plan.runId,
+    plan,
+    checks: [
+      {
+        name: 'computer full loop',
+        command: plan.commands.fullLoop.display,
+        required: true,
+        summaryPath,
+        reportPath,
+      },
+      {
+        name: 'saved browser evidence recheck',
+        command: plan.commands.browserEvidence.display,
+        required: true,
+        resultJsonPath: browserEvidencePath,
+      },
+    ],
+    proofSummary: mode === 'dry-run' ? null : proofSummary(plan),
+    browserEvidence:
+      browserEvidence === undefined
+        ? {
+            generatedAt: '2026-06-19T00:00:01.000Z',
+            success: true,
+            mode: 'validate',
+            plan: {
+              summaryPath,
+              resultJsonPath: browserEvidencePath,
+              inferredFromSummary: {
+                desktop: true,
+                phone: false,
+                windowsChrome: true,
+              },
+              requiredEvidence: {
+                desktop: true,
+                phone: false,
+                windowsChrome: true,
+              },
+              selfTest: {
+                requested: selfTest,
+                phoneEvidence: false,
+                desktopEvidence: selfTest,
+                summary: selfTest,
+                report: false,
+              },
+              paths: {
+                desktopEvidence: 'assets/tmp/computer-loop-result-validator-selftest/desktop-loop.json',
+                desktopScreenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/playwright-chromium-screens',
+                phoneEvidence: 'assets/demo/phone-loop.json',
+                windowsChromeEvidence: 'assets/tmp/computer-loop-result-validator-selftest/chrome-loop.json',
+                windowsChromeScreenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/windows-chrome-screens',
+              },
+            },
+            checks: [
+              {
+                command: 'npm run desktop:evidence:check',
+                required: true,
+                path: 'assets/tmp/computer-loop-result-validator-selftest/desktop-loop.json',
+                screenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/playwright-chromium-screens',
+              },
+              {
+                command: 'npm run desktop:evidence:check -- --require-installed-chrome',
+                required: true,
+                path: 'assets/tmp/computer-loop-result-validator-selftest/chrome-loop.json',
+                screenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/windows-chrome-screens',
+              },
+              {
+                command: 'npm run summary:check',
+                required: true,
+                path: summaryPath,
+              },
+              ...(selfTest
+                ? [
+                    { command: 'npm run desktop:evidence:selftest', required: true },
+                    { command: `npm run summary:selftest -- ${summaryPath}`, required: true },
+                  ]
+                : []),
+            ],
+            proofSummary: browserEvidenceProofSummary({
+              summaryPath,
+              paths: {
+                desktopEvidence: 'assets/tmp/computer-loop-result-validator-selftest/desktop-loop.json',
+                desktopScreenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/playwright-chromium-screens',
+                phoneEvidence: 'assets/demo/phone-loop.json',
+                windowsChromeEvidence: 'assets/tmp/computer-loop-result-validator-selftest/chrome-loop.json',
+                windowsChromeScreenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/windows-chrome-screens',
+              },
+            }),
+          }
+        : browserEvidence,
+  }
+}
+
+function browserEvidenceProofSummary(browserEvidencePlan) {
+  return {
+    summaryRunId: 'full-loop-selftest',
+    appUrl: 'http://127.0.0.1:5173',
+    apiBase: 'http://127.0.0.1:8723',
+    requiredEvidence: {
+      desktop: true,
+      phone: false,
+      windowsChrome: true,
+    },
+    browserParity: {
+      checked: true,
+      success: true,
+      errorCount: 0,
+    },
+    loops: {
+      desktop: loopProofSummary(),
+      windowsChrome: loopProofSummary(),
+      phone: {
+        run: false,
+        success: null,
+      },
+    },
+    evidence: {
+      summaryPath: browserEvidencePlan.summaryPath,
+      desktopEvidencePath: browserEvidencePlan.paths.desktopEvidence,
+      windowsChromeEvidencePath: browserEvidencePlan.paths.windowsChromeEvidence,
+      phoneEvidencePath: browserEvidencePlan.paths.phoneEvidence,
+      desktopScreenshotDir: browserEvidencePlan.paths.desktopScreenshotDir,
+      windowsChromeScreenshotDir: browserEvidencePlan.paths.windowsChromeScreenshotDir,
+    },
+  }
+}
+
+function proofSummary(plan) {
+  return {
+    summaryRunId: 'full-loop-selftest',
+    appUrl: 'http://127.0.0.1:5173',
+    apiBase: 'http://127.0.0.1:8723',
+    requestedLoops: plan.requestedLoops,
+    browserParity: {
+      checked: true,
+      success: true,
+      errorCount: 0,
+    },
+    loops: {
+      desktop: loopProofSummary(),
+      windowsChrome: loopProofSummary(),
+      phone: {
+        run: false,
+        success: null,
+      },
+    },
+    evidence: {
+      reportPath: plan.outputs.reportPath,
+      summaryPath: plan.outputs.summaryPath,
+      browserEvidenceResultJsonPath: plan.outputs.browserEvidenceResultJsonPath,
+      browserEvidenceSuccess: true,
+    },
+  }
+}
+
+function loopProofSummary() {
+  return {
+    run: true,
+    success: true,
+    title: '\u5bb6\u5ead\u667a\u80fd\u7ba1\u5bb6',
+    runButton: '\u751f\u6210\u8ba1\u5212',
+    textRequiredPhrases: 7,
+    textMissingPhrases: 0,
+    textMojibake: 0,
+    firstViewportMinVisibleRatio: 1,
+    runtimeIssueCount: 0,
+    screenshotCount: 6,
+    uniqueScreenshotDigestCount: 6,
+    externalExecutionSource: 'esp32-serial',
+    acceptedActionCount: 5,
+  }
+}
+
+function applySelfTestMode(result) {
+  result.plan.options.selfTest = true
+  result.plan.gates.browserEvidenceSelfTest = true
+  if (!result.plan.commands.browserEvidence.args.includes('-SelfTest')) {
+    result.plan.commands.browserEvidence.args.push('-SelfTest')
+  }
+  result.browserEvidence.plan.selfTest.requested = true
+  result.browserEvidence.plan.selfTest.desktopEvidence = true
+  result.browserEvidence.plan.selfTest.summary = true
+  result.browserEvidence.checks.push(
+    { command: 'npm run desktop:evidence:selftest', required: true },
+    { command: `npm run summary:selftest -- ${result.browserEvidence.plan.summaryPath}`, required: true },
+  )
+}
+
+function displayCommand(executable, args) {
+  return [executable, ...args].join(' ')
+}
+
+async function runValidator(file) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [validatorScript, file], {
+      cwd: path.join(repoRoot, 'apps', 'web'),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let output = ''
+
+    child.stdout.on('data', (chunk) => {
+      output += chunk.toString()
+    })
+    child.stderr.on('data', (chunk) => {
+      output += chunk.toString()
+    })
+    child.on('error', reject)
+    child.on('close', (code) => {
+      resolve({ code, output })
+    })
+  })
+}
+
+async function writeJson(file, value) {
+  await mkdir(path.dirname(file), { recursive: true })
+  await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+}
+
+async function writeReport(file, summary) {
+  await writeText(
+    file,
+    [
+      '# Home AI Companion Loop Report',
+      '',
+      `Generated: ${summary.generatedAt}`,
+      '',
+      '## Summary',
+      '',
+      '- Desktop loop: pass',
+      '- Windows Chrome loop: pass',
+      '- Phone loop: not run',
+      `- Run ID: ${summary.runId}`,
+      `- App URL: ${summary.appUrl}`,
+      `- API base: ${summary.apiBase}`,
+      '',
+    ].join('\n'),
+  )
+}
+
+async function writeScreenshotFiles(paths) {
+  for (const directory of [paths.desktopScreenshotDir, paths.windowsChromeScreenshotDir]) {
+    await mkdir(resolveRepoPath(directory), { recursive: true })
+    for (const file of screenshotFiles()) {
+      await writeText(resolveRepoPath(`${directory}/${file}`), `fake screenshot ${directory}/${file}\n`)
+    }
+  }
+}
+
+async function writeText(file, value) {
+  await mkdir(path.dirname(file), { recursive: true })
+  await writeFile(file, value, 'utf8')
+}
+
+function resolveRepoPath(file) {
+  return path.isAbsolute(file) ? file : path.resolve(repoRoot, file)
+}
+
+function toRepoPath(file) {
+  return path.relative(repoRoot, file).replaceAll(path.sep, '/')
+}
+
+async function fileDigest(file) {
+  const buffer = await readFile(file)
+  return {
+    bytes: buffer.length,
+    sha256: createHash('sha256').update(buffer).digest('hex').slice(0, 12),
+  }
+}

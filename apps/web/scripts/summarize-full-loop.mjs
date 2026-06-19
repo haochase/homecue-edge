@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { recomputeBrowserParity } from './summary-parity.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
@@ -9,18 +10,26 @@ const repoRoot = path.resolve(scriptDir, '..', '..', '..')
 const outputFile = process.argv[2] ?? path.join(repoRoot, 'assets', 'demo', 'full-loop-report.md')
 const desktopFile = process.argv[3] ?? path.join(repoRoot, 'assets', 'demo', 'desktop-loop.json')
 const phoneFile = process.argv[4] ?? path.join(repoRoot, 'assets', 'demo', 'phone-loop.json')
+// argv[5] is the legacy desktop screenshot directory slot. Screenshots are now read from loop JSON.
 const chromeFile = process.argv[6] ?? path.join(repoRoot, 'assets', 'demo', 'chrome-loop.json')
 const summaryFile = process.argv[7] ?? defaultSummaryFile(outputFile)
+const devEnvFile = process.argv[8] ?? path.join(repoRoot, 'assets', 'tmp', 'dev-env-check.json')
 
 const desktop = await readJsonIfExists(desktopFile)
 const phone = await readJsonIfExists(phoneFile)
 const chrome = await readJsonIfExists(chromeFile)
-const browserParity = validateBrowserParity(desktop, chrome)
-const requiredEvidence = validateEvidence({ desktop, phone, chrome })
+const devEnv = await readJsonIfExists(devEnvFile)
+const loops = {
+  desktop: summarizeDesktopLoop(desktop),
+  windowsChrome: summarizeDesktopLoop(chrome),
+  phone: summarizePhoneLoop(phone),
+}
+const browserParity = summarizeBrowserParity(loops.desktop, loops.windowsChrome)
+const requiredEvidence = validateEvidence({ desktop, phone, chrome, devEnv, browserParity })
 const screenshots = collectScreenshots([desktop, chrome])
-const manifest = await buildEvidenceManifest({ desktop, phone, chrome, screenshots })
+const manifest = await buildEvidenceManifest({ desktop, phone, chrome, devEnv, screenshots })
 const generatedAt = new Date().toISOString()
-const summary = buildSummary({ generatedAt, desktop, phone, chrome, browserParity, requiredEvidence, manifest })
+const summary = buildSummary({ generatedAt, desktop, phone, chrome, devEnv, loops, browserParity, requiredEvidence, manifest })
 
 const report = [
   '# Home AI Companion Loop Report',
@@ -33,6 +42,7 @@ const report = [
   `- Windows Chrome loop: ${chrome ? formatStatus(chrome.success) : 'not run'}`,
   `- Phone loop: ${phone ? formatStatus(phone.success) : 'not run'}`,
   `- Run ID: ${requiredEvidence.runId ?? 'not set'}`,
+  `- Dev environment preflight: ${formatDevEnvPreflight(devEnv)}`,
   `- Browser parity: ${formatParity(browserParity)}`,
   `- App URL: ${desktop?.appUrl ?? phone?.appUrl ?? 'unknown'}`,
   `- API base: ${desktop?.apiBase ?? phone?.apiBase ?? 'unknown'}`,
@@ -59,6 +69,7 @@ const report = [
   '- The phone proof covers front-camera preference, Web Speech readiness, visual scene capture, and guarded execution sync.',
   '- The desktop proof covers propose-only planning, web confirmation, offline fallback, and ESP32-style external confirmation sync.',
   '- The report is generated from local ignored evidence artifacts, keeping the public repository free of private screenshots and runtime logs.',
+  '- The environment preflight records host, browser, port, ADB, and authorized-phone readiness before browser automation starts.',
   '',
 ].join('\n')
 
@@ -88,18 +99,17 @@ function defaultSummaryFile(file) {
   return path.join(parsed.dir, `${baseName}.json`)
 }
 
-function buildSummary({ generatedAt, desktop, phone, chrome, browserParity, requiredEvidence, manifest }) {
+function buildSummary({ generatedAt, desktop, phone, chrome, devEnv, loops, browserParity, requiredEvidence, manifest }) {
   return {
     generatedAt,
     success: requiredEvidence.success,
     runId: requiredEvidence.runId,
     appUrl: desktop?.appUrl ?? chrome?.appUrl ?? phone?.appUrl ?? null,
     apiBase: desktop?.apiBase ?? chrome?.apiBase ?? phone?.apiBase ?? null,
-    loops: {
-      desktop: summarizeDesktopLoop(desktop),
-      windowsChrome: summarizeDesktopLoop(chrome),
-      phone: summarizePhoneLoop(phone),
+    environment: {
+      preflight: summarizeDevEnv(devEnv),
     },
+    loops,
     browserParity,
     evidence: {
       validationErrors: requiredEvidence.errors,
@@ -124,7 +134,9 @@ function summarizeDesktopLoop(value) {
     pageUrl: value.pageUrl ?? null,
     title: checks.localizedUi?.title ?? null,
     textIntegrity: summarizeTextIntegrity(checks.localizedUi?.textIntegrity),
+    localizedUi: summarizeDesktopLocalizedUi(checks.localizedUi),
     firstViewportVisibility: summarizeFirstViewportVisibility(checks.firstViewportVisibility),
+    hostEnvironment: summarizeHostEnvironment(checks.hostEnvironment),
     browserEnvironment: summarizeBrowserEnvironment(checks.browserEnvironment),
     responsiveLayout: summarizeResponsiveLayout(checks.responsiveLayout),
     runtimeHealth: summarizeRuntimeHealth(checks.runtimeHealth),
@@ -168,12 +180,15 @@ function summarizePhoneLoop(value) {
     finishedAt: value.finishedAt ?? null,
     pageUrl: value.pageUrl ?? null,
     title: checks.localizedUi?.title ?? null,
+    textIntegrity: summarizeTextIntegrity(checks.localizedUi?.textIntegrity),
     frontCamera: {
       ready: checks.frontCamera?.ready ?? null,
       facingMode: checks.frontCamera?.facingMode ?? null,
       width: checks.frontCamera?.width ?? null,
       height: checks.frontCamera?.height ?? null,
       status: checks.frontCamera?.status ?? null,
+      mirrored: checks.frontCamera?.mirrored ?? null,
+      objectFit: checks.frontCamera?.objectFit ?? null,
     },
     speechInput: {
       available: Boolean(speechSupport.SpeechRecognition || speechSupport.webkitSpeechRecognition),
@@ -214,6 +229,32 @@ function summarizePromptHandoff(value) {
     scene: value.scene ?? null,
     rawImageRetained: value.rawImageRetained ?? null,
     rawImageEchoed: value.rawImageEchoed ?? null,
+  }
+}
+
+function summarizeDevEnv(value) {
+  if (!value) {
+    return { run: false, success: null }
+  }
+
+  const checks = Array.isArray(value.checks) ? value.checks : []
+  return {
+    run: true,
+    success: value.success === true,
+    generatedAt: value.generatedAt ?? null,
+    required: value.required ?? null,
+    requirePhone: value.requirePhone ?? null,
+    okCount: checks.filter((check) => check?.ok === true).length,
+    warnCount: checks.filter((check) => check?.status === 'WARN').length,
+    failCount: checks.filter((check) => check?.status === 'FAIL').length,
+    checks: checks.map((check) => ({
+      name: check?.name ?? null,
+      category: check?.category ?? null,
+      ok: check?.ok ?? null,
+      required: check?.required ?? null,
+      status: check?.status ?? null,
+      detail: check?.detail ?? null,
+    })),
   }
 }
 
@@ -260,6 +301,20 @@ function summarizeBrowserEnvironment(value) {
   }
 }
 
+function summarizeHostEnvironment(value) {
+  if (!value) {
+    return null
+  }
+
+  return {
+    platform: value.platform ?? null,
+    arch: value.arch ?? null,
+    nodeVersion: value.nodeVersion ?? null,
+    nodeMajorVersion: value.nodeMajorVersion ?? null,
+    ci: value.ci ?? null,
+  }
+}
+
 function summarizeRuntimeHealth(value) {
   if (!value) {
     return null
@@ -287,6 +342,19 @@ function summarizeTextIntegrity(value) {
     requiredPhraseCount: value.requiredPhraseCount ?? null,
     missingPhraseCount: value.missingPhraseCount ?? null,
     mojibakeCount: value.mojibakeCount ?? null,
+  }
+}
+
+function summarizeDesktopLocalizedUi(value) {
+  if (!value) {
+    return null
+  }
+
+  return {
+    title: value.title ?? null,
+    runButton: value.runButton ?? null,
+    resetButtonCount: value.resetButtonCount ?? null,
+    textIntegrity: summarizeTextIntegrity(value.textIntegrity),
   }
 }
 
@@ -321,12 +389,13 @@ function summarizeScreenshotEvidence(value) {
   }
 }
 
-async function buildEvidenceManifest({ desktop, phone, chrome, screenshots }) {
+async function buildEvidenceManifest({ desktop, phone, chrome, devEnv, screenshots }) {
   const entries = []
   const jsonFiles = [
     ['Desktop JSON', desktopFile, Boolean(desktop)],
     ['Windows Chrome JSON', chromeFile, Boolean(chrome)],
     ['Phone JSON', phoneFile, Boolean(phone)],
+    ['Dev Environment JSON', devEnvFile, Boolean(devEnv)],
   ]
 
   for (const [label, file, present] of jsonFiles) {
@@ -374,6 +443,7 @@ function formatDesktop(value) {
     `- Title: ${checks.localizedUi?.title ?? 'unknown'}`,
     `- Chinese text integrity: ${formatTextIntegrity(checks.localizedUi?.textIntegrity)}`,
     `- First viewport visibility: ${formatFirstViewportVisibility(checks.firstViewportVisibility)}`,
+    `- Host environment: ${formatHostEnvironment(checks.hostEnvironment)}`,
     `- Browser environment: ${formatBrowserEnvironment(checks.browserEnvironment)}`,
     `- Responsive layout: ${formatResponsiveLayout(checks.responsiveLayout)}`,
     `- Runtime health: ${formatRuntimeHealth(checks.runtimeHealth)}`,
@@ -389,7 +459,7 @@ function formatDesktop(value) {
   ]
 }
 
-function validateEvidence({ desktop, phone, chrome }) {
+function validateEvidence({ desktop, phone, chrome, devEnv, browserParity }) {
   const errors = []
   const requiredItems = []
 
@@ -404,6 +474,9 @@ function validateEvidence({ desktop, phone, chrome }) {
   if (isRequiredFile(chromeFile)) {
     validateDesktopEvidence('Windows Chrome', chrome, errors)
     requiredItems.push(['Windows Chrome', chrome])
+  }
+  if (isRequiredFile(devEnvFile)) {
+    validateDevEnvEvidence(devEnv, errors)
   }
 
   const runIds = requiredItems
@@ -429,8 +502,30 @@ function validateEvidence({ desktop, phone, chrome }) {
   }
 }
 
-function validateBrowserParity(desktop, chrome) {
-  if (!isRequiredFile(desktopFile) || !isRequiredFile(chromeFile)) {
+function validateDevEnvEvidence(value, errors) {
+  if (!value) {
+    errors.push('Dev environment evidence file is missing.')
+    return
+  }
+  if (value.success !== true) {
+    errors.push('Dev environment preflight success is not true.')
+  }
+  if (value.required !== true) {
+    errors.push('Dev environment preflight must run in required mode.')
+  }
+  if (!Array.isArray(value.checks) || value.checks.length === 0) {
+    errors.push('Dev environment preflight checks are missing.')
+    return
+  }
+
+  const failingRequired = value.checks.filter((check) => check?.required === true && check.ok !== true)
+  if (failingRequired.length) {
+    errors.push(`Dev environment required checks failed: ${failingRequired.map((check) => check.name).join(', ')}.`)
+  }
+}
+
+function summarizeBrowserParity(desktop, chrome) {
+  if (!desktop?.run || !chrome?.run || !isRequiredFile(desktopFile) || !isRequiredFile(chromeFile)) {
     return {
       checked: false,
       success: null,
@@ -438,92 +533,7 @@ function validateBrowserParity(desktop, chrome) {
     }
   }
 
-  const errors = []
-  const desktopChecks = desktop?.checks ?? {}
-  const chromeChecks = chrome?.checks ?? {}
-  compareValue(errors, 'title', desktopChecks.localizedUi?.title, chromeChecks.localizedUi?.title)
-  compareValue(
-    errors,
-    'text integrity mojibake count',
-    desktopChecks.localizedUi?.textIntegrity?.mojibakeCount,
-    chromeChecks.localizedUi?.textIntegrity?.mojibakeCount,
-  )
-  compareValue(
-    errors,
-    'text integrity missing phrase count',
-    desktopChecks.localizedUi?.textIntegrity?.missingPhraseCount,
-    chromeChecks.localizedUi?.textIntegrity?.missingPhraseCount,
-  )
-  compareValue(
-    errors,
-    'first viewport panel count',
-    desktopChecks.firstViewportVisibility?.panels?.length,
-    chromeChecks.firstViewportVisibility?.panels?.length,
-  )
-  compareValue(
-    errors,
-    'first viewport min visible ratio',
-    desktopChecks.firstViewportVisibility?.minVisibleRatio,
-    chromeChecks.firstViewportVisibility?.minVisibleRatio,
-  )
-  compareValue(errors, 'scene', desktopChecks.scenePromptHandoff?.scene, chromeChecks.scenePromptHandoff?.scene)
-  compareValue(
-    errors,
-    'scene raw image retained',
-    desktopChecks.scenePromptHandoff?.rawImageRetained,
-    chromeChecks.scenePromptHandoff?.rawImageRetained,
-  )
-  compareValue(
-    errors,
-    'scene raw image echoed',
-    desktopChecks.scenePromptHandoff?.rawImageEchoed,
-    chromeChecks.scenePromptHandoff?.rawImageEchoed,
-  )
-  compareValue(errors, 'web confirmation source', desktopChecks.webConfirmExecute?.latestSource, chromeChecks.webConfirmExecute?.latestSource)
-  compareValue(errors, 'offline fallback source', desktopChecks.offlineFallback?.latestSource, chromeChecks.offlineFallback?.latestSource)
-  compareValue(
-    errors,
-    'external accepted action count',
-    desktopChecks.externalExecutionSync?.acceptedActionCount,
-    chromeChecks.externalExecutionSync?.acceptedActionCount,
-  )
-  compareValue(errors, 'external sync source', desktopChecks.externalExecutionSync?.latestSource, chromeChecks.externalExecutionSync?.latestSource)
-  compareValue(errors, 'runtime issue count', desktopChecks.runtimeHealth?.issueCount, chromeChecks.runtimeHealth?.issueCount)
-  compareValue(errors, 'screenshot count', desktopChecks.screenshotEvidence?.count, chromeChecks.screenshotEvidence?.count)
-  compareValue(
-    errors,
-    'screenshot unique digest count',
-    desktopChecks.screenshotEvidence?.uniqueDigestCount,
-    chromeChecks.screenshotEvidence?.uniqueDigestCount,
-  )
-
-  const desktopLayout = layoutSignature(desktopChecks.responsiveLayout)
-  const chromeLayout = layoutSignature(chromeChecks.responsiveLayout)
-  compareValue(errors, 'responsive layout', desktopLayout, chromeLayout)
-
-  return {
-    checked: true,
-    success: errors.length === 0,
-    errors,
-  }
-}
-
-function compareValue(errors, label, left, right) {
-  if (left !== right) {
-    errors.push(`${label} mismatch (${left ?? 'missing'} != ${right ?? 'missing'})`)
-  }
-}
-
-function layoutSignature(value) {
-  if (!Array.isArray(value)) return null
-  return value
-    .map(
-      (item) =>
-        `${item.label}:${item.overflowX}:${item.overflowingButtons?.length ?? 0}:${
-          item.overlappingPanelPairs?.length ?? 0
-        }:${item.panelCount ?? 'missing'}`,
-    )
-    .join('|')
+  return recomputeBrowserParity(desktop, chrome)
 }
 
 function validateDesktopEvidence(label, value, errors) {
@@ -537,6 +547,7 @@ function validateDesktopEvidence(label, value, errors) {
 
   const checks = value.checks ?? {}
   const requiredChecks = [
+    'hostEnvironment',
     'browserEnvironment',
     'localizedUi',
     'firstViewportVisibility',
@@ -553,6 +564,7 @@ function validateDesktopEvidence(label, value, errors) {
   if (missing.length) {
     errors.push(`${label} missing checks: ${missing.join(', ')}.`)
   }
+  validateHostEnvironment(checks.hostEnvironment, errors, label)
 
   if (!Array.isArray(value.screenshots) || value.screenshots.length !== 6) {
     errors.push(`${label} expected 6 screenshots, got ${value.screenshots?.length ?? 0}.`)
@@ -589,6 +601,28 @@ function validateDesktopEvidence(label, value, errors) {
   }
 }
 
+function validateHostEnvironment(value, errors, label) {
+  if (!value || typeof value !== 'object') {
+    return
+  }
+
+  if (!['win32', 'darwin', 'linux'].includes(value.platform)) {
+    errors.push(`${label} host platform must identify a supported desktop OS.`)
+  }
+  if (!['x64', 'arm64'].includes(value.arch)) {
+    errors.push(`${label} host architecture must identify a supported desktop CPU architecture.`)
+  }
+  if (typeof value.nodeVersion !== 'string' || !/^\d+\.\d+\.\d+$/u.test(value.nodeVersion)) {
+    errors.push(`${label} host Node.js version must be semantic.`)
+  }
+  if (!Number.isInteger(value.nodeMajorVersion) || value.nodeMajorVersion < 20) {
+    errors.push(`${label} host Node.js major version must be at least 20.`)
+  }
+  if (typeof value.ci !== 'boolean') {
+    errors.push(`${label} host CI flag must be boolean.`)
+  }
+}
+
 function validatePhoneEvidence(value, errors) {
   if (!value) {
     errors.push('Phone evidence file is missing.')
@@ -612,11 +646,9 @@ function validatePhoneEvidence(value, errors) {
   if (missing.length) {
     errors.push(`Phone missing checks: ${missing.join(', ')}.`)
   }
-  if (checks.frontCamera && checks.frontCamera.ready !== true) {
-    errors.push('Phone front camera is not ready.')
-  }
-  if (checks.frontCamera?.facingMode && checks.frontCamera.facingMode !== 'user') {
-    errors.push(`Phone camera facingMode is ${checks.frontCamera.facingMode}.`)
+  validatePhoneFrontCamera(checks.frontCamera, errors)
+  if (checks.localizedUi?.textIntegrity?.missingPhraseCount !== 0 || checks.localizedUi?.textIntegrity?.mojibakeCount !== 0) {
+    errors.push('Phone localized text integrity proof is incomplete.')
   }
   if (checks.runtimeHealth && checks.runtimeHealth.success !== true) {
     errors.push('Phone runtime health is not clean.')
@@ -624,6 +656,30 @@ function validatePhoneEvidence(value, errors) {
   if (checks.scene && checks.scene.rawImageNotRetained !== true) {
     errors.push('Phone scene privacy proof is incomplete.')
   }
+}
+
+function validatePhoneFrontCamera(value, errors) {
+  if (!value || typeof value !== 'object') {
+    return
+  }
+
+  if (value.ready !== true) errors.push('Phone front camera is not ready.')
+  if (value.facingMode !== 'user') {
+    errors.push(`Phone front camera facingMode must be user, got ${value.facingMode ?? 'missing'}.`)
+  }
+  if (!positiveNumber(value.width) || !positiveNumber(value.height)) {
+    errors.push('Phone front camera dimensions must be positive.')
+  }
+  if (value.active !== true) errors.push('Phone front camera stream must be active.')
+  if (value.trackState !== 'live') {
+    errors.push(`Phone front camera trackState must be live, got ${value.trackState ?? 'missing'}.`)
+  }
+  if (typeof value.status !== 'string' || !value.status.includes('前置摄像头已就绪')) {
+    errors.push('Phone front camera status must confirm the front camera is ready.')
+  }
+  if (value.mirrored !== true) errors.push('Phone front camera preview must be mirrored.')
+  if (value.objectFit !== 'cover') errors.push('Phone front camera preview objectFit must be cover.')
+  if (value.error !== '') errors.push('Phone front camera error must be empty.')
 }
 
 function isRequiredFile(file) {
@@ -640,7 +696,9 @@ function formatPhone(value) {
   const speech = checks.speechInput ?? {}
   return [
     `- Title: ${checks.localizedUi?.title ?? 'unknown'}`,
-    `- Front camera: ${camera.ready ? 'ready' : 'not ready'} (${camera.facingMode ?? 'unknown'}, ${camera.width ?? '?'}x${camera.height ?? '?'})`,
+    `- Chinese text integrity: ${formatTextIntegrity(checks.localizedUi?.textIntegrity)}`,
+    `- Front camera: ${camera.ready ? 'ready' : 'not ready'} (${camera.facingMode ?? 'unknown'}, ${camera.width ?? '?'}x${camera.height ?? '?'}, mirrored=${formatBoolean(camera.mirrored)})`,
+    `- Front camera status: ${camera.status ?? 'unknown'}`,
     `- Speech recognition: ${speech.support?.webkitSpeechRecognition || speech.support?.SpeechRecognition ? 'available' : 'unavailable'}`,
     `- Speech status: ${speech.listeningState?.status ?? 'unknown'}`,
     `- Runtime health: ${formatRuntimeHealth(checks.runtimeHealth)}`,
@@ -650,6 +708,17 @@ function formatPhone(value) {
     `- External sync source: ${checks.externalExecution?.latestSource ?? 'unknown'}`,
     `- External accepted actions: ${checks.externalExecution?.acceptedActionCount ?? 'unknown'}`,
   ]
+}
+
+function formatDevEnvPreflight(value) {
+  if (!value) return 'not run'
+  const checks = Array.isArray(value.checks) ? value.checks : []
+  const okCount = checks.filter((check) => check?.ok === true).length
+  const warnCount = checks.filter((check) => check?.status === 'WARN').length
+  const failCount = checks.filter((check) => check?.status === 'FAIL').length
+  const phone = value.requirePhone ? 'phone required' : 'phone optional'
+
+  return `${formatStatus(value.success)} (${okCount} ok, ${warnCount} warn, ${failCount} fail, ${phone})`
 }
 
 function formatPromptHandoff(value) {
@@ -692,6 +761,14 @@ function formatBrowserEnvironment(value) {
   return `${value.browserName ?? browserFamily} (${browserFamily}, ${mode}${
     executable ? `, ${executable}` : ''
   }, ${viewport.innerWidth ?? '?'}x${viewport.innerHeight ?? '?'}, dpr ${viewport.devicePixelRatio ?? '?'}, ${media}, ${speech})`
+}
+
+function formatHostEnvironment(value) {
+  if (!value) return 'not checked'
+
+  return `${value.platform ?? '?'} ${value.arch ?? '?'} / Node ${value.nodeVersion ?? '?'} / ci:${
+    value.ci === true ? 'yes' : 'no'
+  }`
 }
 
 function chromeMajorVersion(value) {
@@ -760,6 +837,10 @@ function formatStatus(success) {
   if (success === true) return 'pass'
   if (success === false) return 'fail'
   return 'unknown'
+}
+
+function positiveNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
 }
 
 function collectScreenshots(values) {

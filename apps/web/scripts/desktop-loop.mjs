@@ -41,6 +41,7 @@ let context
 let runtimeHealth
 
 try {
+  await runCheck('hostEnvironment', () => verifyHostEnvironment())
   await postJson(`${apiBase}/devices/reset`, undefined)
 
   context = await chromium.launchPersistentContext(userDataDir, {
@@ -150,6 +151,29 @@ function verifyChineseTextIntegrity(bodyText) {
     missingPhraseCount: missingPhrases.length,
     mojibakeCount: mojibakeMatches.length,
   }
+}
+
+function verifyHostEnvironment() {
+  const nodeMajorVersion = Number(process.versions.node.split('.')[0])
+  const host = {
+    platform: process.platform,
+    arch: process.arch,
+    nodeVersion: process.versions.node,
+    nodeMajorVersion,
+    ci: process.env.CI === 'true',
+  }
+
+  if (!Number.isFinite(nodeMajorVersion) || nodeMajorVersion < 20) {
+    throw new Error(`Unexpected Node.js version for desktop loop: ${process.versions.node}`)
+  }
+  if (!['win32', 'darwin', 'linux'].includes(host.platform)) {
+    throw new Error(`Unexpected host platform for desktop loop: ${host.platform}`)
+  }
+  if (!['x64', 'arm64'].includes(host.arch)) {
+    throw new Error(`Unexpected host architecture for desktop loop: ${host.arch}`)
+  }
+
+  return host
 }
 
 async function verifyFirstViewportVisibility(page) {

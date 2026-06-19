@@ -4,10 +4,15 @@ param(
   [switch]$IncludePhone,
   [switch]$IncludeChrome,
   [switch]$SkipDesktop,
+  [switch]$SkipPreflight,
+  [switch]$DryRun,
   [int]$StartupTimeoutSeconds = 60,
   [int]$StepTimeoutSeconds = 180,
   [string]$ReportPath = "",
-  [string]$SummaryPath = ""
+  [string]$SummaryPath = "",
+  [string]$AdbPath = "",
+  [string]$PartialEvidenceDir = "",
+  [int]$BrowserWrapperSharedStateLockTimeoutSeconds = 1200
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,19 +23,177 @@ $WebDir = Join-Path $Root "apps\web"
 $ApiPort = [System.Uri]$ApiBase | Select-Object -ExpandProperty Port
 $WebPort = [System.Uri]$AppUrl | Select-Object -ExpandProperty Port
 $FullLoopRunId = "full-loop-{0:yyyyMMdd-HHmmss}-{1}" -f (Get-Date), ([guid]::NewGuid().ToString("N").Substring(0, 8))
+$IsPartialEvidenceRun = $SkipDesktop -or (-not $IncludePhone) -or (-not $IncludeChrome)
+if (-not $PartialEvidenceDir) {
+  $PartialEvidenceDir = Join-Path $Root ("assets\tmp\full-loop-partial\{0}" -f $FullLoopRunId)
+}
+elseif (-not [System.IO.Path]::IsPathRooted($PartialEvidenceDir)) {
+  $PartialEvidenceDir = Join-Path $Root $PartialEvidenceDir
+}
+$PreflightJsonPath = if ($IsPartialEvidenceRun) {
+  Join-Path $PartialEvidenceDir "dev-env-check.json"
+} else {
+  Join-Path $Root "assets\tmp\dev-env-check.json"
+}
+$PreflightEvidencePath = $PreflightJsonPath
+$ReportPathProvided = -not [string]::IsNullOrWhiteSpace($ReportPath)
+$SummaryPathProvided = -not [string]::IsNullOrWhiteSpace($SummaryPath)
 
-if (-not $ReportPath) {
-  $ReportPath = Join-Path $Root "assets\demo\full-loop-report.md"
+function Get-DefaultAdbCandidates {
+  $Candidates = New-Object System.Collections.Generic.List[string]
+  $LocalAppDataValues = @(
+    $env:LOCALAPPDATA,
+    [Environment]::GetFolderPath("LocalApplicationData")
+  ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+
+  foreach ($LocalAppData in $LocalAppDataValues) {
+    $Candidates.Add([System.IO.Path]::Combine($LocalAppData, "Android", "Sdk", "platform-tools", "adb.exe"))
+  }
+
+  $PathAdb = Get-Command "adb.exe" -ErrorAction SilentlyContinue
+  if ($PathAdb -and $PathAdb.Source) {
+    $Candidates.Add($PathAdb.Source)
+  }
+
+  return @($Candidates.ToArray() | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+}
+
+function Resolve-AdbExecutable {
+  param([string]$ExplicitPath)
+
+  $Candidates = if ([string]::IsNullOrWhiteSpace($ExplicitPath)) {
+    @(Get-DefaultAdbCandidates)
+  } else {
+    @($ExplicitPath)
+  }
+
+  foreach ($Candidate in $Candidates) {
+    if (Test-Path -LiteralPath $Candidate) {
+      return (Get-Item -LiteralPath $Candidate).FullName
+    }
+  }
+
+  if ($Candidates.Count -gt 0) {
+    return $Candidates[0]
+  }
+
+  return ""
+}
+
+if ($IncludePhone) {
+  $AdbPath = Resolve-AdbExecutable -ExplicitPath $AdbPath
+}
+
+if ($IsPartialEvidenceRun) {
+  $DesktopEvidenceFile = Join-Path $PartialEvidenceDir "desktop-loop.json"
+  $PhoneEvidenceFile = Join-Path $PartialEvidenceDir "phone-loop.json"
+  $ChromeEvidenceFile = Join-Path $PartialEvidenceDir "chrome-loop.json"
+  $DesktopScreenshotDir = Join-Path $PartialEvidenceDir "playwright-chromium-screens"
+  $ChromeScreenshotDir = Join-Path $PartialEvidenceDir "windows-chrome-screens"
+}
+else {
+  $DesktopEvidenceFile = Join-Path $Root "assets\demo\desktop-loop.json"
+  $PhoneEvidenceFile = Join-Path $Root "assets\demo\phone-loop.json"
+  $ChromeEvidenceFile = Join-Path $Root "assets\demo\chrome-loop.json"
+  $DesktopScreenshotDir = Join-Path $Root "assets\demo\playwright-chromium-screens"
+  $ChromeScreenshotDir = Join-Path $Root "assets\demo\windows-chrome-screens"
+}
+
+if (-not $ReportPathProvided) {
+  $ReportPath = if ($IsPartialEvidenceRun) {
+    Join-Path $PartialEvidenceDir "full-loop-report.md"
+  } else {
+    Join-Path $Root "assets\demo\full-loop-report.md"
+  }
 }
 elseif (-not [System.IO.Path]::IsPathRooted($ReportPath)) {
   $ReportPath = Join-Path $Root $ReportPath
 }
 
-if (-not $SummaryPath) {
-  $SummaryPath = Join-Path $Root "assets\demo\full-loop-report.json"
+if (-not $SummaryPathProvided) {
+  $SummaryPath = if ($ReportPathProvided) {
+    [System.IO.Path]::ChangeExtension($ReportPath, ".json")
+  } elseif ($IsPartialEvidenceRun) {
+    Join-Path $PartialEvidenceDir "full-loop-report.json"
+  } else {
+    Join-Path $Root "assets\demo\full-loop-report.json"
+  }
 }
 elseif (-not [System.IO.Path]::IsPathRooted($SummaryPath)) {
   $SummaryPath = Join-Path $Root $SummaryPath
+}
+
+function Convert-ToPlanPath {
+  param([string]$Path)
+
+  if (-not $Path -or $Path.StartsWith("__")) {
+    return $Path
+  }
+
+  $FullPath = [System.IO.Path]::GetFullPath($Path)
+  $RootPath = [System.IO.Path]::GetFullPath([string]$Root).TrimEnd("\", "/")
+  $RootPrefix = $RootPath + [System.IO.Path]::DirectorySeparatorChar
+
+  if ($FullPath.StartsWith($RootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+    return $FullPath.Substring($RootPrefix.Length).Replace("\", "/")
+  }
+
+  return $FullPath
+}
+
+function New-FullLoopPlan {
+  $DesktopEvidencePath = if ($SkipDesktop) { "__desktop_not_run__.json" } else { $DesktopEvidenceFile }
+  $PhoneEvidencePath = if ($IncludePhone) { $PhoneEvidenceFile } else { "__phone_not_run__.json" }
+  $ChromeEvidencePath = if ($IncludeChrome) { $ChromeEvidenceFile } else { "__chrome_not_run__.json" }
+  $ResolvedPreflightEvidencePath = if ($SkipPreflight) { "__dev_env_not_run__.json" } else { $PreflightEvidencePath }
+  $RunGlobalEvidenceSelfTests = (-not $SkipDesktop) -and $IncludePhone -and $IncludeChrome
+
+  return [pscustomobject]@{
+    runId = $FullLoopRunId
+    partialEvidenceRun = [bool]$IsPartialEvidenceRun
+    requestedLoops = [pscustomobject]@{
+      desktop = -not [bool]$SkipDesktop
+      phone = [bool]$IncludePhone
+      windowsChrome = [bool]$IncludeChrome
+    }
+    options = [pscustomobject]@{
+      skipPreflight = [bool]$SkipPreflight
+      reportPathProvided = [bool]$ReportPathProvided
+      summaryPathProvided = [bool]$SummaryPathProvided
+    }
+    outputs = [pscustomobject]@{
+      partialEvidenceDir = Convert-ToPlanPath $PartialEvidenceDir
+      reportPath = Convert-ToPlanPath $ReportPath
+      summaryPath = Convert-ToPlanPath $SummaryPath
+      preflightJsonPath = Convert-ToPlanPath $PreflightJsonPath
+      preflightEvidencePath = Convert-ToPlanPath $ResolvedPreflightEvidencePath
+    }
+    evidence = [pscustomobject]@{
+      desktopJson = Convert-ToPlanPath $DesktopEvidencePath
+      phoneJson = Convert-ToPlanPath $PhoneEvidencePath
+      windowsChromeJson = Convert-ToPlanPath $ChromeEvidencePath
+      desktopScreenshotDir = Convert-ToPlanPath $DesktopScreenshotDir
+      windowsChromeScreenshotDir = Convert-ToPlanPath $ChromeScreenshotDir
+    }
+    gates = [pscustomobject]@{
+      preflightRun = -not [bool]$SkipPreflight
+      summaryAllowSkipDesktop = [bool]$SkipDesktop
+      summaryRequirePhone = [bool]$IncludePhone
+      summaryRequireChrome = [bool]$IncludeChrome
+      reportSelftest = [bool]$RunGlobalEvidenceSelfTests
+      phoneSelftest = [bool]($IncludePhone -and (-not $SkipDesktop))
+      desktopAndSummarySelftests = [bool]($IncludeChrome -and (-not $SkipDesktop))
+      browserWrapperSharedStateLock = [pscustomobject]@{
+        name = "Global\HCEdgeBrowserLoopGate"
+        timeoutSeconds = $BrowserWrapperSharedStateLockTimeoutSeconds
+      }
+    }
+  }
+}
+
+if ($DryRun) {
+  New-FullLoopPlan | ConvertTo-Json -Depth 8
+  exit 0
 }
 
 function Test-HttpOk {
@@ -255,6 +418,32 @@ function Ensure-Web {
   Wait-HttpOk $AppUrl "Web"
 }
 
+if (-not $SkipPreflight) {
+  $PreflightArgs = @(
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "$PSScriptRoot\check-dev-env.ps1",
+    "-Required",
+    "-ResultJsonPath",
+    $PreflightJsonPath
+  )
+
+  if ($IncludePhone) {
+    $PreflightArgs += "-RequirePhone"
+    if ($AdbPath) {
+      $PreflightArgs += "-AdbPath"
+      $PreflightArgs += $AdbPath
+    }
+  }
+
+  Invoke-CheckedScript "development environment preflight" $PreflightArgs
+}
+else {
+  $PreflightEvidencePath = "__dev_env_not_run__.json"
+}
+
 Ensure-Api
 Ensure-Web
 
@@ -262,15 +451,21 @@ $env:FULL_LOOP_RUN_ID = $FullLoopRunId
 Write-Host "Full loop run id: $FullLoopRunId"
 
 if (-not $SkipDesktop) {
-  Invoke-CheckedScript "desktop loop" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$PSScriptRoot\check-desktop-loop.ps1", "-AppUrl", $AppUrl, "-ApiBase", $ApiBase)
+  Invoke-CheckedScript "desktop loop" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$PSScriptRoot\check-desktop-loop.ps1", "-AppUrl", $AppUrl, "-ApiBase", $ApiBase, "-OutputPath", $DesktopEvidenceFile, "-ScreenshotDir", $DesktopScreenshotDir, "-SharedStateLockTimeoutSeconds", "$BrowserWrapperSharedStateLockTimeoutSeconds")
 }
 
 if ($IncludePhone) {
-  Invoke-CheckedScript "phone loop" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$PSScriptRoot\check-phone-loop.ps1", "-AppUrl", $AppUrl, "-ApiBase", $ApiBase)
+  $PhoneLoopArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$PSScriptRoot\check-phone-loop.ps1", "-AppUrl", $AppUrl, "-ApiBase", $ApiBase, "-OutputPath", $PhoneEvidenceFile)
+  if ($AdbPath) {
+    $PhoneLoopArgs += "-AdbPath"
+    $PhoneLoopArgs += $AdbPath
+  }
+
+  Invoke-CheckedScript "phone loop" $PhoneLoopArgs
 }
 
 if ($IncludeChrome) {
-  Invoke-CheckedScript "chrome loop" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$PSScriptRoot\check-chrome-loop.ps1", "-AppUrl", $AppUrl, "-ApiBase", $ApiBase)
+  Invoke-CheckedScript "chrome loop" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$PSScriptRoot\check-chrome-loop.ps1", "-AppUrl", $AppUrl, "-ApiBase", $ApiBase, "-OutputPath", $ChromeEvidenceFile, "-ScreenshotDir", $ChromeScreenshotDir, "-SharedStateLockTimeoutSeconds", "$BrowserWrapperSharedStateLockTimeoutSeconds")
 }
 
 Push-Location $WebDir
@@ -279,24 +474,25 @@ try {
     $DesktopEvidencePath = "__desktop_not_run__.json"
   }
   else {
-    $DesktopEvidencePath = Join-Path $Root "assets\demo\desktop-loop.json"
+    $DesktopEvidencePath = $DesktopEvidenceFile
   }
 
   $ReportArgs = @($ReportPath, $DesktopEvidencePath)
   if ($IncludePhone) {
-    $ReportArgs += (Join-Path $Root "assets\demo\phone-loop.json")
+    $ReportArgs += $PhoneEvidenceFile
   }
   else {
     $ReportArgs += "__phone_not_run__.json"
   }
-  $ReportArgs += (Join-Path $Root "assets\demo\desktop-screens")
+  $ReportArgs += $DesktopScreenshotDir
   if ($IncludeChrome) {
-    $ReportArgs += (Join-Path $Root "assets\demo\chrome-loop.json")
+    $ReportArgs += $ChromeEvidenceFile
   }
   else {
     $ReportArgs += "__chrome_not_run__.json"
   }
   $ReportArgs += $SummaryPath
+  $ReportArgs += $PreflightEvidencePath
 
   npm run report:loop -- @ReportArgs
   if ($LASTEXITCODE -ne 0) {
@@ -304,6 +500,9 @@ try {
   }
 
   $SummaryCheckArgs = @($SummaryPath)
+  if ($SkipDesktop) {
+    $SummaryCheckArgs += "--allow-skip-desktop"
+  }
   if ($IncludePhone) {
     $SummaryCheckArgs += "--require-phone"
   }
@@ -316,16 +515,41 @@ try {
     throw "summary:check failed."
   }
 
-  if ($IncludeChrome) {
+  $CanRunGlobalEvidenceSelfTests = (-not $SkipDesktop) -and $IncludePhone -and $IncludeChrome
+
+  if ($CanRunGlobalEvidenceSelfTests) {
+    npm run report:selftest
+    if ($LASTEXITCODE -ne 0) {
+      throw "report:selftest failed."
+    }
+  }
+  else {
+    Write-Host "Skipping report:selftest because this is not a complete desktop+phone+Chrome evidence run."
+  }
+
+  if ($IncludePhone -and (-not $SkipDesktop)) {
+    npm run phone:evidence:selftest
+    if ($LASTEXITCODE -ne 0) {
+      throw "phone:evidence:selftest failed."
+    }
+  }
+  elseif ($IncludePhone) {
+    Write-Host "Skipping phone:evidence:selftest because desktop evidence was skipped."
+  }
+
+  if ($IncludeChrome -and (-not $SkipDesktop)) {
     npm run desktop:evidence:selftest
     if ($LASTEXITCODE -ne 0) {
       throw "desktop:evidence:selftest failed."
     }
 
-    npm run summary:selftest
+    npm run summary:selftest -- $SummaryPath
     if ($LASTEXITCODE -ne 0) {
       throw "summary:selftest failed."
     }
+  }
+  elseif ($IncludeChrome) {
+    Write-Host "Skipping desktop/summary self-tests because desktop evidence was skipped."
   }
 }
 finally {

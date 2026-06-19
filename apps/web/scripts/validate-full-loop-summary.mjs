@@ -2,10 +2,12 @@ import { createHash } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parityErrorsSignature, recomputeBrowserParity } from './summary-parity.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
-const summaryFile = process.argv[2] ?? path.join(repoRoot, 'assets', 'demo', 'full-loop-report.json')
+const defaultSummaryFile = path.join(repoRoot, 'assets', 'demo', 'full-loop-report.json')
+const { summaryFile, optionArgs } = parseCliArgs(process.argv.slice(2), defaultSummaryFile)
 const EXPECTED_SCREENSHOT_FILES = [
   '01-control-console.png',
   '02-scene-prompt-handoff.png',
@@ -14,7 +16,8 @@ const EXPECTED_SCREENSHOT_FILES = [
   '05-offline-fallback.png',
   '06-external-sync.png',
 ]
-const options = parseOptions(process.argv.slice(3))
+const MIN_LOCALIZED_PHRASE_COUNT = 7
+const options = parseOptions(optionArgs)
 const summary = JSON.parse(await readFile(summaryFile, 'utf8'))
 const errors = await validateSummary(summary, options)
 
@@ -28,14 +31,24 @@ if (errors.length) {
 
 console.log(`Full loop summary validation passed: ${summaryFile}`)
 
+function parseCliArgs(args, defaultFile) {
+  const [firstArg, ...remainingArgs] = args
+  if (firstArg && !firstArg.startsWith('--')) {
+    return { summaryFile: firstArg, optionArgs: remainingArgs }
+  }
+
+  return { summaryFile: defaultFile, optionArgs: args }
+}
+
 function parseOptions(args) {
   return {
     requirePhone: args.includes('--require-phone'),
     requireChrome: args.includes('--require-chrome'),
+    requireDesktop: !args.includes('--allow-skip-desktop'),
   }
 }
 
-async function validateSummary(value, { requirePhone, requireChrome }) {
+async function validateSummary(value, { requirePhone, requireChrome, requireDesktop }) {
   const errors = []
 
   if (!value || typeof value !== 'object') {
@@ -50,6 +63,11 @@ async function validateSummary(value, { requirePhone, requireChrome }) {
   assertString(errors, value.runId, 'runId')
   assertString(errors, value.appUrl, 'appUrl')
   assertString(errors, value.apiBase, 'apiBase')
+  validateDevEnvPreflight(errors, value.environment?.preflight, 'environment.preflight', {
+    generatedAt: value.generatedAt,
+    requirePhone: requirePhone || value.loops?.phone?.run === true,
+  })
+  validatePreflightBeforeLoops(errors, value)
   assertArray(errors, value.evidence?.files, 'evidence.files')
   assertArray(errors, value.evidence?.validationErrors, 'evidence.validationErrors')
 
@@ -58,7 +76,7 @@ async function validateSummary(value, { requirePhone, requireChrome }) {
   }
 
   validateDesktopLoop(errors, value.loops?.desktop, 'loops.desktop', {
-    required: true,
+    required: requireDesktop,
     expectedRunId: value.runId,
     generatedAt: value.generatedAt,
     appUrl: value.appUrl,
@@ -82,10 +100,15 @@ async function validateSummary(value, { requirePhone, requireChrome }) {
     appUrl: value.appUrl,
     apiBase: value.apiBase,
   })
-  validateBrowserParity(errors, value.browserParity, { required: requireChrome })
-  validateBrowserParityAgainstLoops(errors, value, { required: requireChrome })
-  await validateEvidenceManifest(errors, value.evidence?.files, { requirePhone, requireChrome })
-  await validateRawEvidence(errors, value, { requirePhone, requireChrome })
+  validateBrowserParity(errors, value.browserParity, { required: requireChrome && requireDesktop })
+  validateBrowserParityAgainstLoops(errors, value, { required: requireChrome && requireDesktop })
+  await validateEvidenceManifest(errors, value.evidence?.files, {
+    requireDesktop,
+    requirePhone,
+    requireChrome,
+    requireDevEnv: value.environment?.preflight?.run === true,
+  })
+  await validateRawEvidence(errors, value, { requireDesktop, requirePhone, requireChrome })
 
   return errors
 }
@@ -111,6 +134,10 @@ function validateDesktopLoop(
   assertString(errors, loop.title, `${label}.title`)
   assertString(errors, loop.browserName, `${label}.browserName`)
   assertString(errors, loop.pageUrl, `${label}.pageUrl`)
+  validateDesktopLocalizedUi(errors, loop.localizedUi, `${label}.localizedUi`, {
+    title: loop.title,
+    textIntegrity: loop.textIntegrity,
+  })
   validateLoopTiming(errors, loop, label, generatedAt)
   validateLoopUrls(errors, loop, label, { appUrl, apiBase })
 
@@ -123,6 +150,7 @@ function validateDesktopLoop(
     expectedExecutablePath,
     expectedInstalledChromeIdentity: expectedBrowserName === 'windows-chrome',
   })
+  validateHostEnvironment(errors, loop.hostEnvironment, `${label}.hostEnvironment`)
   validateTextIntegrity(errors, loop.textIntegrity, `${label}.textIntegrity`)
   validateFirstViewportVisibility(errors, loop.firstViewportVisibility, `${label}.firstViewportVisibility`)
   validateRuntimeHealth(errors, loop.runtimeHealth, `${label}.runtimeHealth`)
@@ -166,12 +194,15 @@ function validatePhoneLoop(errors, loop, label, { required, expectedRunId, gener
   validateLoopTiming(errors, loop, label, generatedAt)
   validateLoopUrls(errors, loop, label, { appUrl, apiBase })
   validateRuntimeHealth(errors, loop.runtimeHealth, `${label}.runtimeHealth`)
+  validateTextIntegrity(errors, loop.textIntegrity, `${label}.textIntegrity`)
 
   if (loop.frontCamera?.ready !== true) errors.push(`${label}.frontCamera.ready must be true.`)
   if (loop.frontCamera?.facingMode !== 'user') errors.push(`${label}.frontCamera.facingMode must be user.`)
   if (!positiveNumber(loop.frontCamera?.width) || !positiveNumber(loop.frontCamera?.height)) {
     errors.push(`${label}.frontCamera dimensions must be positive.`)
   }
+  if (loop.frontCamera?.mirrored !== true) errors.push(`${label}.frontCamera.mirrored must be true.`)
+  if (loop.frontCamera?.objectFit !== 'cover') errors.push(`${label}.frontCamera.objectFit must be cover.`)
   if (loop.speechInput?.available !== true) errors.push(`${label}.speechInput.available must be true.`)
   if (loop.scene?.rawImageNotRetained !== true) errors.push(`${label}.scene.rawImageNotRetained must be true.`)
   if (loop.scene?.rawImageRetained !== false) errors.push(`${label}.scene.rawImageRetained must be false.`)
@@ -220,91 +251,45 @@ function validateBrowserParityAgainstLoops(errors, summary, { required }) {
   }
 }
 
-function recomputeBrowserParity(desktop, chrome) {
-  const errors = []
-  compareParityValue(errors, 'title', desktop?.title, chrome?.title)
-  compareParityValue(
-    errors,
-    'text integrity mojibake count',
-    desktop?.textIntegrity?.mojibakeCount,
-    chrome?.textIntegrity?.mojibakeCount,
-  )
-  compareParityValue(
-    errors,
-    'text integrity missing phrase count',
-    desktop?.textIntegrity?.missingPhraseCount,
-    chrome?.textIntegrity?.missingPhraseCount,
-  )
-  compareParityValue(
-    errors,
-    'first viewport panel count',
-    desktop?.firstViewportVisibility?.panelCount,
-    chrome?.firstViewportVisibility?.panelCount,
-  )
-  compareParityValue(
-    errors,
-    'first viewport min visible ratio',
-    desktop?.firstViewportVisibility?.minVisibleRatio,
-    chrome?.firstViewportVisibility?.minVisibleRatio,
-  )
-  compareParityValue(errors, 'scene', desktop?.scenePromptHandoff?.scene, chrome?.scenePromptHandoff?.scene)
-  compareParityValue(
-    errors,
-    'scene raw image retained',
-    desktop?.scenePromptHandoff?.rawImageRetained,
-    chrome?.scenePromptHandoff?.rawImageRetained,
-  )
-  compareParityValue(
-    errors,
-    'scene raw image echoed',
-    desktop?.scenePromptHandoff?.rawImageEchoed,
-    chrome?.scenePromptHandoff?.rawImageEchoed,
-  )
-  compareParityValue(errors, 'web confirmation source', desktop?.webConfirmExecute?.latestSource, chrome?.webConfirmExecute?.latestSource)
-  compareParityValue(errors, 'offline fallback source', desktop?.offlineFallback?.latestSource, chrome?.offlineFallback?.latestSource)
-  compareParityValue(
-    errors,
-    'external accepted action count',
-    desktop?.externalExecutionSync?.acceptedActionCount,
-    chrome?.externalExecutionSync?.acceptedActionCount,
-  )
-  compareParityValue(errors, 'external sync source', desktop?.externalExecutionSync?.latestSource, chrome?.externalExecutionSync?.latestSource)
-  compareParityValue(errors, 'runtime issue count', desktop?.runtimeHealth?.issueCount, chrome?.runtimeHealth?.issueCount)
-  compareParityValue(errors, 'screenshot count', desktop?.screenshotEvidence?.count, chrome?.screenshotEvidence?.count)
-  compareParityValue(
-    errors,
-    'screenshot unique digest count',
-    desktop?.screenshotEvidence?.uniqueDigestCount,
-    chrome?.screenshotEvidence?.uniqueDigestCount,
-  )
-  compareParityValue(errors, 'responsive layout', summaryLayoutSignature(desktop?.responsiveLayout), summaryLayoutSignature(chrome?.responsiveLayout))
-
-  return {
-    checked: true,
-    success: errors.length === 0,
-    errors,
+function validateDesktopLocalizedUi(errors, value, label, { title, textIntegrity }) {
+  if (!value || typeof value !== 'object') {
+    errors.push(`${label} is missing.`)
+    return
   }
-}
 
-function compareParityValue(errors, label, left, right) {
-  if (left !== right) {
-    errors.push(`${label} mismatch (${left ?? 'missing'} != ${right ?? 'missing'})`)
+  compareValue(errors, value.title ?? null, title ?? null, `${label}.title legacy field`)
+  if (value.runButton !== '\u751f\u6210\u8ba1\u5212') errors.push(`${label}.runButton must be \u751f\u6210\u8ba1\u5212.`)
+  if (!Number.isInteger(value.resetButtonCount) || value.resetButtonCount < 1) {
+    errors.push(`${label}.resetButtonCount must be at least 1.`)
   }
+  compareValue(
+    errors,
+    value.textIntegrity?.missingPhraseCount ?? null,
+    textIntegrity?.missingPhraseCount ?? null,
+    `${label}.textIntegrity.missingPhraseCount legacy field`,
+  )
+  compareValue(
+    errors,
+    value.textIntegrity?.mojibakeCount ?? null,
+    textIntegrity?.mojibakeCount ?? null,
+    `${label}.textIntegrity.mojibakeCount legacy field`,
+  )
+  validateTextIntegrity(errors, value.textIntegrity, `${label}.textIntegrity`)
 }
 
-function parityErrorsSignature(value) {
-  if (!Array.isArray(value)) return null
-  return value.join('|')
-}
-
-async function validateEvidenceManifest(errors, files, { requirePhone, requireChrome }) {
+async function validateEvidenceManifest(errors, files, { requireDesktop, requirePhone, requireChrome, requireDevEnv }) {
   if (!Array.isArray(files)) return
 
   const presentFiles = files.filter((entry) => entry?.present)
   if (!presentFiles.length) errors.push('evidence.files must contain present entries.')
 
   validateUniquePresentManifestFiles(errors, presentFiles)
-  validateUniqueManifestJsonLabels(errors, files, ['Desktop JSON', 'Windows Chrome JSON', 'Phone JSON'])
+  validateUniqueManifestJsonLabels(errors, files, [
+    'Desktop JSON',
+    'Windows Chrome JSON',
+    'Phone JSON',
+    'Dev Environment JSON',
+  ])
 
   for (const entry of presentFiles) {
     assertString(errors, entry.label, 'evidence.files[].label')
@@ -316,7 +301,14 @@ async function validateEvidenceManifest(errors, files, { requirePhone, requireCh
     await validateManifestFile(errors, entry)
   }
 
-  requireManifestLabel(errors, files, 'Desktop JSON')
+  if (requireDesktop) {
+    requireManifestLabel(errors, files, 'Desktop JSON')
+  }
+  if (requireDevEnv) {
+    requireManifestLabel(errors, files, 'Dev Environment JSON')
+  } else {
+    forbidManifestLabel(errors, files, 'Dev Environment JSON')
+  }
   if (requireChrome) requireManifestLabel(errors, files, 'Windows Chrome JSON')
   if (requirePhone) requireManifestLabel(errors, files, 'Phone JSON')
 }
@@ -390,24 +382,32 @@ function requireManifestLabel(errors, files, label) {
   }
 }
 
-async function validateRawEvidence(errors, summary, { requirePhone, requireChrome }) {
+function forbidManifestLabel(errors, files, label) {
+  const entry = files.find((item) => item?.present && item.label === label)
+  if (entry) {
+    errors.push(`evidence manifest must not include present ${label} when preflight did not run.`)
+  }
+}
+
+async function validateRawEvidence(errors, summary, { requireDesktop, requirePhone, requireChrome }) {
   const manifest = manifestByLabel(summary.evidence?.files)
   const screenshots = manifestByLabel(summary.evidence?.files, 'Screenshot')
-  const rawDesktop = await validateRawDesktopEvidence(
-    errors,
-    summary.loops?.desktop,
-    manifest.get('Desktop JSON'),
-    screenshots,
-    'loops.desktop',
-    {
-      appUrl: summary.appUrl,
-      apiBase: summary.apiBase,
-      expectedManifestLabel: 'Desktop JSON',
-      expectedBrowserName: 'playwright-chromium',
-      expectedExecutablePath: 'bundled',
-      expectedScreenshotDir: 'assets/demo/playwright-chromium-screens/',
-    },
-  )
+  const rawDesktop = requireDesktop
+    ? await validateRawDesktopEvidence(
+        errors,
+        summary.loops?.desktop,
+        manifest.get('Desktop JSON'),
+        screenshots,
+        'loops.desktop',
+        {
+          appUrl: summary.appUrl,
+          apiBase: summary.apiBase,
+          expectedManifestLabel: 'Desktop JSON',
+          expectedBrowserName: 'playwright-chromium',
+          expectedExecutablePath: 'bundled',
+        },
+      )
+    : null
 
   let rawChrome = null
   if (requireChrome || summary.loops?.windowsChrome?.run) {
@@ -423,12 +423,11 @@ async function validateRawEvidence(errors, summary, { requirePhone, requireChrom
         expectedManifestLabel: 'Windows Chrome JSON',
         expectedBrowserName: 'windows-chrome',
         expectedExecutablePath: 'custom',
-        expectedScreenshotDir: 'assets/demo/windows-chrome-screens/',
       },
     )
   }
 
-  if (requireChrome || summary.loops?.windowsChrome?.run) {
+  if (requireDesktop && (requireChrome || summary.loops?.windowsChrome?.run)) {
     validateIndependentBrowserScreenshots(errors, rawDesktop, rawChrome)
   }
 
@@ -437,6 +436,15 @@ async function validateRawEvidence(errors, summary, { requirePhone, requireChrom
       appUrl: summary.appUrl,
       apiBase: summary.apiBase,
     })
+  }
+
+  if (summary.environment?.preflight?.run === true) {
+    await validateRawDevEnvEvidence(
+      errors,
+      summary.environment?.preflight,
+      manifest.get('Dev Environment JSON'),
+      'environment.preflight',
+    )
   }
 }
 
@@ -462,7 +470,7 @@ async function validateRawDesktopEvidence(
   manifestEntry,
   screenshotEntries,
   label,
-  { appUrl, apiBase, expectedManifestLabel, expectedBrowserName, expectedExecutablePath, expectedScreenshotDir },
+  { appUrl, apiBase, expectedManifestLabel, expectedBrowserName, expectedExecutablePath },
 ) {
   if (!manifestEntry?.present || !loop?.run) return null
 
@@ -485,6 +493,12 @@ async function validateRawDesktopEvidence(
   compareValue(errors, raw.pageUrl ?? null, loop.pageUrl ?? null, `${label}.pageUrl raw evidence`)
 
   const checks = raw.checks ?? {}
+  compareValue(
+    errors,
+    hostEnvironmentSignature(checks.hostEnvironment),
+    hostEnvironmentSignature(loop.hostEnvironment),
+    `${label}.hostEnvironment raw evidence`,
+  )
   compareValue(
     errors,
     checks.browserEnvironment?.browserName ?? null,
@@ -585,6 +599,30 @@ async function validateRawDesktopEvidence(
   compareValue(errors, checks.localizedUi?.title ?? null, loop.title ?? null, `${label}.title raw evidence`)
   compareValue(
     errors,
+    checks.localizedUi?.title ?? null,
+    loop.localizedUi?.title ?? null,
+    `${label}.localizedUi.title raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.localizedUi?.runButton ?? null,
+    loop.localizedUi?.runButton ?? null,
+    `${label}.localizedUi.runButton raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.localizedUi?.resetButtonCount ?? null,
+    loop.localizedUi?.resetButtonCount ?? null,
+    `${label}.localizedUi.resetButtonCount raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.localizedUi?.textIntegrity?.requiredPhraseCount ?? null,
+    loop.textIntegrity?.requiredPhraseCount ?? null,
+    `${label}.textIntegrity.requiredPhraseCount raw evidence`,
+  )
+  compareValue(
+    errors,
     checks.localizedUi?.textIntegrity?.missingPhraseCount ?? null,
     loop.textIntegrity?.missingPhraseCount ?? null,
     `${label}.textIntegrity.missingPhraseCount raw evidence`,
@@ -594,6 +632,24 @@ async function validateRawDesktopEvidence(
     checks.localizedUi?.textIntegrity?.mojibakeCount ?? null,
     loop.textIntegrity?.mojibakeCount ?? null,
     `${label}.textIntegrity.mojibakeCount raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.localizedUi?.textIntegrity?.requiredPhraseCount ?? null,
+    loop.localizedUi?.textIntegrity?.requiredPhraseCount ?? null,
+    `${label}.localizedUi.textIntegrity.requiredPhraseCount raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.localizedUi?.textIntegrity?.missingPhraseCount ?? null,
+    loop.localizedUi?.textIntegrity?.missingPhraseCount ?? null,
+    `${label}.localizedUi.textIntegrity.missingPhraseCount raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.localizedUi?.textIntegrity?.mojibakeCount ?? null,
+    loop.localizedUi?.textIntegrity?.mojibakeCount ?? null,
+    `${label}.localizedUi.textIntegrity.mojibakeCount raw evidence`,
   )
   compareValue(
     errors,
@@ -649,7 +705,7 @@ async function validateRawDesktopEvidence(
     checks.screenshotEvidence?.files,
     screenshotEntries,
     label,
-    { expectedScreenshotDir },
+    { expectedBrowserName },
   )
   compareValue(
     errors,
@@ -740,7 +796,7 @@ function validateRawScreenshotsInManifest(
   rawScreenshotFiles,
   screenshotEntries,
   label,
-  { expectedScreenshotDir },
+  { expectedBrowserName },
 ) {
   if (!Array.isArray(screenshots)) {
     errors.push(`${label}.screenshots raw evidence must be an array.`)
@@ -749,8 +805,12 @@ function validateRawScreenshotsInManifest(
 
   const manifestEntriesByFile = new Map(screenshotEntries.map((entry) => [entry.file, entry]))
   const missingFiles = screenshots.filter((screenshot) => !manifestEntriesByFile.has(screenshot))
-  const wrongDirectoryFiles = expectedScreenshotDir
-    ? screenshots.filter((screenshot) => !screenshot.startsWith(expectedScreenshotDir))
+  const expectedDirectory = inferCommonScreenshotDirectory(screenshots)
+  const wrongDirectoryFiles = expectedDirectory
+    ? screenshots.filter((screenshot) => !screenshot.startsWith(expectedDirectory))
+    : screenshots
+  const wrongBrowserDirectoryFiles = expectedBrowserName
+    ? screenshots.filter((screenshot) => !screenshot.includes(`/${expectedBrowserName}-screens/`))
     : []
 
   if (missingFiles.length) {
@@ -758,7 +818,12 @@ function validateRawScreenshotsInManifest(
   }
   if (wrongDirectoryFiles.length) {
     errors.push(
-      `${label}.screenshots must use ${expectedScreenshotDir}: ${wrongDirectoryFiles.join(', ')}.`,
+      `${label}.screenshots must share one screenshot directory: ${wrongDirectoryFiles.join(', ')}.`,
+    )
+  }
+  if (wrongBrowserDirectoryFiles.length) {
+    errors.push(
+      `${label}.screenshots must use a ${expectedBrowserName}-screens directory: ${wrongBrowserDirectoryFiles.join(', ')}.`,
     )
   }
 
@@ -819,6 +884,24 @@ async function validateRawPhoneEvidence(errors, loop, manifestEntry, label, { ap
   compareValue(errors, checks.localizedUi?.title ?? null, loop.title ?? null, `${label}.title raw evidence`)
   compareValue(
     errors,
+    checks.localizedUi?.textIntegrity?.requiredPhraseCount ?? null,
+    loop.textIntegrity?.requiredPhraseCount ?? null,
+    `${label}.textIntegrity.requiredPhraseCount raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.localizedUi?.textIntegrity?.missingPhraseCount ?? null,
+    loop.textIntegrity?.missingPhraseCount ?? null,
+    `${label}.textIntegrity.missingPhraseCount raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.localizedUi?.textIntegrity?.mojibakeCount ?? null,
+    loop.textIntegrity?.mojibakeCount ?? null,
+    `${label}.textIntegrity.mojibakeCount raw evidence`,
+  )
+  compareValue(
+    errors,
     checks.runtimeHealth?.issueCount ?? null,
     loop.runtimeHealth?.issueCount ?? null,
     `${label}.runtimeHealth.issueCount raw evidence`,
@@ -832,6 +915,18 @@ async function validateRawPhoneEvidence(errors, loop, manifestEntry, label, { ap
   )
   compareValue(errors, checks.frontCamera?.width ?? null, loop.frontCamera?.width ?? null, `${label}.frontCamera.width raw evidence`)
   compareValue(errors, checks.frontCamera?.height ?? null, loop.frontCamera?.height ?? null, `${label}.frontCamera.height raw evidence`)
+  compareValue(
+    errors,
+    checks.frontCamera?.mirrored ?? null,
+    loop.frontCamera?.mirrored ?? null,
+    `${label}.frontCamera.mirrored raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.frontCamera?.objectFit ?? null,
+    loop.frontCamera?.objectFit ?? null,
+    `${label}.frontCamera.objectFit raw evidence`,
+  )
   compareValue(
     errors,
     Boolean(checks.speechInput?.support?.SpeechRecognition || checks.speechInput?.support?.webkitSpeechRecognition),
@@ -861,6 +956,28 @@ async function validateRawPhoneEvidence(errors, loop, manifestEntry, label, { ap
     checks.externalExecution?.acceptedActionCount ?? null,
     loop.externalExecution?.acceptedActionCount ?? null,
     `${label}.externalExecution.acceptedActionCount raw evidence`,
+  )
+}
+
+async function validateRawDevEnvEvidence(errors, preflight, manifestEntry, label) {
+  if (!manifestEntry?.present) {
+    errors.push(`${label} manifest entry is missing.`)
+    return
+  }
+  if (!preflight?.run) return
+
+  const raw = await readManifestJson(errors, manifestEntry, label)
+  if (!raw) return
+
+  compareValue(errors, raw.success === true, preflight.success, `${label}.success raw evidence`)
+  compareValue(errors, raw.generatedAt ?? null, preflight.generatedAt ?? null, `${label}.generatedAt raw evidence`)
+  compareValue(errors, raw.required ?? null, preflight.required ?? null, `${label}.required raw evidence`)
+  compareValue(errors, raw.requirePhone ?? null, preflight.requirePhone ?? null, `${label}.requirePhone raw evidence`)
+  compareValue(
+    errors,
+    devEnvChecksSignature(raw.checks),
+    devEnvChecksSignature(preflight.checks),
+    `${label}.checks raw evidence`,
   )
 }
 
@@ -899,26 +1016,127 @@ function responsiveLayoutSignature(value) {
     .join('|')
 }
 
-function summaryLayoutSignature(value) {
-  if (!Array.isArray(value)) return null
-  return value
-    .map(
-      (item) =>
-        `${item.label}:${item.overflowX}:${item.overflowingButtonCount ?? 0}:${
-          item.overlappingPanelPairCount ?? 0
-        }:${item.panelCount ?? 'missing'}`,
-    )
-    .join('|')
-}
-
 function screenshotFilesSignature(value) {
   if (!Array.isArray(value)) return null
   return value.join('|')
 }
 
+function inferCommonScreenshotDirectory(screenshots) {
+  if (!Array.isArray(screenshots) || screenshots.length === 0) return null
+  const directories = Array.from(new Set(screenshots.map((screenshot) => screenshot.slice(0, screenshot.lastIndexOf('/') + 1))))
+  return directories.length === 1 ? directories[0] : null
+}
+
 function browserViewportSignature(value) {
   if (!value || typeof value !== 'object') return null
   return [value.innerWidth ?? null, value.innerHeight ?? null, value.devicePixelRatio ?? null].join(':')
+}
+
+function hostEnvironmentSignature(value) {
+  if (!value || typeof value !== 'object') return null
+  return [
+    value.platform ?? null,
+    value.arch ?? null,
+    value.nodeVersion ?? null,
+    value.nodeMajorVersion ?? null,
+    value.ci ?? null,
+  ].join(':')
+}
+
+function devEnvChecksSignature(value) {
+  if (!Array.isArray(value)) return null
+  return value
+    .map((check) =>
+      [
+        check?.name ?? null,
+        check?.category ?? null,
+        check?.ok ?? null,
+        check?.required ?? null,
+        check?.status ?? null,
+        check?.detail ?? null,
+      ].join(':'),
+    )
+    .join('|')
+}
+
+function validateDevEnvPreflight(errors, value, label, { generatedAt, requirePhone }) {
+  if (!value || typeof value !== 'object') {
+    errors.push(`${label} is missing.`)
+    return
+  }
+
+  if (value.run !== true) {
+    if (requirePhone) {
+      errors.push(`${label}.run must be true when phone loop is required or present.`)
+    }
+    if (value.success !== null) errors.push(`${label}.success must be null when preflight did not run.`)
+    return
+  }
+
+  if (value.success !== true) errors.push(`${label}.success must be true.`)
+  if (value.required !== true) errors.push(`${label}.required must be true.`)
+  if (requirePhone && value.requirePhone !== true) {
+    errors.push(`${label}.requirePhone must be true when phone loop is required or present.`)
+  }
+  assertString(errors, value.generatedAt, `${label}.generatedAt`)
+  assertArray(errors, value.checks, `${label}.checks`)
+  if (!positiveNumber(value.okCount)) errors.push(`${label}.okCount must be positive.`)
+  if (value.failCount !== 0) errors.push(`${label}.failCount must be 0.`)
+
+  const preflightMs = timestampMs(value.generatedAt)
+  const summaryMs = timestampMs(generatedAt)
+  if (!Number.isFinite(preflightMs)) errors.push(`${label}.generatedAt must be a valid timestamp.`)
+  if (Number.isFinite(preflightMs) && Number.isFinite(summaryMs) && summaryMs < preflightMs) {
+    errors.push(`generatedAt must not be earlier than ${label}.generatedAt.`)
+  }
+
+  const checks = Array.isArray(value.checks) ? value.checks : []
+  const requiredNames = ['node', 'npm', 'api directory', 'api requirements', 'api env template', 'web package', 'web package lock', 'Windows Chrome']
+  for (const name of requiredNames) {
+    const check = checks.find((item) => item?.name === name)
+    if (!check) {
+      errors.push(`${label}.checks missing ${name}.`)
+    } else if (check.ok !== true) {
+      errors.push(`${label}.checks ${name} must be ok.`)
+    }
+  }
+
+  if (value.requirePhone === true || requirePhone) {
+    for (const name of ['adb.exe', 'authorized Android device']) {
+      const check = checks.find((item) => item?.name === name)
+      if (!check) {
+        errors.push(`${label}.checks missing ${name}.`)
+      } else if (check.ok !== true) {
+        errors.push(`${label}.checks ${name} must be ok when phone is required.`)
+      }
+    }
+  }
+
+  for (const check of checks) {
+    if (check?.required === true && check.ok !== true) {
+      errors.push(`${label}.checks ${check.name ?? 'unknown'} is required but not ok.`)
+    }
+  }
+}
+
+function validatePreflightBeforeLoops(errors, summary) {
+  const preflightAt = timestampMs(summary.environment?.preflight?.generatedAt)
+  if (!Number.isFinite(preflightAt)) return
+
+  const loops = [
+    ['loops.desktop', summary.loops?.desktop],
+    ['loops.windowsChrome', summary.loops?.windowsChrome],
+    ['loops.phone', summary.loops?.phone],
+  ]
+
+  for (const [label, loop] of loops) {
+    if (!loop?.run) continue
+    const startedAt = timestampMs(loop.startedAt)
+    if (!Number.isFinite(startedAt)) continue
+    if (preflightAt > startedAt) {
+      errors.push(`environment.preflight.generatedAt must not be later than ${label}.startedAt.`)
+    }
+  }
 }
 
 function validateRuntimeHealth(errors, value, label) {
@@ -1027,6 +1245,29 @@ function validateBrowserEnvironment(
   }
 }
 
+function validateHostEnvironment(errors, value, label) {
+  if (!value || typeof value !== 'object') {
+    errors.push(`${label} is missing.`)
+    return
+  }
+
+  if (!['win32', 'darwin', 'linux'].includes(value.platform)) {
+    errors.push(`${label}.platform must identify a supported desktop OS.`)
+  }
+  if (!['x64', 'arm64'].includes(value.arch)) {
+    errors.push(`${label}.arch must identify a supported desktop CPU architecture.`)
+  }
+  if (typeof value.nodeVersion !== 'string' || !/^\d+\.\d+\.\d+$/u.test(value.nodeVersion)) {
+    errors.push(`${label}.nodeVersion must be a semantic Node.js version.`)
+  }
+  if (!Number.isInteger(value.nodeMajorVersion) || value.nodeMajorVersion < 20) {
+    errors.push(`${label}.nodeMajorVersion must be at least 20.`)
+  }
+  if (typeof value.ci !== 'boolean') {
+    errors.push(`${label}.ci must be boolean.`)
+  }
+}
+
 function validateInstalledChromeExecutableIdentity(errors, value, label) {
   if (!value || typeof value !== 'object') {
     errors.push(`${label} executable identity is missing.`)
@@ -1069,7 +1310,9 @@ function validateTextIntegrity(errors, value, label) {
     return
   }
 
-  if (!positiveNumber(value.requiredPhraseCount)) errors.push(`${label}.requiredPhraseCount must be positive.`)
+  if (!Number.isInteger(value.requiredPhraseCount) || value.requiredPhraseCount < MIN_LOCALIZED_PHRASE_COUNT) {
+    errors.push(`${label}.requiredPhraseCount must be at least ${MIN_LOCALIZED_PHRASE_COUNT}.`)
+  }
   if (value.missingPhraseCount !== 0) errors.push(`${label}.missingPhraseCount must be 0.`)
   if (value.mojibakeCount !== 0) errors.push(`${label}.mojibakeCount must be 0.`)
 }

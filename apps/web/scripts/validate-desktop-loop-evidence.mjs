@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
-const evidenceFile = process.argv[2] ?? path.join(repoRoot, 'assets', 'demo', 'desktop-loop.json')
+const defaultEvidenceFile = path.join(repoRoot, 'assets', 'demo', 'desktop-loop.json')
+const { evidenceFile, optionArgs } = parseCliArgs(process.argv.slice(2), defaultEvidenceFile)
 const EXPECTED_SCREENSHOT_FILES = [
   '01-control-console.png',
   '02-scene-prompt-handoff.png',
@@ -14,7 +15,13 @@ const EXPECTED_SCREENSHOT_FILES = [
   '05-offline-fallback.png',
   '06-external-sync.png',
 ]
-const options = parseOptions(process.argv.slice(3))
+const EXPECTED_LOCALIZED_UI = {
+  title: '\u5bb6\u5ead\u667a\u80fd\u7ba1\u5bb6',
+  runButton: '\u751f\u6210\u8ba1\u5212',
+  minResetButtonCount: 1,
+}
+const MIN_LOCALIZED_PHRASE_COUNT = 7
+const options = parseOptions(optionArgs)
 const evidence = JSON.parse(await readFile(evidenceFile, 'utf8'))
 const errors = await validateEvidence(evidence, options)
 
@@ -27,6 +34,15 @@ if (errors.length) {
 }
 
 console.log(`Desktop loop evidence validation passed: ${evidenceFile}`)
+
+function parseCliArgs(args, defaultFile) {
+  const [firstArg, ...remainingArgs] = args
+  if (firstArg && !firstArg.startsWith('--')) {
+    return { evidenceFile: firstArg, optionArgs: remainingArgs }
+  }
+
+  return { evidenceFile: defaultFile, optionArgs: args }
+}
 
 function parseOptions(args) {
   return {
@@ -65,7 +81,11 @@ async function validateEvidence(value, options) {
   }
 
   validateBrowserEnvironment(errors, value.checks?.browserEnvironment, options)
+  validateHostEnvironment(errors, value.checks?.hostEnvironment)
   validateRequiredChecks(errors, value.checks)
+  validateLocalizedUi(errors, value.checks?.localizedUi)
+  validateFirstViewportVisibility(errors, value.checks?.firstViewportVisibility)
+  validateResponsiveLayout(errors, value.checks?.responsiveLayout)
   await validateScreenshotEvidence(errors, value, options)
   validateRuntimeHealth(errors, value.checks?.runtimeHealth)
   validateExecutionChecks(errors, value.checks)
@@ -125,6 +145,29 @@ function validateBrowserEnvironment(errors, value, options) {
 
   if (options.requireInstalledChrome) {
     validateInstalledChromeIdentity(errors, value)
+  }
+}
+
+function validateHostEnvironment(errors, value) {
+  if (!value || typeof value !== 'object') {
+    errors.push('checks.hostEnvironment is missing.')
+    return
+  }
+
+  if (!['win32', 'darwin', 'linux'].includes(value.platform)) {
+    errors.push('checks.hostEnvironment.platform must identify a supported desktop OS.')
+  }
+  if (!['x64', 'arm64'].includes(value.arch)) {
+    errors.push('checks.hostEnvironment.arch must identify a supported desktop CPU architecture.')
+  }
+  if (typeof value.nodeVersion !== 'string' || !/^\d+\.\d+\.\d+$/u.test(value.nodeVersion)) {
+    errors.push('checks.hostEnvironment.nodeVersion must be a semantic Node.js version.')
+  }
+  if (!Number.isInteger(value.nodeMajorVersion) || value.nodeMajorVersion < 20) {
+    errors.push('checks.hostEnvironment.nodeMajorVersion must be at least 20.')
+  }
+  if (typeof value.ci !== 'boolean') {
+    errors.push('checks.hostEnvironment.ci must be boolean.')
   }
 }
 
@@ -285,6 +328,111 @@ function validateRuntimeHealth(errors, value) {
 
   if (value.success !== true) errors.push('checks.runtimeHealth.success must be true.')
   if (value.issueCount !== 0) errors.push('checks.runtimeHealth.issueCount must be 0.')
+}
+
+function validateLocalizedUi(errors, value) {
+  if (!value || typeof value !== 'object') {
+    errors.push('checks.localizedUi is missing.')
+    return
+  }
+
+  if (value.title !== EXPECTED_LOCALIZED_UI.title) {
+    errors.push(`checks.localizedUi.title must be ${EXPECTED_LOCALIZED_UI.title}.`)
+  }
+  if (value.runButton !== EXPECTED_LOCALIZED_UI.runButton) {
+    errors.push(`checks.localizedUi.runButton must be ${EXPECTED_LOCALIZED_UI.runButton}.`)
+  }
+  if (!Number.isInteger(value.resetButtonCount) || value.resetButtonCount < EXPECTED_LOCALIZED_UI.minResetButtonCount) {
+    errors.push(`checks.localizedUi.resetButtonCount must be at least ${EXPECTED_LOCALIZED_UI.minResetButtonCount}.`)
+  }
+  validateTextIntegrity(errors, value.textIntegrity)
+}
+
+function validateTextIntegrity(errors, value) {
+  if (!value || typeof value !== 'object') {
+    errors.push('checks.localizedUi.textIntegrity is missing.')
+    return
+  }
+
+  if (!Number.isInteger(value.requiredPhraseCount) || value.requiredPhraseCount < MIN_LOCALIZED_PHRASE_COUNT) {
+    errors.push(
+      `checks.localizedUi.textIntegrity.requiredPhraseCount must be at least ${MIN_LOCALIZED_PHRASE_COUNT}.`,
+    )
+  }
+  if (value.missingPhraseCount !== 0) {
+    errors.push('checks.localizedUi.textIntegrity.missingPhraseCount must be 0.')
+  }
+  if (value.mojibakeCount !== 0) {
+    errors.push('checks.localizedUi.textIntegrity.mojibakeCount must be 0.')
+  }
+}
+
+function validateFirstViewportVisibility(errors, value) {
+  if (!value || typeof value !== 'object') {
+    errors.push('checks.firstViewportVisibility is missing.')
+    return
+  }
+
+  if (typeof value.minVisibleRatio !== 'number' || value.minVisibleRatio < 0.9 || value.minVisibleRatio > 1) {
+    errors.push('checks.firstViewportVisibility.minVisibleRatio must be between 0.9 and 1.')
+  }
+  if (!Array.isArray(value.panels) || value.panels.length !== 5) {
+    errors.push('checks.firstViewportVisibility.panels must include the five first-viewport targets.')
+    return
+  }
+
+  const expectedLabels = ['topbar', 'prompt', 'context', 'scene', 'plan']
+  const actualLabels = value.panels.map((panel) => panel?.label)
+  if (actualLabels.join('|') !== expectedLabels.join('|')) {
+    errors.push(`checks.firstViewportVisibility.panels labels must be ${expectedLabels.join(', ')}.`)
+  }
+
+  for (const panel of value.panels) {
+    if (panel?.present !== true) errors.push(`checks.firstViewportVisibility.${panel?.label ?? 'unknown'} must be present.`)
+    if (!positiveNumber(panel?.width) || !positiveNumber(panel?.height)) {
+      errors.push(`checks.firstViewportVisibility.${panel?.label ?? 'unknown'} dimensions must be positive.`)
+    }
+    if (typeof panel?.top === 'number' && panel.top < 0) {
+      errors.push(`checks.firstViewportVisibility.${panel.label} top must be non-negative.`)
+    }
+    if (typeof panel?.visibleRatio !== 'number' || panel.visibleRatio < 0.9 || panel.visibleRatio > 1) {
+      errors.push(`checks.firstViewportVisibility.${panel?.label ?? 'unknown'} visibleRatio must be between 0.9 and 1.`)
+    }
+  }
+}
+
+function validateResponsiveLayout(errors, value) {
+  if (!Array.isArray(value) || value.length !== 3) {
+    errors.push('checks.responsiveLayout must include mobile, tablet, and desktop results.')
+    return
+  }
+
+  const expectedLabels = ['mobile', 'tablet', 'desktop']
+  const actualLabels = value.map((item) => item?.label)
+  if (actualLabels.join('|') !== expectedLabels.join('|')) {
+    errors.push(`checks.responsiveLayout labels must be ${expectedLabels.join(', ')}.`)
+  }
+
+  for (const item of value) {
+    const label = item?.label ?? 'unknown'
+    if (!positiveNumber(item?.width) || !positiveNumber(item?.height)) {
+      errors.push(`checks.responsiveLayout.${label} viewport dimensions must be positive.`)
+    }
+    if (item?.overflowX !== 0) errors.push(`checks.responsiveLayout.${label}.overflowX must be 0.`)
+    if (Array.isArray(item?.missingSelectors) && item.missingSelectors.length) {
+      errors.push(`checks.responsiveLayout.${label}.missingSelectors must be empty.`)
+    }
+    if (!positiveNumber(item?.panelCount)) errors.push(`checks.responsiveLayout.${label}.panelCount must be positive.`)
+    if (!positiveNumber(item?.minPanelWidth) || !positiveNumber(item?.minPanelHeight)) {
+      errors.push(`checks.responsiveLayout.${label} min panel dimensions must be positive.`)
+    }
+    if (Array.isArray(item?.overlappingPanelPairs) && item.overlappingPanelPairs.length) {
+      errors.push(`checks.responsiveLayout.${label}.overlappingPanelPairs must be empty.`)
+    }
+    if (Array.isArray(item?.overflowingButtons) && item.overflowingButtons.length) {
+      errors.push(`checks.responsiveLayout.${label}.overflowingButtons must be empty.`)
+    }
+  }
 }
 
 function validateExecutionChecks(errors, checks) {
