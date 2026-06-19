@@ -187,6 +187,10 @@ function New-FullLoopPlan {
         name = "Global\HCEdgeBrowserLoopGate"
         timeoutSeconds = $BrowserWrapperSharedStateLockTimeoutSeconds
       }
+      webReadiness = [pscustomobject]@{
+        httpProbeBeforePortReuse = $true
+        stalePortBlocksDuplicateStart = $true
+      }
     }
   }
 }
@@ -403,8 +407,14 @@ function Ensure-Api {
 }
 
 function Ensure-Web {
+  if (Test-HttpOk $AppUrl) {
+    Write-Host "Web already ready: $AppUrl"
+    return
+  }
+
   if (Test-PortListening $WebPort) {
-    Write-Host "Web server already listening: $AppUrl"
+    Write-Warning "Web port $WebPort is listening, but $AppUrl is not HTTP-ready; waiting instead of starting a duplicate server."
+    Wait-HttpOk $AppUrl "Web"
     return
   }
 

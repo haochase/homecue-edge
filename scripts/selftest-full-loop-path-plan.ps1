@@ -79,6 +79,8 @@ Assert-True (-not $DefaultPartial.requestedLoops.phone) "Default run should not 
 Assert-True (-not $DefaultPartial.requestedLoops.windowsChrome) "Default run should not include Windows Chrome."
 Assert-Equal $DefaultPartial.gates.browserWrapperSharedStateLock.name "Global\HCEdgeBrowserLoopGate" "Default browser wrapper shared-state lock name."
 Assert-Equal $DefaultPartial.gates.browserWrapperSharedStateLock.timeoutSeconds 1200 "Default browser wrapper shared-state lock timeout."
+Assert-True $DefaultPartial.gates.webReadiness.httpProbeBeforePortReuse "Default run should HTTP-probe web readiness before port-only reuse."
+Assert-True $DefaultPartial.gates.webReadiness.stalePortBlocksDuplicateStart "Default run should avoid duplicate web starts when the web port is stale."
 Assert-PartialPath $DefaultPartial.outputs.reportPath $DefaultPartial.runId "Default report path should be per-run partial output."
 Assert-PartialPath $DefaultPartial.outputs.summaryPath $DefaultPartial.runId "Default summary path should be per-run partial output."
 Assert-PartialPath $DefaultPartial.outputs.preflightJsonPath $DefaultPartial.runId "Default preflight JSON should be per-run partial output."
