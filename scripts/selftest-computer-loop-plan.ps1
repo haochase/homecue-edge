@@ -155,6 +155,33 @@ function Assert-Contains {
   }
 }
 
+function Assert-NotContains {
+  param(
+    [string]$Actual,
+    [string]$Unexpected,
+    [string]$Message
+  )
+
+  if ($Actual.Contains($Unexpected)) {
+    throw ("{0} Expected '{1}' not to contain '{2}'." -f $Message, $Actual, $Unexpected)
+  }
+}
+
+function Get-ArgumentValue {
+  param(
+    [object[]]$Arguments,
+    [string]$Name
+  )
+
+  for ($Index = 0; $Index -lt ($Arguments.Count - 1); $Index++) {
+    if ($Arguments[$Index] -eq $Name) {
+      return [string]$Arguments[$Index + 1]
+    }
+  }
+
+  throw "Argument not found: $Name"
+}
+
 try {
   $Implicit = Invoke-Plan @()
   Assert-Equal $Implicit.outputs.resultJsonPath "assets/tmp/computer-loop-check.json" "Implicit result path should use the stable default."
@@ -181,6 +208,12 @@ try {
   Assert-Contains $Default.commands.browserEvidence.display "check-browser-evidence.ps1" "Browser evidence display command"
   Assert-Contains $Default.commands.browserEvidence.display "-RequireDesktop" "Browser evidence display command"
   Assert-Contains $Default.commands.browserEvidence.display "-RequireChrome" "Browser evidence display command"
+  $DefaultBrowserEvidenceSummaryArg = Get-ArgumentValue $Default.commands.browserEvidence.args "-SummaryPath"
+  $DefaultBrowserEvidenceResultArg = Get-ArgumentValue $Default.commands.browserEvidence.args "-ResultJsonPath"
+  Assert-Equal $DefaultBrowserEvidenceSummaryArg $Default.outputs.summaryPath "Browser evidence summary command path"
+  Assert-Equal $DefaultBrowserEvidenceResultArg $Default.outputs.browserEvidenceResultJsonPath "Browser evidence result command path"
+  Assert-NotContains $DefaultBrowserEvidenceSummaryArg ([string]$Root) "Browser evidence summary command path should be portable"
+  Assert-NotContains $DefaultBrowserEvidenceResultArg ([string]$Root) "Browser evidence result command path should be portable"
   Assert-Equal $DefaultResult.mode "dry-run" "Dry-run result mode"
   Assert-Equal $DefaultResult.success $true "Dry-run result success"
   Assert-Equal $DefaultResult.plan.outputs.resultJsonPath $Default.outputs.resultJsonPath "Dry-run result should embed the same plan."

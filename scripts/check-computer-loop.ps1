@@ -163,11 +163,11 @@ function New-ComputerLoopPlan {
     "-File",
     "$PSScriptRoot\check-browser-evidence.ps1",
     "-SummaryPath",
-    $SummaryPath,
+    (Convert-ToPlanPath $SummaryPath),
     "-RequireDesktop",
     "-RequireChrome",
     "-ResultJsonPath",
-    $BrowserEvidenceResultJsonPath
+    (Convert-ToPlanPath $BrowserEvidenceResultJsonPath)
   )
   if ($SelfTest) {
     $BrowserEvidenceArgs += "-SelfTest"
