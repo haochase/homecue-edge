@@ -29,17 +29,22 @@
 .PARAMETER All
   Scan every tracked file (default when neither -Staged nor -All is given).
 
+.PARAMETER IncludeUntracked
+  Include untracked, non-ignored working-tree files when scanning all files.
+
 .PARAMETER Quiet
   Suppress the "clean" success banner (still prints findings).
 
 .EXAMPLE
   powershell -File ./scripts/scan-secrets.ps1            # scan all tracked files
+  powershell -File ./scripts/scan-secrets.ps1 -All -IncludeUntracked
   powershell -File ./scripts/scan-secrets.ps1 -Staged    # scan staged (pre-commit)
 #>
 [CmdletBinding()]
 param(
     [switch]$Staged,
     [switch]$All,
+    [switch]$IncludeUntracked,
     [switch]$Quiet
 )
 
@@ -106,8 +111,11 @@ if ($Staged) {
     $files = & git diff --cached --name-only --diff-filter=ACM
 } else {
     $files = & git ls-files
+    if ($IncludeUntracked) {
+        $files += & git ls-files --others --exclude-standard
+    }
 }
-$files = @($files | Where-Object { $_ -and $_.Trim() })
+$files = @($files | Where-Object { $_ -and $_.Trim() } | Sort-Object -Unique)
 
 $findings = New-Object System.Collections.Generic.List[string]
 

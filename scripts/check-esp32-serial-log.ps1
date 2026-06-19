@@ -94,7 +94,17 @@ function Read-SerialLog {
     Write-Host ""
   } finally {
     if ($SerialPort.IsOpen) {
-      $SerialPort.Close()
+      try {
+        $SerialPort.Close()
+      } catch {
+        Write-Warning ("Could not close serial port cleanly: {0}" -f $_.Exception.Message)
+      }
+    }
+
+    try {
+      $SerialPort.Dispose()
+    } catch {
+      Write-Warning ("Could not dispose serial port cleanly: {0}" -f $_.Exception.Message)
     }
   }
 
@@ -156,7 +166,7 @@ Write-Host "Checking expected firmware markers..."
 $InteractionRequired = [bool]$RequireInteraction
 
 Write-Check "boot banner" ($LogText -match "\[HomeCue Edge\].*firmware booting") "HomeCue firmware started" $true
-Write-Check "button-route mode" ($LogText -match "\[mode\] button-route MVP") "current firmware keeps ESP-SR optional" $true
+Write-Check "button-route mode" ($LogText -match "\[mode\] button-route") "key/serial fallback remains available" $true
 Write-Check "TCA9555 key expander" ($LogText -match "\[keys\] TCA9555 OK") "KEY1/KEY2/KEY3 route detected" $false
 Write-Check "BOOT fallback" ($LogText -match "BOOT=plan-fallback") "fallback route documented by firmware" $true
 Write-Check "WiFi connected" ($LogText -match "\[WiFi\] connected, IP =") "board joined local network" $true

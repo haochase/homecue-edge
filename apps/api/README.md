@@ -52,7 +52,10 @@ The verifier calls the same `/plan` route used by the demo and confirms the retu
 ## Tests
 
 ```powershell
-.\.venv\Scripts\python -m pytest
+.\.venv\Scripts\python -m pytest -o "cache_dir=..\..\assets\tmp\pytest\cache" "--basetemp=..\..\assets\tmp\pytest\basetemp"
 ```
 
-The current tests cover health, mock planning, weak-network mode, offline fallback, and device reset behavior.
+The current tests cover health, mock planning, weak-network mode, offline
+fallback, and device reset behavior. The repository-level `check-local.ps1`
+uses the same repo-local pytest cache and basetemp under ignored `assets/tmp/`
+so Windows temp-directory permissions do not add warning noise to the gate.

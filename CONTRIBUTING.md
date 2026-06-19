@@ -9,8 +9,8 @@ rules for both human contributors and AI agents.
 Run the privacy/secret scanner before every commit and before any push:
 
 ```powershell
-# scan everything currently tracked
-pwsh ./scripts/scan-secrets.ps1
+# scan tracked files plus new, non-ignored files
+pwsh ./scripts/scan-secrets.ps1 -All -IncludeUntracked
 
 # scan only what you are about to commit
 pwsh ./scripts/scan-secrets.ps1 -Staged
@@ -48,9 +48,14 @@ Windows). If PowerShell is unavailable the hook skips (run the scanner manually)
 ## Local checks
 
 ```powershell
-.\scripts\check-local.ps1      # API tests + web lint/build
+.\scripts\check-local.ps1      # scan + diff whitespace + API tests + web lint/build
 .\scripts\verify-qwen.ps1      # real provider verification (needs a key)
 ```
+
+`check-local.ps1` keeps pytest cache and basetemp under ignored
+`assets/tmp/pytest/`, which avoids Windows temp-directory permission warnings in
+the local gate. It also runs `git diff --check` so patch whitespace problems
+fail before review.
 
 ## Secrets & config
 

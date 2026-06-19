@@ -21,8 +21,8 @@ There are two separate zones. Never mix them.
 ## 2. Run the scanner before every commit / push
 
 ```powershell
-pwsh ./scripts/scan-secrets.ps1            # scan all tracked files
-pwsh ./scripts/scan-secrets.ps1 -Staged    # scan staged changes (what the hook runs)
+pwsh ./scripts/scan-secrets.ps1 -All -IncludeUntracked  # scan tracked + new files
+pwsh ./scripts/scan-secrets.ps1 -Staged                  # scan staged changes (what the hook runs)
 ```
 
 A non-zero exit means **do not commit**. Fix the finding first. See
@@ -48,8 +48,9 @@ A non-zero exit means **do not commit**. Fix the finding first. See
   decide when to run them.
 - Use placeholders (e.g. `your-key-here`, `192.168.x.x`, `example.com`) in any
   example/config template you add (`*.example` files).
-- After adding or editing files, re-run `scripts/scan-secrets.ps1` and confirm
-  it reports **clean** before handing back.
+- After adding or editing files, re-run
+  `scripts/scan-secrets.ps1 -All -IncludeUntracked` and confirm it reports
+  **clean** before handing back.
 
 ## 5. Project invariants (don't break these)
 
