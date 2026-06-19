@@ -262,6 +262,20 @@ const cases = [
     },
   },
   {
+    name: 'web-readiness-http-probe-missing',
+    expectedError: 'plan.gates.fullLoopWebReadiness.httpProbeBeforePortReuse must be true.',
+    mutate: (result) => {
+      result.plan.gates.fullLoopWebReadiness.httpProbeBeforePortReuse = false
+    },
+  },
+  {
+    name: 'web-readiness-stale-port-missing',
+    expectedError: 'plan.gates.fullLoopWebReadiness.stalePortBlocksDuplicateStart must be true.',
+    mutate: (result) => {
+      result.plan.gates.fullLoopWebReadiness.stalePortBlocksDuplicateStart = false
+    },
+  },
+  {
     name: 'browser-evidence-selftest-summary-mismatch',
     expectedError: 'browserEvidence.plan.selfTest.summary must match plan.options.selfTest for computer-only result.',
     mutate: (result) => {
@@ -1082,6 +1096,10 @@ function createResult({ mode = 'validate', browserEvidence = undefined, selfTest
       browserWrapperSharedStateLock: {
         name: 'Global\\HCEdgeBrowserLoopGate',
         timeoutSeconds: 1200,
+      },
+      fullLoopWebReadiness: {
+        httpProbeBeforePortReuse: true,
+        stalePortBlocksDuplicateStart: true,
       },
     },
     commands: {

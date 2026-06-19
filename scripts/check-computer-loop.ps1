@@ -205,6 +205,10 @@ function New-ComputerLoopPlan {
         name = "Global\HCEdgeBrowserLoopGate"
         timeoutSeconds = $BrowserWrapperSharedStateLockTimeoutSeconds
       }
+      fullLoopWebReadiness = [pscustomobject]@{
+        httpProbeBeforePortReuse = $true
+        stalePortBlocksDuplicateStart = $true
+      }
     }
     commands = [pscustomobject]@{
       fullLoop = [pscustomobject]@{
@@ -402,11 +406,12 @@ function Invoke-PostProcessWithResult {
       throw
     }
 
-    Write-Error "post-process computer loop evidence failed: $($_.Exception.Message)"
+    $ErrorRecord = $_
     $Failure = New-ComputerLoopFailure -Stage "result validation" -Command ([pscustomobject]@{
         display = "post-process computer loop evidence"
-      }) -ErrorRecord $_ -ExitCode $null
+      }) -ErrorRecord $ErrorRecord -ExitCode $null
     Write-JsonFile -Path $ResultJsonPath -Value (New-ComputerLoopResult -Plan $Plan -Mode "failed" -Success $false -Failure $Failure)
+    Write-Error "post-process computer loop evidence failed: $($ErrorRecord.Exception.Message)" -ErrorAction Continue
     throw
   }
 }

@@ -133,6 +133,7 @@ function validateGates(errors, gates) {
     errors.push('plan.gates.browserEvidenceSelfTest must be boolean.')
   }
   validateBrowserWrapperLock(errors, gates.browserWrapperSharedStateLock)
+  validateFullLoopWebReadiness(errors, gates.fullLoopWebReadiness)
 }
 
 function validateCommands(errors, commands) {
@@ -347,6 +348,20 @@ function validateBrowserWrapperLock(errors, value) {
   }
   if (!positiveInteger(value.timeoutSeconds)) {
     errors.push('plan.gates.browserWrapperSharedStateLock.timeoutSeconds must be a positive integer.')
+  }
+}
+
+function validateFullLoopWebReadiness(errors, value) {
+  if (!value || typeof value !== 'object') {
+    errors.push('plan.gates.fullLoopWebReadiness is missing.')
+    return
+  }
+
+  if (value.httpProbeBeforePortReuse !== true) {
+    errors.push('plan.gates.fullLoopWebReadiness.httpProbeBeforePortReuse must be true.')
+  }
+  if (value.stalePortBlocksDuplicateStart !== true) {
+    errors.push('plan.gates.fullLoopWebReadiness.stalePortBlocksDuplicateStart must be true.')
   }
 }
 

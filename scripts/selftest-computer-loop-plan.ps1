@@ -174,6 +174,8 @@ try {
   Assert-True $Default.gates.browserEvidenceRequireDesktop "Browser evidence check should require desktop evidence."
   Assert-True $Default.gates.browserEvidenceRequireChrome "Browser evidence check should require Chrome evidence."
   Assert-True (-not $Default.gates.browserEvidenceRequirePhone) "Browser evidence check should not require phone evidence."
+  Assert-True $Default.gates.fullLoopWebReadiness.httpProbeBeforePortReuse "Computer loop should require full-loop HTTP web readiness probing."
+  Assert-True $Default.gates.fullLoopWebReadiness.stalePortBlocksDuplicateStart "Computer loop should require stale web ports to block duplicate starts."
   Assert-Contains $Default.commands.fullLoop.display "check-full-loop.ps1" "Full-loop display command"
   Assert-Contains $Default.commands.fullLoop.display "-IncludeChrome" "Full-loop display command"
   Assert-Contains $Default.commands.browserEvidence.display "check-browser-evidence.ps1" "Browser evidence display command"
