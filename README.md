@@ -372,8 +372,10 @@ summary captures re-checkable without hand-entering every path. If the manifest
 lists browser JSON but not screenshots, the script reads that raw JSON to infer
 the screenshot directory. If a required phone, Chrome, or desktop loop
 contradicts the saved summary, the script fails before falling back to any
-default demo artifact. `-SelfTest` also replays the validator negative cases
-against generated bad evidence under ignored `assets/tmp/`. `-DryRun` prints the
+default demo artifact. When a loop is not required, the dry-run and saved result
+use explicit `__*_not_run__` JSON and screenshot-directory sentinels instead of
+pointing at previous demo artifacts. `-SelfTest` also replays the validator
+negative cases against generated bad evidence under ignored `assets/tmp/`. `-DryRun` prints the
 inferred evidence and self-test plan as JSON without reading screenshot
 directories or running npm validators. Add `-ResultJsonPath` to save a
 machine-readable validation result with the inferred plan and executed check

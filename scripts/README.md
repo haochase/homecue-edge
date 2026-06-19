@@ -153,6 +153,8 @@ hidden by a generated Markdown summary.
 When `-SkipDesktop`
 or optional phone/Chrome checks are omitted, the wrapper passes an explicit
 `__*_not_run__.json` sentinel so old evidence from a previous run is not reused.
+Skipped desktop or Chrome screenshot directories also use explicit
+`__*_screens_not_run__` sentinels for the same reason.
 Partial runs also isolate their default report, summary, preflight JSON, loop
 JSON, and screenshot files under the same per-run temp directory.
 Relative wrapper paths, including direct desktop/Chrome `-OutputPath` and
@@ -234,8 +236,10 @@ the manifest does not include them. If the manifest lists the browser JSON but
 not screenshots, the script reads that raw JSON to infer its screenshot
 directory. If `-RequirePhone`, `-RequireChrome`, or a required desktop loop
 contradicts the saved summary, the script fails before falling back to any
-default demo artifact. Add `-SelfTest` to also replay the evidence validator
-self-tests against generated bad artifacts under ignored `assets/tmp/`. Use
+default demo artifact. When a loop is not required, the dry-run and saved result
+use explicit `__*_not_run__` JSON and screenshot-directory sentinels instead of
+pointing at previous demo artifacts. Add `-SelfTest` to also replay the evidence
+validator self-tests against generated bad artifacts under ignored `assets/tmp/`. Use
 `-DryRun` to print the inferred evidence and self-test plan as JSON without
 reading screenshot directories or running npm validators. Add `-ResultJsonPath`
 to save a machine-readable validation result with the inferred plan and executed
