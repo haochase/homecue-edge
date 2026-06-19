@@ -195,16 +195,43 @@ function Assert-Equal {
   }
 }
 
+function Assert-PathEndsWith {
+  param(
+    [Parameter(Mandatory = $true)][string]$Actual,
+    [Parameter(Mandatory = $true)][string]$Expected,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+
+  $NormalizedActual = $Actual.Replace("\", "/")
+  $NormalizedExpected = $Expected.Replace("\", "/")
+  if (-not $NormalizedActual.EndsWith($NormalizedExpected)) {
+    throw "${Label}: expected '$Actual' to end with '$Expected'"
+  }
+}
+
+function Assert-PortableEvidencePath {
+  param(
+    [Parameter(Mandatory = $true)][string]$Actual,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+
+  if ([System.IO.Path]::IsPathRooted($Actual)) {
+    throw "${Label} should be repo-relative: $Actual"
+  }
+  if ($Actual.Replace("\", "/").Contains($Root.ToString().Replace("\", "/"))) {
+    throw "${Label} should not contain the repo root: $Actual"
+  }
+}
+
 $CompleteSummary = Write-Summary -Name "complete" -Desktop $true -Phone $true -Chrome $true -WithManifest
 $DesktopOnlySummary = Write-Summary -Name "desktop-only" -Desktop $true -Phone $false -Chrome $false
 $ChromeOnlySummary = Write-Summary -Name "chrome-only" -Desktop $false -Phone $false -Chrome $true
 $JsonOnlySummary = Write-Summary -Name "json-only" -Desktop $true -Phone $false -Chrome $true -JsonOnlyManifest
 
 $DefaultPlan = Read-Plan @()
-if (-not $DefaultPlan.summaryPath.EndsWith("assets\tmp\browser-evidence-default-summary\full-loop-report.json")) {
-  throw "default summary path should use an isolated temp snapshot: $($DefaultPlan.summaryPath)"
-}
-$DefaultSummary = Get-Content -Raw -LiteralPath $DefaultPlan.summaryPath | ConvertFrom-Json
+Assert-PathEndsWith $DefaultPlan.summaryPath "assets/tmp/browser-evidence-default-summary/full-loop-report.json" "default summary path should use an isolated temp snapshot"
+Assert-PortableEvidencePath $DefaultPlan.summaryPath "default summary path"
+$DefaultSummary = Get-Content -Raw -LiteralPath (Join-Path $Root $DefaultPlan.summaryPath) | ConvertFrom-Json
 $DefaultDevEnvEntry = @($DefaultSummary.evidence.files | Where-Object { $_.present -eq $true -and $_.label -eq "Dev Environment JSON" } | Select-Object -First 1)
 if ($DefaultDevEnvEntry.Count -ne 0 -and -not ([string]$DefaultDevEnvEntry[0].file).EndsWith("assets/tmp/browser-evidence-default-summary/dev-env-check.json")) {
   throw "default summary should point Dev Environment JSON at the isolated temp snapshot: $($DefaultDevEnvEntry[0].file)"
@@ -218,20 +245,20 @@ Assert-Equal $CompletePlan.selfTest.phoneEvidence $true "complete phone self-tes
 Assert-Equal $CompletePlan.selfTest.desktopEvidence $true "complete desktop self-test"
 Assert-Equal $CompletePlan.selfTest.summary $true "complete summary self-test"
 Assert-Equal $CompletePlan.selfTest.report $true "complete report self-test"
-if (-not $CompletePlan.paths.desktopEvidence.EndsWith("assets\tmp\browser-evidence-plan-selftest\complete\desktop-loop.json")) {
-  throw "complete desktop path was not inferred from manifest: $($CompletePlan.paths.desktopEvidence)"
-}
-if (-not $CompletePlan.paths.desktopScreenshotDir.EndsWith("assets\tmp\browser-evidence-plan-selftest\complete\playwright-chromium-screens")) {
-  throw "complete desktop screenshot dir was not inferred from manifest: $($CompletePlan.paths.desktopScreenshotDir)"
-}
-if (-not $CompletePlan.paths.phoneEvidence.EndsWith("assets\tmp\browser-evidence-plan-selftest\complete\phone-loop.json")) {
-  throw "complete phone path was not inferred from manifest: $($CompletePlan.paths.phoneEvidence)"
-}
-if (-not $CompletePlan.paths.windowsChromeEvidence.EndsWith("assets\tmp\browser-evidence-plan-selftest\complete\chrome-loop.json")) {
-  throw "complete Chrome path was not inferred from manifest: $($CompletePlan.paths.windowsChromeEvidence)"
-}
-if (-not $CompletePlan.paths.windowsChromeScreenshotDir.EndsWith("assets\tmp\browser-evidence-plan-selftest\complete\windows-chrome-screens")) {
-  throw "complete Chrome screenshot dir was not inferred from manifest: $($CompletePlan.paths.windowsChromeScreenshotDir)"
+Assert-PathEndsWith $CompletePlan.paths.desktopEvidence "assets/tmp/browser-evidence-plan-selftest/complete/desktop-loop.json" "complete desktop path was not inferred from manifest"
+Assert-PathEndsWith $CompletePlan.paths.desktopScreenshotDir "assets/tmp/browser-evidence-plan-selftest/complete/playwright-chromium-screens" "complete desktop screenshot dir was not inferred from manifest"
+Assert-PathEndsWith $CompletePlan.paths.phoneEvidence "assets/tmp/browser-evidence-plan-selftest/complete/phone-loop.json" "complete phone path was not inferred from manifest"
+Assert-PathEndsWith $CompletePlan.paths.windowsChromeEvidence "assets/tmp/browser-evidence-plan-selftest/complete/chrome-loop.json" "complete Chrome path was not inferred from manifest"
+Assert-PathEndsWith $CompletePlan.paths.windowsChromeScreenshotDir "assets/tmp/browser-evidence-plan-selftest/complete/windows-chrome-screens" "complete Chrome screenshot dir was not inferred from manifest"
+foreach ($EvidencePath in @(
+    $CompletePlan.summaryPath,
+    $CompletePlan.paths.desktopEvidence,
+    $CompletePlan.paths.desktopScreenshotDir,
+    $CompletePlan.paths.phoneEvidence,
+    $CompletePlan.paths.windowsChromeEvidence,
+    $CompletePlan.paths.windowsChromeScreenshotDir
+  )) {
+  Assert-PortableEvidencePath $EvidencePath "complete plan evidence path"
 }
 
 $ResultJsonPath = Join-Path $OutputDir "complete-result.json"
@@ -241,6 +268,8 @@ Assert-Equal $CompleteWithResult.result.mode "dry-run" "result-json mode"
 Assert-Equal $CompleteWithResult.result.success $true "result-json success"
 Assert-Equal $CompleteWithResult.result.plan.requiredEvidence.phone $true "result-json phone required"
 Assert-Equal $CompleteWithResult.result.plan.selfTest.report $true "result-json report self-test"
+Assert-PortableEvidencePath $CompleteWithResult.result.plan.summaryPath "result-json plan summary path"
+Assert-PortableEvidencePath $CompleteWithResult.result.plan.resultJsonPath "result-json plan result path"
 if (-not (@($CompleteWithResult.result.checks | Where-Object { $_.command -eq "npm run phone:evidence:check" }).Count -eq 1)) {
   throw "result JSON did not include the phone evidence check command."
 }
@@ -264,12 +293,8 @@ Assert-Equal $ChromeOnlyPlan.selfTest.report $false "chrome-only report self-tes
 $JsonOnlyPlan = Read-Plan @("-SummaryPath", $JsonOnlySummary)
 Assert-Equal $JsonOnlyPlan.requiredEvidence.desktop $true "json-only desktop required"
 Assert-Equal $JsonOnlyPlan.requiredEvidence.windowsChrome $true "json-only Chrome required"
-if (-not $JsonOnlyPlan.paths.desktopScreenshotDir.EndsWith("assets\tmp\browser-evidence-plan-selftest\json-only\raw-desktop-screens")) {
-  throw "json-only desktop screenshot dir was not inferred from raw JSON: $($JsonOnlyPlan.paths.desktopScreenshotDir)"
-}
-if (-not $JsonOnlyPlan.paths.windowsChromeScreenshotDir.EndsWith("assets\tmp\browser-evidence-plan-selftest\json-only\raw-chrome-screens")) {
-  throw "json-only Chrome screenshot dir was not inferred from raw JSON: $($JsonOnlyPlan.paths.windowsChromeScreenshotDir)"
-}
+Assert-PathEndsWith $JsonOnlyPlan.paths.desktopScreenshotDir "assets/tmp/browser-evidence-plan-selftest/json-only/raw-desktop-screens" "json-only desktop screenshot dir was not inferred from raw JSON"
+Assert-PathEndsWith $JsonOnlyPlan.paths.windowsChromeScreenshotDir "assets/tmp/browser-evidence-plan-selftest/json-only/raw-chrome-screens" "json-only Chrome screenshot dir was not inferred from raw JSON"
 
 Read-FailingPlan @("-SummaryPath", $DesktopOnlySummary, "-RequirePhone") "Phone evidence was required"
 Read-FailingPlan @("-SummaryPath", $DesktopOnlySummary, "-RequireChrome") "Windows Chrome evidence was required"

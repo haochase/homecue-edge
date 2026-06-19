@@ -122,6 +122,16 @@ function Convert-ToRepoRelativePath {
   return $FullPath.Substring($RootPrefix.Length).Replace("\", "/")
 }
 
+function Convert-ToEvidencePath {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return ""
+  }
+
+  return Convert-ToRepoRelativePath $Path
+}
+
 function Get-FileSha256Prefix {
   param([string]$Path)
 
@@ -318,8 +328,8 @@ if (-not $PhoneEvidencePath) {
 
 function New-EvidenceCheckPlan {
   return [pscustomobject]@{
-    summaryPath = $SummaryPath
-    resultJsonPath = $ResultJsonPath
+    summaryPath = Convert-ToEvidencePath $SummaryPath
+    resultJsonPath = Convert-ToEvidencePath $ResultJsonPath
     inferredFromSummary = [pscustomobject]@{
       desktop = [bool]($Summary.loops.desktop.run -eq $true)
       phone = [bool]($Summary.loops.phone.run -eq $true)
@@ -338,11 +348,11 @@ function New-EvidenceCheckPlan {
       report = [bool]($SelfTest -and $RequirePhone -and $RequireChrome -and (-not $AllowSkipDesktop))
     }
     paths = [pscustomobject]@{
-      desktopEvidence = $DesktopEvidencePath
-      desktopScreenshotDir = $DesktopScreenshotDir
-      phoneEvidence = $PhoneEvidencePath
-      windowsChromeEvidence = $ChromeEvidencePath
-      windowsChromeScreenshotDir = $ChromeScreenshotDir
+      desktopEvidence = Convert-ToEvidencePath $DesktopEvidencePath
+      desktopScreenshotDir = Convert-ToEvidencePath $DesktopScreenshotDir
+      phoneEvidence = Convert-ToEvidencePath $PhoneEvidencePath
+      windowsChromeEvidence = Convert-ToEvidencePath $ChromeEvidencePath
+      windowsChromeScreenshotDir = Convert-ToEvidencePath $ChromeScreenshotDir
     }
   }
 }
@@ -461,7 +471,7 @@ function New-EvidenceProofSummary {
       desktopEvidencePath = $Plan.paths.desktopEvidence
       windowsChromeEvidencePath = $Plan.paths.windowsChromeEvidence
       phoneEvidencePath = $Plan.paths.phoneEvidence
-      webReadinessEvidencePath = Get-ManifestFile "Web Readiness JSON"
+      webReadinessEvidencePath = Convert-ToEvidencePath (Get-ManifestFile "Web Readiness JSON")
       desktopScreenshotDir = $Plan.paths.desktopScreenshotDir
       windowsChromeScreenshotDir = $Plan.paths.windowsChromeScreenshotDir
     }

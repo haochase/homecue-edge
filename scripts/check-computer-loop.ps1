@@ -146,11 +146,11 @@ function New-ComputerLoopPlan {
     "-BrowserWrapperSharedStateLockTimeoutSeconds",
     "$BrowserWrapperSharedStateLockTimeoutSeconds",
     "-PartialEvidenceDir",
-    $OutputDir,
+    (Convert-ToPlanPath $OutputDir),
     "-ReportPath",
-    $ReportPath,
+    (Convert-ToPlanPath $ReportPath),
     "-SummaryPath",
-    $SummaryPath
+    (Convert-ToPlanPath $SummaryPath)
   )
   if ($SkipPreflight) {
     $FullLoopArgs += "-SkipPreflight"
