@@ -79,6 +79,9 @@ files are caught.
 Browser environment fields such as user agent, language, viewport,
 headed/channel mode, and raw page origin are cross-checked against the original
 browser JSON evidence.
+Run `npm run summary:selftest` from `apps/web` after a successful full-loop run
+to replay the validator against generated bad summaries under ignored
+`assets/tmp/`.
 
 ```powershell
 .\scripts\check-chrome-loop.ps1

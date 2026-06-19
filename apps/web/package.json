@@ -11,7 +11,8 @@
     "phone:loop": "node scripts/phone-loop.mjs",
     "preview": "vite preview",
     "report:loop": "node scripts/summarize-full-loop.mjs",
-    "summary:check": "node scripts/validate-full-loop-summary.mjs"
+    "summary:check": "node scripts/validate-full-loop-summary.mjs",
+    "summary:selftest": "node scripts/selftest-full-loop-summary-validator.mjs"
   },
   "dependencies": {
     "react": "^19.2.6",

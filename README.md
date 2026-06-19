@@ -217,6 +217,10 @@ It also checks each loop's started/finished timestamps against the raw evidence
 and requires the report generation time to be no earlier than completed loops.
 Loop page URLs must share the summary app origin and carry the same API base in
 their query string, with raw evidence checked against the same URLs.
+After a successful full-loop run, `npm run summary:selftest` in `apps/web`
+replays the validator against the current summary plus generated bad summaries
+under ignored `assets/tmp/` to prove the Chrome identity, version, origin, and
+manifest-uniqueness guards fail closed.
 
 ## Contributing & Security
 
