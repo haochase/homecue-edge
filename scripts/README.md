@@ -82,7 +82,10 @@ browser JSON evidence.
 Run `npm run summary:selftest` from `apps/web` after a successful full-loop run
 to replay the validator against generated bad summaries under ignored
 `assets/tmp/`. The full-loop wrapper runs that self-test automatically after
-`summary:check` when `-IncludeChrome` is set.
+`summary:check` when `-IncludeChrome` is set. The
+`desktop:evidence:selftest` command replays the raw desktop/Chrome evidence
+validator against generated bad loop JSON; `-IncludeChrome` also runs it
+automatically.
 
 ```powershell
 .\scripts\check-chrome-loop.ps1

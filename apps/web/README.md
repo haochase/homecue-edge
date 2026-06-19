@@ -156,5 +156,7 @@ headed/channel mode, and raw page origin are cross-checked against the original
 browser JSON evidence.
 After a successful full-loop run, `npm run summary:selftest` replays the
 validator against the current summary plus generated bad summaries under ignored
-`assets/tmp/` to prove these guards fail closed. The full-loop wrapper runs that
-self-test automatically after `summary:check` when `-IncludeChrome` is set.
+`assets/tmp/` to prove these guards fail closed. The
+`desktop:evidence:selftest` command does the same for raw desktop/Chrome loop
+JSON and screenshot evidence. The full-loop wrapper runs both self-tests
+automatically after `summary:check` when `-IncludeChrome` is set.

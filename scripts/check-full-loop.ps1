@@ -317,6 +317,11 @@ try {
   }
 
   if ($IncludeChrome) {
+    npm run desktop:evidence:selftest
+    if ($LASTEXITCODE -ne 0) {
+      throw "desktop:evidence:selftest failed."
+    }
+
     npm run summary:selftest
     if ($LASTEXITCODE -ne 0) {
       throw "summary:selftest failed."
