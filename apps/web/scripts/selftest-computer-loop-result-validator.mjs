@@ -252,6 +252,13 @@ const cases = [
     },
   },
   {
+    name: 'phone-expected-evidence-missing',
+    expectedError: 'plan.expectedEvidence.phoneEvidence must be __phone_not_run__.json for computer-only checks.',
+    mutate: (result) => {
+      result.plan.expectedEvidence.phoneEvidence = 'assets/demo/phone-loop.json'
+    },
+  },
+  {
     name: 'full-loop-includes-phone',
     expectedError: 'plan.commands.fullLoop.args must not include -IncludePhone',
     mutate: (result) => {
@@ -279,6 +286,13 @@ const cases = [
       result.browserEvidence.plan.paths.phoneEvidence = 'assets/demo/phone-loop.json'
       result.browserEvidence.proofSummary.evidence.phoneEvidencePath = result.browserEvidence.plan.paths.phoneEvidence
       result.proofSummary.evidence.phoneEvidencePath = result.browserEvidence.plan.paths.phoneEvidence
+    },
+  },
+  {
+    name: 'expected-phone-evidence-browser-path-mismatch',
+    expectedError: 'plan.expectedEvidence.phoneEvidence must match browserEvidence.plan.paths.phoneEvidence.',
+    mutate: (result) => {
+      result.browserEvidence.plan.paths.phoneEvidence = 'assets/tmp/computer-loop-result-validator-selftest/phone-loop.json'
     },
   },
   {
@@ -503,9 +517,17 @@ const cases = [
   },
   {
     name: 'proof-summary-phone-evidence-path-mismatch',
-    expectedError: 'proofSummary.evidence.phoneEvidencePath must match browserEvidence.proofSummary.evidence.phoneEvidencePath.',
+    expectedError: 'proofSummary.evidence.phoneEvidencePath must match plan.expectedEvidence.phoneEvidence.',
     mutate: (result) => {
       result.proofSummary.evidence.phoneEvidencePath = 'assets/demo/phone-loop.json'
+    },
+  },
+  {
+    name: 'proof-summary-phone-evidence-browser-path-mismatch',
+    expectedError: 'proofSummary.evidence.phoneEvidencePath must match browserEvidence.proofSummary.evidence.phoneEvidencePath.',
+    mutate: (result) => {
+      result.browserEvidence.proofSummary.evidence.phoneEvidencePath = 'assets/demo/phone-loop.json'
+      result.proofSummary.evidence.phoneEvidencePath = result.plan.expectedEvidence.phoneEvidence
     },
   },
   {
@@ -1248,6 +1270,9 @@ function createResult({ mode = 'validate', browserEvidence = undefined, selfTest
       summaryPath,
       resultJsonPath: 'assets/tmp/computer-loop-result-validator-selftest/computer-loop-check.json',
       browserEvidenceResultJsonPath: browserEvidencePath,
+    },
+    expectedEvidence: {
+      phoneEvidence: '__phone_not_run__.json',
     },
     gates: {
       fullLoopIncludeChrome: true,

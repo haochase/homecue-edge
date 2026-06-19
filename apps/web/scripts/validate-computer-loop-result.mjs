@@ -90,6 +90,7 @@ function validatePlan(errors, plan, validatedResultFile) {
   if (typeof plan.options?.selfTest !== 'boolean') errors.push('plan.options.selfTest must be boolean.')
 
   validateOutputs(errors, plan.outputs)
+  validateExpectedEvidence(errors, plan.expectedEvidence)
   validateGates(errors, plan.gates)
   validateCommands(errors, plan.commands)
   validatePlanConsistency(errors, plan, validatedResultFile)
@@ -114,6 +115,17 @@ function validateOutputs(errors, outputs) {
     if (!isInsidePath(outputs[label], outputs.outputDir)) {
       errors.push(`plan.outputs.${label} must be inside plan.outputs.outputDir.`)
     }
+  }
+}
+
+function validateExpectedEvidence(errors, expectedEvidence) {
+  if (!expectedEvidence || typeof expectedEvidence !== 'object') {
+    errors.push('plan.expectedEvidence is missing.')
+    return
+  }
+
+  if (expectedEvidence.phoneEvidence !== '__phone_not_run__.json') {
+    errors.push('plan.expectedEvidence.phoneEvidence must be __phone_not_run__.json for computer-only checks.')
   }
 }
 
@@ -473,6 +485,13 @@ async function validateValidateMode(errors, value) {
     'summary.generatedAt',
   )
   validateNestedBrowserEvidencePaths(errors, browserEvidence.plan, outputs)
+  compareRepoPaths(
+    errors,
+    value.plan?.expectedEvidence?.phoneEvidence,
+    browserEvidence.plan?.paths?.phoneEvidence,
+    'plan.expectedEvidence.phoneEvidence',
+    'browserEvidence.plan.paths.phoneEvidence',
+  )
   validateRequiredBrowserEvidencePaths(errors, browserEvidence.plan)
   validateSkippedBrowserEvidencePaths(errors, browserEvidence.plan)
   validateBrowserEvidenceProofSummary(errors, browserEvidence.proofSummary, summary, browserEvidence.plan)
@@ -615,6 +634,13 @@ function validateProofSummary(errors, proofSummary, summary, browserEvidence, pl
     browserEvidence?.success,
     'proofSummary.evidence.browserEvidenceSuccess',
     'browserEvidence.success',
+  )
+  compareRepoPaths(
+    errors,
+    proofSummary.evidence?.phoneEvidencePath,
+    plan?.expectedEvidence?.phoneEvidence,
+    'proofSummary.evidence.phoneEvidencePath',
+    'plan.expectedEvidence.phoneEvidence',
   )
   validateProofSummaryRawEvidencePaths(errors, proofSummary.evidence, browserEvidence?.proofSummary?.evidence)
 }

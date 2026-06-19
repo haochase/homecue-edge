@@ -43,9 +43,18 @@ function Read-Result {
 function Assert-ComputerResultValid {
   param([string]$Path)
 
-  Push-Location (Join-Path $Root "apps\web")
+  $WebRoot = Join-Path $Root "apps\web"
+  $RootPath = (Resolve-Path -LiteralPath $Root).Path.TrimEnd("\")
+  $ResultPath = (Resolve-Path -LiteralPath $Path).Path
+  if (-not $ResultPath.StartsWith($RootPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Result path must stay inside repository root: $Path"
+  }
+  $RepoRelativePath = $ResultPath.Substring($RootPath.Length).TrimStart("\")
+  $ValidatorPath = Join-Path "..\.." $RepoRelativePath
+
+  Push-Location $WebRoot
   try {
-    npm run computer:result:check -- $Path | Out-Host
+    npm run computer:result:check -- $ValidatorPath | Out-Host
     if ($LASTEXITCODE -ne 0) {
       throw "computer:result:check failed for dry-run result: $Path"
     }
@@ -201,6 +210,7 @@ try {
   Assert-True $Default.gates.browserEvidenceRequireDesktop "Browser evidence check should require desktop evidence."
   Assert-True $Default.gates.browserEvidenceRequireChrome "Browser evidence check should require Chrome evidence."
   Assert-True (-not $Default.gates.browserEvidenceRequirePhone) "Browser evidence check should not require phone evidence."
+  Assert-Equal $Default.expectedEvidence.phoneEvidence "__phone_not_run__.json" "Computer-only dry-run should expose the skipped phone evidence sentinel."
   Assert-True $Default.gates.fullLoopWebReadiness.httpProbeBeforePortReuse "Computer loop should require full-loop HTTP web readiness probing."
   Assert-True $Default.gates.fullLoopWebReadiness.stalePortBlocksDuplicateStart "Computer loop should require stale web ports to block duplicate starts."
   Assert-Contains $Default.commands.fullLoop.display "check-full-loop.ps1" "Full-loop display command"
@@ -232,6 +242,10 @@ try {
   Assert-Equal $DefaultResult.mode "dry-run" "Dry-run result mode"
   Assert-Equal $DefaultResult.success $true "Dry-run result success"
   Assert-Equal $DefaultResult.plan.outputs.resultJsonPath $Default.outputs.resultJsonPath "Dry-run result should embed the same plan."
+  Assert-True (-not $DefaultResult.plan.gates.browserEvidenceRequirePhone) "Dry-run result should preserve the skipped phone evidence gate."
+  Assert-Equal $DefaultResult.plan.expectedEvidence.phoneEvidence "__phone_not_run__.json" "Dry-run result should preserve the skipped phone evidence sentinel."
+  Assert-Equal $DefaultResult.proofSummary $null "Dry-run result should not include proof summary evidence."
+  Assert-Equal $DefaultResult.browserEvidence $null "Dry-run result should not include nested browser evidence."
   Assert-True (@($DefaultResult.checks).Count -eq 2) "Dry-run result should describe the two computer-loop checks."
 
   $CustomResultPath = Join-Path $OutputDir "custom-result.json"
@@ -252,6 +266,7 @@ try {
     "42"
   )
   Assert-ComputerResultValid $CustomResultPath
+  $CustomResult = Read-Result $CustomResultPath
 
   Assert-Equal $Custom.outputs.outputDir "assets/tmp/computer-loop-plan-selftest/custom-out" "Custom output dir should be honored."
   Assert-Equal $Custom.outputs.reportPath "assets/tmp/computer-loop-plan-selftest/custom-out/custom-report.md" "Custom report path should be honored."
@@ -262,6 +277,10 @@ try {
   Assert-Equal $Custom.options.stepTimeoutSeconds 42 "Custom plan should preserve StepTimeoutSeconds."
   Assert-Contains $Custom.commands.fullLoop.display "-SkipPreflight" "Custom full-loop display command"
   Assert-Contains $Custom.commands.browserEvidence.display "-SelfTest" "Custom browser evidence display command"
+  Assert-True (-not $CustomResult.plan.gates.browserEvidenceRequirePhone) "Custom dry-run result should preserve the skipped phone evidence gate."
+  Assert-Equal $CustomResult.plan.expectedEvidence.phoneEvidence "__phone_not_run__.json" "Custom dry-run result should preserve the skipped phone evidence sentinel."
+  Assert-Equal $CustomResult.proofSummary $null "Custom dry-run result should not include proof summary evidence."
+  Assert-Equal $CustomResult.browserEvidence $null "Custom dry-run result should not include nested browser evidence."
 
   $FailureResultPath = Join-Path $OutputDir "failed-result.json"
   $FailureOutput = Invoke-ComputerLoopExpectFailure @(
