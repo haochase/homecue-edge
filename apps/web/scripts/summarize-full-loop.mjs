@@ -65,11 +65,7 @@ const report = [
   '',
   '## Demo Talking Points',
   '',
-  '- The loop verifies a multimodal assistant path across desktop web, Windows Chrome, Android Chrome, edge API, and simulated room-terminal execution.',
-  '- The phone proof covers front-camera preference, Web Speech readiness, visual scene capture, and guarded execution sync.',
-  '- The desktop proof covers propose-only planning, web confirmation, offline fallback, and ESP32-style external confirmation sync.',
-  '- The report is generated from local ignored evidence artifacts, keeping the public repository free of private screenshots and runtime logs.',
-  '- The environment preflight records host, browser, port, ADB, and authorized-phone readiness before browser automation starts.',
+  ...formatDemoTalkingPoints({ desktop, phone, chrome, devEnv, browserParity }),
   '',
 ].join('\n')
 
@@ -431,6 +427,48 @@ function formatManifest(entries) {
     }
     return `- ${entry.label}: ${entry.file} (${entry.bytes} bytes, sha256:${entry.sha256})`
   })
+}
+
+function formatDemoTalkingPoints({ desktop, phone, chrome, devEnv, browserParity }) {
+  const points = []
+  const runTargets = [
+    desktop ? 'desktop web' : null,
+    chrome ? 'Windows Chrome' : null,
+    phone ? 'Android Chrome' : null,
+  ].filter(Boolean)
+  const runScope = runTargets.length ? runTargets.join(', ') : 'the configured browser target'
+
+  points.push(
+    `- The loop verifies the HomeCue assistant path across ${runScope}, the edge API, and simulated room-terminal execution.`,
+  )
+
+  if (phone) {
+    points.push(
+      '- The phone proof covers front-camera preference, Web Speech readiness, visual scene capture, and guarded execution sync.',
+    )
+  } else {
+    points.push('- Phone proof was not run in this report; run the full loop with phone enabled for Android camera and speech coverage.')
+  }
+
+  if (desktop || chrome) {
+    points.push(
+      '- The desktop proof covers propose-only planning, web confirmation, offline fallback, and ESP32-style external confirmation sync.',
+    )
+  }
+
+  if (browserParity.checked) {
+    points.push(`- Browser parity is ${formatParity(browserParity)} between the desktop browser targets.`)
+  }
+
+  points.push(
+    '- The report is generated from local ignored evidence artifacts, keeping the public repository free of private screenshots and runtime logs.',
+  )
+
+  if (devEnv) {
+    points.push('- The environment preflight records host, browser, port, ADB, and authorized-phone readiness before browser automation starts.')
+  }
+
+  return points
 }
 
 function formatDesktop(value) {
