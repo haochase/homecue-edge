@@ -133,7 +133,7 @@ function New-ComputerLoopPlan {
     "-ExecutionPolicy",
     "Bypass",
     "-File",
-    "$PSScriptRoot\check-full-loop.ps1",
+    (Convert-ToPlanPath "$PSScriptRoot\check-full-loop.ps1"),
     "-AppUrl",
     $AppUrl,
     "-ApiBase",
@@ -161,7 +161,7 @@ function New-ComputerLoopPlan {
     "-ExecutionPolicy",
     "Bypass",
     "-File",
-    "$PSScriptRoot\check-browser-evidence.ps1",
+    (Convert-ToPlanPath "$PSScriptRoot\check-browser-evidence.ps1"),
     "-SummaryPath",
     (Convert-ToPlanPath $SummaryPath),
     "-RequireDesktop",
@@ -357,9 +357,15 @@ function Invoke-CheckedScript {
     [Parameter(Mandatory = $true)]$Command
   )
 
-  & $Command.executable @($Command.args)
-  if ($LASTEXITCODE -ne 0) {
-    throw "$Name failed with exit code $LASTEXITCODE."
+  Push-Location $Root
+  try {
+    & $Command.executable @($Command.args)
+    if ($LASTEXITCODE -ne 0) {
+      throw "$Name failed with exit code $LASTEXITCODE."
+    }
+  }
+  finally {
+    Pop-Location
   }
 }
 
