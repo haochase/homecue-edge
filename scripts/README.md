@@ -86,7 +86,7 @@ That result also includes a compact `proofSummary` with the summary run id,
 desktop/Windows Chrome pass flags, browser-parity status, screenshot counts,
 Chinese text-integrity counts (`required/missing/mojibake`), external execution
 source, and the report/summary/browser-evidence paths plus raw
-desktop/Chrome/phone/web-readiness JSON and screenshot directories.
+desktop/Chrome/phone/dev-env/web-readiness JSON and screenshot directories.
 Computer-only runs record the skipped phone path as `__phone_not_run__.json`.
 `npm run computer:result:check` prints that compact proof line after validation
 so a successful saved-result check is readable without manually opening the JSON;
@@ -108,8 +108,10 @@ matches the referenced summary and browser-evidence result, summary manifest
 paths match the browser-evidence plan, browser evidence carries the
 `Web Readiness JSON` manifest path, top-level proof paths match the nested
 browser evidence, and the skipped phone evidence sentinel matches across layers.
-The raw desktop/Windows Chrome JSON files must also share the summary run id and
-expected browser roles. It also verifies that
+The referenced `Dev Environment JSON` and `Web Readiness JSON` raw files must
+keep their narrow field sets and match the summary environment block. The raw
+desktop/Windows Chrome JSON files must also share the summary run id and expected
+browser roles. It also verifies that
 `plan.outputs.resultJsonPath` is the file being checked and that the saved
 command arguments still match the planned output paths, timeout options, and
 browser-evidence gates. The saved plan must still point at
@@ -208,7 +210,9 @@ browser JSON evidence. The summary JSON is also treated as a strict manifest:
 top-level, environment, loop, browser-parity, and evidence entry objects reject
 unknown fields so stale side-channel proof cannot silently ride along with a
 passing summary. Raw preflight and web-readiness JSON evidence must keep the
-same narrow field sets when they are referenced by the manifest.
+same narrow field sets when they are referenced by the manifest; the saved
+browser/computer result checkers repeat those raw environment checks so a final
+result recheck does not depend only on a prior `summary:check` run.
 Run `npm run summary:selftest` from `apps/web` after a successful full-loop run
 to replay the validator against generated bad summaries under ignored
 `assets/tmp/`, including summary and raw environment field-boundary regressions.

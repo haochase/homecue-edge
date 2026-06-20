@@ -240,9 +240,9 @@ That result also includes a compact `proofSummary` with the summary run id,
 desktop/Windows Chrome pass flags, browser-parity status, screenshot counts,
 web-readiness strategy, Chinese text-integrity counts
 (`required/missing/mojibake`), external execution source, and the
-report/summary/browser-evidence paths plus raw desktop/Chrome/phone/web-readiness
-JSON and screenshot directories. Computer-only runs record the skipped phone
-path as `__phone_not_run__.json`.
+report/summary/browser-evidence paths plus raw desktop/Chrome/phone/dev-env/
+web-readiness JSON and screenshot directories. Computer-only runs record the
+skipped phone path as `__phone_not_run__.json`.
 `npm run computer:result:check` prints that compact proof line after validation
 so a successful saved-result check is readable without manually opening the JSON;
 the line includes `phone=not-run`, `phoneEvidence=__phone_not_run__.json`, and
@@ -261,7 +261,9 @@ ran, phone did not run, browser parity passed, `proofSummary` matches the
 referenced summary and browser-evidence result, summary manifest paths match the
 browser-evidence plan, browser evidence carries the `Web Readiness JSON`
 manifest path, top-level proof paths match the nested browser evidence, and the
-skipped phone evidence sentinel matches across layers. The raw desktop/Windows
+skipped phone evidence sentinel matches across layers. The referenced
+`Dev Environment JSON` and `Web Readiness JSON` raw files must keep their narrow
+field sets and match the summary environment block. The raw desktop/Windows
 Chrome JSON files must also share the summary run id and expected browser roles.
 It also verifies that
 `plan.outputs.resultJsonPath` is the file being checked and that the saved
@@ -338,7 +340,9 @@ against the original browser JSON evidence. The summary JSON is also treated as
 a strict manifest: top-level, environment, loop, browser-parity, and evidence
 entry objects reject unknown fields so stale side-channel proof cannot silently
 ride along with a passing summary. Raw preflight and web-readiness JSON evidence
-must keep the same narrow field sets when they are referenced by the manifest.
+must keep the same narrow field sets when they are referenced by the manifest;
+the saved browser/computer result checkers repeat those raw environment checks
+so a final result recheck does not depend only on a prior `summary:check` run.
 When Windows Chrome is required, the validator recomputes desktop/Chrome parity
 from the summarized loop fields rather than trusting the reported parity flag.
 It also checks each loop's started/finished timestamps against the raw evidence
