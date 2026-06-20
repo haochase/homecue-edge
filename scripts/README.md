@@ -204,14 +204,19 @@ summary fields against their original JSON evidence so stale or edited evidence
 files are caught.
 Browser environment fields such as user agent, language, viewport,
 headed/channel mode, and raw page origin are cross-checked against the original
-browser JSON evidence.
+browser JSON evidence. The summary JSON is also treated as a strict manifest:
+top-level, environment, loop, browser-parity, and evidence entry objects reject
+unknown fields so stale side-channel proof cannot silently ride along with a
+passing summary. Raw preflight and web-readiness JSON evidence must keep the
+same narrow field sets when they are referenced by the manifest.
 Run `npm run summary:selftest` from `apps/web` after a successful full-loop run
 to replay the validator against generated bad summaries under ignored
-`assets/tmp/`. The full-loop wrapper runs that self-test automatically after
-`summary:check` when `-IncludeChrome` is set. `npm run report:selftest` replays
-the report generator against generated bad phone JSON so weak front-camera proof
-cannot be summarized as a passing report; the full-loop wrapper runs it only
-for a complete desktop + phone + Windows Chrome evidence run. The
+`assets/tmp/`, including summary and raw environment field-boundary regressions.
+The full-loop wrapper runs that self-test automatically after `summary:check`
+when `-IncludeChrome` is set. `npm run report:selftest` replays the report
+generator against generated bad phone JSON so weak front-camera proof cannot be
+summarized as a passing report; the full-loop wrapper runs it only for a
+complete desktop + phone + Windows Chrome evidence run. The
 `desktop:evidence:selftest` command replays the raw desktop/Chrome evidence
 validator against generated bad loop JSON, including root/checks field-boundary
 regressions; `-IncludeChrome` also runs it automatically. The

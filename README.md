@@ -334,7 +334,11 @@ identity fields must match their manifest role. Windows Chrome evidence must
 identify `chrome.exe` with Google Chrome product metadata and matching runtime /
 executable major versions. Browser environment fields such as user agent,
 language, viewport, headed/channel mode, and raw page origin are cross-checked
-against the original browser JSON evidence.
+against the original browser JSON evidence. The summary JSON is also treated as
+a strict manifest: top-level, environment, loop, browser-parity, and evidence
+entry objects reject unknown fields so stale side-channel proof cannot silently
+ride along with a passing summary. Raw preflight and web-readiness JSON evidence
+must keep the same narrow field sets when they are referenced by the manifest.
 When Windows Chrome is required, the validator recomputes desktop/Chrome parity
 from the summarized loop fields rather than trusting the reported parity flag.
 It also checks each loop's started/finished timestamps against the raw evidence
@@ -343,8 +347,9 @@ Loop page URLs must share the summary app origin and carry the same API base in
 their query string, with raw evidence checked against the same URLs.
 After a successful full-loop run, `npm run summary:selftest` in `apps/web`
 replays the validator against the current summary plus generated bad summaries
-under ignored `assets/tmp/` to prove the Chrome identity, version, origin,
-manifest-uniqueness, and phone text-integrity guards fail closed.
+under ignored `assets/tmp/` to prove the summary and raw environment
+field-boundary, Chrome identity, version, origin, manifest-uniqueness, and phone
+text-integrity guards fail closed.
 `npm run report:selftest` replays the report generator against source evidence
 and generated bad phone JSON so weak front-camera proof cannot be summarized as
 a passing report.
