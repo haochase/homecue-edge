@@ -64,6 +64,7 @@ Starts the FastAPI edge gateway on `http://127.0.0.1:8723` and the Vite web cons
 .\scripts\check-full-loop.ps1 -DryRun
 .\scripts\check-computer-loop.ps1
 .\scripts\check-computer-loop-latest.ps1
+.\scripts\check-computer-loop-latest.ps1 -SelfTest -MaxAgeMinutes 30
 .\scripts\check-computer-loop.ps1 -ResultJsonPath .\assets\tmp\computer-loop-check-latest.json
 .\scripts\check-computer-loop.ps1 -SelfTest
 .\scripts\check-computer-loop.ps1 -DryRun
@@ -74,6 +75,7 @@ Starts the FastAPI edge gateway on `http://127.0.0.1:8723` and the Vite web cons
 .\scripts\selftest-full-loop-path-plan.ps1
 npm --prefix apps/web run computer:result:check -- ..\..\assets\tmp\computer-loop-check.json
 npm --prefix apps/web run computer:result:check -- ..\..\assets\tmp\computer-loop-check-latest.json
+npm --prefix apps/web run computer:result:check:latest -- --max-age-minutes 30
 npm --prefix apps/web run computer:result:check:latest
 npm --prefix apps/web run computer:result:selftest
 ```
@@ -104,8 +106,14 @@ The wrapper validates that result JSON before returning success. Use `-DryRun`
 to inspect those paths and commands without starting services or opening
 browsers. By default dry-run only prints the plan and does not overwrite the
 stable `assets/tmp/computer-loop-check.json`; pass `-ResultJsonPath` when you
-want a dry-run result JSON for automation. `selftest-computer-loop-plan.ps1`
-covers that dry-run contract without hardware, and `computer:result:selftest`
+want a dry-run result JSON for automation. Add `--max-age-minutes N` to
+`npm run computer:result:check`, or pass `-MaxAgeMinutes N` to
+`check-computer-loop.ps1` / `check-computer-loop-latest.ps1`, when a demo or
+handoff must prove the saved result was generated within the last N minutes; the
+default checker still accepts older saved evidence when source state and
+manifests match.
+`selftest-computer-loop-plan.ps1` covers that dry-run contract without
+hardware, and `computer:result:selftest`
 replays positive and negative result JSON cases so phone-only drift, missing
 nested browser evidence, mismatched summary paths, missing computer-only
 `expectedEvidence.phoneEvidence` sentinels, source-state drift, or embedded
@@ -248,6 +256,7 @@ or computer-loop summary instead of the default demo summary.
 .\scripts\check-browser-evidence.ps1 -RequireDesktop -RequireChrome -RequirePhone -ResultJsonPath .\assets\tmp\browser-evidence-check.json
 .\scripts\selftest-browser-evidence-plan.ps1
 npm --prefix apps/web run browser:evidence-result:check -- ..\..\assets\tmp\browser-evidence-check.json
+npm --prefix apps/web run browser:evidence-result:check -- ..\..\assets\tmp\browser-evidence-check.json --max-age-minutes 30
 npm --prefix apps/web run browser:evidence-result:selftest
 ```
 
@@ -285,7 +294,9 @@ must match the inferred plan. In validate mode it also prints a
 compact `Browser evidence proof summary` line with loop status, browser parity,
 web-readiness strategy, source state, screenshot counts, self-test state,
 external execution source, and the summary path. The source field includes the
-branch, short commit, dirty state, status-line count, and status hash.
+branch, short commit, dirty state, status-line count, and status hash. Add
+`--max-age-minutes N` when the saved browser-evidence result must be fresh, for
+example before a live demo or handoff.
 `selftest-browser-evidence-plan.ps1` uses that dry-run mode to verify complete,
 desktop-only, Chrome-only, manifest-path, raw-JSON screenshot fallback, and
 explicit override planning without hardware.
