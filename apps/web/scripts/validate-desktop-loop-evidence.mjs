@@ -67,6 +67,13 @@ async function validateEvidence(value, options) {
     return ['Evidence root must be an object.']
   }
 
+  validateAllowedKeys(
+    errors,
+    value,
+    ['success', 'runId', 'appUrl', 'apiBase', 'pageUrl', 'browserName', 'startedAt', 'finishedAt', 'screenshots', 'checks'],
+    'evidence root',
+  )
+  validateChecksManifest(errors, value.checks)
   if (value.success !== true) errors.push('success must be true.')
   assertString(errors, value.startedAt, 'startedAt')
   assertString(errors, value.finishedAt, 'finishedAt')
@@ -91,6 +98,44 @@ async function validateEvidence(value, options) {
   validateExecutionChecks(errors, value.checks)
 
   return errors
+}
+
+function validateAllowedKeys(errors, value, allowedKeys, label) {
+  if (!value || typeof value !== 'object') return
+
+  const allowed = new Set(allowedKeys)
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      errors.push(`${label} must not include unexpected field: ${key}.`)
+    }
+  }
+}
+
+function validateChecksManifest(errors, checks) {
+  if (!checks || typeof checks !== 'object') {
+    errors.push('checks is missing.')
+    return
+  }
+
+  validateAllowedKeys(
+    errors,
+    checks,
+    [
+      'browserEnvironment',
+      'hostEnvironment',
+      'localizedUi',
+      'firstViewportVisibility',
+      'responsiveLayout',
+      'scenePromptHandoff',
+      'proposeOnly',
+      'webConfirmExecute',
+      'offlineFallback',
+      'externalExecutionSync',
+      'screenshotEvidence',
+      'runtimeHealth',
+    ],
+    'checks',
+  )
 }
 
 function validateTiming(errors, value) {

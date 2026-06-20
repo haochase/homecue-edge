@@ -28,6 +28,24 @@ const positiveCases = [
 ]
 const negativeCases = [
   {
+    name: 'desktop-root-unexpected-field',
+    base: desktopEvidence,
+    argsFor: desktopArgs,
+    expectedError: 'evidence root must not include unexpected field: proofSummary',
+    mutate: (evidence) => {
+      evidence.proofSummary = {}
+    },
+  },
+  {
+    name: 'desktop-checks-unexpected-field',
+    base: desktopEvidence,
+    argsFor: desktopArgs,
+    expectedError: 'checks must not include unexpected field: debugTrace',
+    mutate: (evidence) => {
+      evidence.checks.debugTrace = []
+    },
+  },
+  {
     name: 'chrome-product-mismatch',
     base: chromeEvidence,
     argsFor: chromeArgs,
