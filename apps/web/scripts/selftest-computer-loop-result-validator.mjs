@@ -868,6 +868,18 @@ const cases = [
     },
   },
   {
+    name: 'referenced-browser-evidence-ascii-safe-json-required',
+    expectedError:
+      'plan.outputs.browserEvidenceResultJsonPath JSON cannot be read: plan.outputs.browserEvidenceResultJsonPath must be ASCII-safe JSON',
+    prepare: async (result, name) => {
+      const file = `assets/tmp/computer-loop-result-validator-selftest/${name}/browser-evidence-check.json`
+      result.plan.outputs.browserEvidenceResultJsonPath = file
+      result.checks[1].resultJsonPath = file
+      await writeNonAsciiJson(resolveRepoPath(file), result.browserEvidence)
+    },
+    skipBrowserEvidenceRewrite: true,
+  },
+  {
     name: 'missing-browser-evidence',
     expectedError: 'browserEvidence is missing in validate mode.',
     mutate: (result) => {
@@ -1025,6 +1037,15 @@ const cases = [
       result.plan.outputs.summaryPath = 'assets/demo/full-loop-report.json'
       result.checks[0].summaryPath = result.plan.outputs.summaryPath
       result.browserEvidence.plan.summaryPath = result.plan.outputs.summaryPath
+    },
+  },
+  {
+    name: 'referenced-summary-ascii-safe-json-required',
+    expectedError: 'plan.outputs.summaryPath JSON cannot be read: plan.outputs.summaryPath must be ASCII-safe JSON',
+    prepare: async (result, name) => {
+      await attachRunLocalEvidence(result, name)
+      const summary = await createSummary(result.browserEvidence.plan.paths)
+      await writeNonAsciiJson(resolveRepoPath(result.plan.outputs.summaryPath), summary)
     },
   },
   {
@@ -1236,6 +1257,16 @@ const cases = [
       await attachRunLocalEvidence(result, name, {
         desktop: { runId: 'different-full-loop' },
       })
+    },
+  },
+  {
+    name: 'referenced-raw-desktop-ascii-safe-json-required',
+    expectedError:
+      'browserEvidence.plan.paths.desktopEvidence JSON cannot be read: browserEvidence.plan.paths.desktopEvidence must be ASCII-safe JSON',
+    prepare: async (result, name) => {
+      await attachRunLocalEvidence(result, name)
+      const raw = JSON.parse(await readFile(resolveRepoPath(result.browserEvidence.plan.paths.desktopEvidence), 'utf8'))
+      await writeNonAsciiJson(resolveRepoPath(result.browserEvidence.plan.paths.desktopEvidence), raw)
     },
   },
   {
@@ -2209,6 +2240,11 @@ async function runValidator(file, args = []) {
 
 async function writeJson(file, value) {
   await writeJsonFile(file, value)
+}
+
+async function writeNonAsciiJson(file, value) {
+  await mkdir(path.dirname(file), { recursive: true })
+  await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
 }
 
 async function assertAsciiSafeJsonIsRequired() {

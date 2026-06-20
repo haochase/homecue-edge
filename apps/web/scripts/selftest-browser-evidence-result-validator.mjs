@@ -695,6 +695,15 @@ const cases = [
     },
   },
   {
+    name: 'referenced-summary-ascii-safe-json-required',
+    expectedError: 'plan.summaryPath JSON cannot be read: plan.summaryPath must be ASCII-safe JSON',
+    prepare: async (result, name) => {
+      await attachRunLocalEvidence(result, name)
+      const summary = await createSummary(result.plan)
+      await writeNonAsciiJson(resolveRepoPath(result.plan.summaryPath), summary)
+    },
+  },
+  {
     name: 'required-chrome-mismatch',
     expectedError: 'plan.requiredEvidence.windowsChrome must match plan.inferredFromSummary.windowsChrome.',
     mutate: (result) => {
@@ -735,6 +744,15 @@ const cases = [
       await attachRunLocalEvidence(result, name, {
         desktop: { runId: 'different-full-loop' },
       })
+    },
+  },
+  {
+    name: 'referenced-raw-desktop-ascii-safe-json-required',
+    expectedError: 'plan.paths.desktopEvidence JSON cannot be read: plan.paths.desktopEvidence must be ASCII-safe JSON',
+    prepare: async (result, name) => {
+      await attachRunLocalEvidence(result, name)
+      const raw = JSON.parse(await readFile(resolveRepoPath(result.plan.paths.desktopEvidence), 'utf8'))
+      await writeNonAsciiJson(resolveRepoPath(result.plan.paths.desktopEvidence), raw)
     },
   },
   {
@@ -1452,6 +1470,11 @@ async function runValidator(file, args = []) {
 
 async function writeJson(file, value) {
   await writeJsonFile(file, value)
+}
+
+async function writeNonAsciiJson(file, value) {
+  await mkdir(path.dirname(file), { recursive: true })
+  await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
 }
 
 async function assertAsciiSafeJsonIsRequired() {

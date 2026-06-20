@@ -598,7 +598,8 @@ async function readValidatedSummary(value) {
   const absolutePath = resolveRepoPath(summaryPath)
   if (!absolutePath) return null
 
-  return JSON.parse(await readFile(absolutePath, 'utf8'))
+  const errors = []
+  return readJsonFile(errors, absolutePath, 'plan.summaryPath')
 }
 
 function formatBrowserEvidenceProofSummary(value, summary) {
@@ -1394,8 +1395,14 @@ async function readReferencedJson(errors, value, label) {
   const absolutePath = resolveRepoPath(value)
   if (!absolutePath) return null
 
+  return readJsonFile(errors, absolutePath, label)
+}
+
+async function readJsonFile(errors, absolutePath, label) {
   try {
-    return JSON.parse(await readFile(absolutePath, 'utf8'))
+    const text = await readFile(absolutePath, 'utf8')
+    assertAsciiSafeJsonText(text, label)
+    return JSON.parse(text)
   } catch (error) {
     errors.push(`${label} JSON cannot be read: ${error?.code ?? error.message ?? error}`)
     return null
