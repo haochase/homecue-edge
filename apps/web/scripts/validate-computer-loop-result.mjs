@@ -1520,6 +1520,8 @@ function validateReportEvidence(errors, report, summary) {
       errors.push(`report must include "${line}".`)
     }
   }
+  validateReportLoopSection(errors, report, 'Desktop Browser', summary.loops?.desktop)
+  validateReportLoopSection(errors, report, 'Windows Chrome', summary.loops?.windowsChrome)
   validateReportManifest(errors, report, summary.evidence?.files)
 }
 
@@ -1536,6 +1538,64 @@ function formatBrowserParity(value) {
   if (!value?.checked) return 'not checked'
   if (value.success) return 'pass'
   return `fail (${Array.isArray(value.errors) ? value.errors.join('; ') : 'unknown'})`
+}
+
+function validateReportLoopSection(errors, report, heading, loop) {
+  const section = markdownSection(report, heading)
+  if (!section) {
+    errors.push(`report must include "## ${heading}".`)
+    return
+  }
+
+  for (const line of [
+    `- Title: ${loop?.title ?? 'unknown'}`,
+    `- Chinese text integrity: ${formatTextIntegrity(loop?.textIntegrity)}`,
+    `- Runtime health: ${formatRuntimeHealth(loop?.runtimeHealth)}`,
+    `- Screenshot evidence: ${formatScreenshotEvidence(loop?.screenshotEvidence)}`,
+    `- External sync source: ${loop?.externalExecutionSync?.latestSource ?? 'unknown'}`,
+    `- External accepted actions: ${loop?.externalExecutionSync?.acceptedActionCount ?? 'unknown'}`,
+  ]) {
+    if (!section.includes(line)) {
+      errors.push(`report ${heading} section must include "${line}".`)
+    }
+  }
+}
+
+function markdownSection(report, heading) {
+  const marker = `## ${heading}`
+  const start = report.indexOf(marker)
+  if (start === -1) return ''
+  const next = report.indexOf('\n## ', start + marker.length)
+  return next === -1 ? report.slice(start) : report.slice(start, next)
+}
+
+function formatTextIntegrity(value) {
+  if (!value) return 'not checked'
+  return `${value.requiredPhraseCount ?? 0} phrases, missing:${value.missingPhraseCount ?? '?'} mojibake:${
+    value.mojibakeCount ?? '?'
+  }`
+}
+
+function formatRuntimeHealth(value) {
+  if (!value) return 'not checked'
+  const counts = value.counts ?? {}
+  const issueCount =
+    value.issueCount ?? Object.values(counts).reduce((total, count) => total + (typeof count === 'number' ? count : 0), 0)
+  const summary = [
+    `console:${counts.consoleErrors ?? 0}`,
+    `page:${counts.pageErrors ?? 0}`,
+    `request:${counts.requestFailures ?? 0}`,
+    `http:${counts.httpErrors ?? 0}`,
+  ].join(', ')
+  return value.success === false || issueCount > 0 ? `fail (${summary})` : `clean (${summary})`
+}
+
+function formatScreenshotEvidence(value) {
+  if (!value) return 'not checked'
+  if (value.success === false) return `fail (${value.error ?? 'unknown error'})`
+  return `${value.count ?? 0} PNGs, unique:${value.uniqueDigestCount ?? '?'}, min ${value.minWidth ?? '?'}x${
+    value.minHeight ?? '?'
+  }, ${value.minBytes ?? '?'} bytes`
 }
 
 function validateReportManifest(errors, report, files) {

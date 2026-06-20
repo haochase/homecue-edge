@@ -1311,6 +1311,28 @@ const cases = [
     },
   },
   {
+    name: 'report-desktop-title-mismatch',
+    expectedError: 'report Desktop Browser section must include "- Title: \u5bb6\u5ead\u667a\u80fd\u7ba1\u5bb6".',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, async (summary) => {
+        const reportSummary = structuredClone(summary)
+        reportSummary.loops.desktop.title = 'Wrong desktop title'
+        await writeReport(resolveRepoPath(result.plan.outputs.reportPath), reportSummary)
+      })
+    },
+  },
+  {
+    name: 'report-chrome-external-sync-mismatch',
+    expectedError: 'report Windows Chrome section must include "- External sync source: esp32-serial".',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, async (summary) => {
+        const reportSummary = structuredClone(summary)
+        reportSummary.loops.windowsChrome.externalExecutionSync.latestSource = 'web'
+        await writeReport(resolveRepoPath(result.plan.outputs.reportPath), reportSummary)
+      })
+    },
+  },
+  {
     name: 'raw-desktop-run-id-mismatch',
     expectedError: 'desktop raw evidence.runId must match summary.runId.',
     prepare: async (result, name) => {
@@ -2365,12 +2387,64 @@ async function writeReport(file, summary) {
       `- App URL: ${summary.appUrl}`,
       `- API base: ${summary.apiBase}`,
       '',
+      '## Desktop Browser',
+      '',
+      ...formatLoop(summary.loops?.desktop),
+      '',
+      '## Windows Chrome',
+      '',
+      ...formatLoop(summary.loops?.windowsChrome),
+      '',
+      '## Android Chrome Phone',
+      '',
+      '- Not run.',
+      '',
       '## Evidence Files',
       '',
       ...formatManifest(summary.evidence?.files),
       '',
     ].join('\n'),
   )
+}
+
+function formatLoop(loop) {
+  return [
+    `- Title: ${loop?.title ?? 'unknown'}`,
+    `- Chinese text integrity: ${formatTextIntegrity(loop?.textIntegrity)}`,
+    `- Runtime health: ${formatRuntimeHealth(loop?.runtimeHealth)}`,
+    `- Screenshot evidence: ${formatScreenshotEvidence(loop?.screenshotEvidence)}`,
+    `- External sync source: ${loop?.externalExecutionSync?.latestSource ?? 'unknown'}`,
+    `- External accepted actions: ${loop?.externalExecutionSync?.acceptedActionCount ?? 'unknown'}`,
+  ]
+}
+
+function formatTextIntegrity(value) {
+  if (!value) return 'not checked'
+  return `${value.requiredPhraseCount ?? 0} phrases, missing:${value.missingPhraseCount ?? '?'} mojibake:${
+    value.mojibakeCount ?? '?'
+  }`
+}
+
+function formatRuntimeHealth(value) {
+  if (!value) return 'not checked'
+  const counts = value.counts ?? {}
+  const issueCount =
+    value.issueCount ?? Object.values(counts).reduce((total, count) => total + (typeof count === 'number' ? count : 0), 0)
+  const summary = [
+    `console:${counts.consoleErrors ?? 0}`,
+    `page:${counts.pageErrors ?? 0}`,
+    `request:${counts.requestFailures ?? 0}`,
+    `http:${counts.httpErrors ?? 0}`,
+  ].join(', ')
+  return value.success === false || issueCount > 0 ? `fail (${summary})` : `clean (${summary})`
+}
+
+function formatScreenshotEvidence(value) {
+  if (!value) return 'not checked'
+  if (value.success === false) return `fail (${value.error ?? 'unknown error'})`
+  return `${value.count ?? 0} PNGs, unique:${value.uniqueDigestCount ?? '?'}, min ${value.minWidth ?? '?'}x${
+    value.minHeight ?? '?'
+  }, ${value.minBytes ?? '?'} bytes`
 }
 
 function formatDevEnvPreflight(value) {
