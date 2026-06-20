@@ -121,6 +121,51 @@ function Write-JsonFile {
   [System.IO.File]::WriteAllText($Path, (($Value | ConvertTo-Json -Depth 10) + [Environment]::NewLine), $Utf8NoBom)
 }
 
+function Get-StringSha256Prefix {
+  param([string]$Value)
+
+  $Bytes = [System.Text.Encoding]::UTF8.GetBytes($Value)
+  $Hasher = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return ([BitConverter]::ToString($Hasher.ComputeHash($Bytes)).Replace("-", "").ToLowerInvariant()).Substring(0, 12)
+  }
+  finally {
+    $Hasher.Dispose()
+  }
+}
+
+function Get-GitOutput {
+  param([string[]]$Arguments)
+
+  Push-Location $Root
+  try {
+    $Output = @(& git @Arguments)
+    if ($LASTEXITCODE -ne 0) {
+      throw "git $($Arguments -join ' ') failed with exit code $LASTEXITCODE."
+    }
+
+    return $Output
+  }
+  finally {
+    Pop-Location
+  }
+}
+
+function Get-SourceState {
+  $Branch = (Get-GitOutput -Arguments @("rev-parse", "--abbrev-ref", "HEAD") | Select-Object -First 1)
+  $Commit = (Get-GitOutput -Arguments @("rev-parse", "HEAD") | Select-Object -First 1)
+  $StatusLines = @(Get-GitOutput -Arguments @("status", "--short"))
+  $StatusText = $StatusLines -join "`n"
+
+  return [pscustomobject]@{
+    branch = [string]$Branch
+    commit = [string]$Commit
+    dirty = [bool]($StatusLines.Count -gt 0)
+    statusCount = [int]$StatusLines.Count
+    statusSha256 = Get-StringSha256Prefix $StatusText
+  }
+}
+
 function Read-JsonFile {
   param([string]$Path)
 
@@ -243,6 +288,7 @@ function New-ComputerLoopResult {
     success = $Success
     mode = $Mode
     runId = $Plan.runId
+    sourceState = Get-SourceState
     plan = $Plan
     checks = @(
       [pscustomobject]@{

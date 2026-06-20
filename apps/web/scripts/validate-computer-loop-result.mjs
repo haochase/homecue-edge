@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
@@ -111,7 +112,18 @@ async function validateComputerLoopResult(value, validatedResultFile) {
   validateAllowedKeys(
     errors,
     value,
-    ['generatedAt', 'success', 'mode', 'runId', 'plan', 'checks', 'proofSummary', 'browserEvidence', 'failure'],
+    [
+      'generatedAt',
+      'success',
+      'mode',
+      'runId',
+      'sourceState',
+      'plan',
+      'checks',
+      'proofSummary',
+      'browserEvidence',
+      'failure',
+    ],
     'result root',
   )
   assertString(errors, value.generatedAt, 'generatedAt')
@@ -130,6 +142,7 @@ async function validateComputerLoopResult(value, validatedResultFile) {
   }
 
   validatePlan(errors, value.plan, validatedResultFile)
+  validateSourceState(errors, value.sourceState)
   validateChecks(errors, value.checks, value.plan)
 
   if (value.mode === 'validate') {
@@ -146,6 +159,69 @@ async function validateComputerLoopResult(value, validatedResultFile) {
   }
 
   return errors
+}
+
+function validateSourceState(errors, sourceState) {
+  if (!sourceState || typeof sourceState !== 'object') {
+    errors.push('sourceState is missing.')
+    return
+  }
+
+  validateAllowedKeys(errors, sourceState, ['branch', 'commit', 'dirty', 'statusCount', 'statusSha256'], 'sourceState')
+  assertString(errors, sourceState.branch, 'sourceState.branch')
+  assertString(errors, sourceState.commit, 'sourceState.commit')
+  if (typeof sourceState.commit === 'string' && !/^[0-9a-f]{40}$/i.test(sourceState.commit)) {
+    errors.push('sourceState.commit must be a 40-character git commit hash.')
+  }
+  if (typeof sourceState.dirty !== 'boolean') errors.push('sourceState.dirty must be boolean.')
+  if (!Number.isInteger(sourceState.statusCount) || sourceState.statusCount < 0) {
+    errors.push('sourceState.statusCount must be a non-negative integer.')
+  }
+  assertString(errors, sourceState.statusSha256, 'sourceState.statusSha256')
+  if (typeof sourceState.statusSha256 === 'string' && !/^[0-9a-f]{12}$/i.test(sourceState.statusSha256)) {
+    errors.push('sourceState.statusSha256 must be a 12-character SHA-256 prefix.')
+  }
+
+  const actual = readCurrentSourceState(errors)
+  if (!actual) return
+
+  for (const key of ['branch', 'commit']) {
+    if (sourceState[key] !== actual[key]) {
+      errors.push(`sourceState.${key} must match current git ${key}.`)
+    }
+  }
+}
+
+function readCurrentSourceState(errors) {
+  try {
+    const branch = gitOutput(['rev-parse', '--abbrev-ref', 'HEAD'])
+    const commit = gitOutput(['rev-parse', 'HEAD'])
+    const statusText = execFileSync('git', ['status', '--short'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trimEnd()
+    const statusLines = statusText ? statusText.split(/\r?\n/) : []
+
+    return {
+      branch,
+      commit,
+      dirty: statusLines.length > 0,
+      statusCount: statusLines.length,
+      statusSha256: createHash('sha256').update(statusText).digest('hex').slice(0, 12),
+    }
+  } catch (error) {
+    errors.push(`sourceState cannot be checked against current git state: ${error?.message ?? error}`)
+    return null
+  }
+}
+
+function gitOutput(args) {
+  return execFileSync('git', args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim()
 }
 
 function validatePlan(errors, plan, validatedResultFile) {

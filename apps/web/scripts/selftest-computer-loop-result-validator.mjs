@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -107,6 +107,34 @@ const cases = [
     expectedError: 'plan must not include unexpected field: artifacts.',
     mutate: (result) => {
       result.plan.artifacts = []
+    },
+  },
+  {
+    name: 'source-state-missing',
+    expectedError: 'sourceState is missing.',
+    mutate: (result) => {
+      delete result.sourceState
+    },
+  },
+  {
+    name: 'source-state-unexpected-field',
+    expectedError: 'sourceState must not include unexpected field: remote.',
+    mutate: (result) => {
+      result.sourceState.remote = 'origin'
+    },
+  },
+  {
+    name: 'source-state-commit-mismatch',
+    expectedError: 'sourceState.commit must match current git commit.',
+    mutate: (result) => {
+      result.sourceState.commit = '0'.repeat(40)
+    },
+  },
+  {
+    name: 'source-state-status-invalid',
+    expectedError: 'sourceState.statusSha256 must be a 12-character SHA-256 prefix.',
+    mutate: (result) => {
+      result.sourceState.statusSha256 = 'not-a-hash'
     },
   },
   {
@@ -1680,6 +1708,7 @@ function createResult({ mode = 'validate', browserEvidence = undefined, selfTest
     success: true,
     mode,
     runId: plan.runId,
+    sourceState: currentSourceState(),
     plan,
     checks: [
       {
@@ -1780,6 +1809,33 @@ function createResult({ mode = 'validate', browserEvidence = undefined, selfTest
           }
         : browserEvidence,
   }
+}
+
+function currentSourceState() {
+  const branch = gitOutput(['rev-parse', '--abbrev-ref', 'HEAD'])
+  const commit = gitOutput(['rev-parse', 'HEAD'])
+  const statusText = execFileSync('git', ['status', '--short'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trimEnd()
+  const statusLines = statusText ? statusText.split(/\r?\n/) : []
+
+  return {
+    branch,
+    commit,
+    dirty: statusLines.length > 0,
+    statusCount: statusLines.length,
+    statusSha256: createHash('sha256').update(statusText).digest('hex').slice(0, 12),
+  }
+}
+
+function gitOutput(args) {
+  return execFileSync('git', args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim()
 }
 
 function browserEvidenceProofSummary(browserEvidencePlan) {
