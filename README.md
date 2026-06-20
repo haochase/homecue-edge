@@ -242,15 +242,19 @@ machine-readable `computer-loop-check.json` with the full-loop command, browser
 evidence command, summary/report paths, and browser-evidence result JSON path.
 That result also includes a compact `proofSummary` with the summary run id,
 desktop/Windows Chrome pass flags, browser-parity status, screenshot counts,
-web-readiness strategy, source branch/commit/dirty state, Chinese text-integrity counts
-(`required/missing/mojibake`), external execution source, and the
+web-readiness strategy, source branch/commit/dirty state plus status-line count
+and status hash, Chinese text-integrity counts (`required/missing/mojibake`),
+external execution source, and the
 report/summary/browser-evidence paths plus raw desktop/Chrome/phone/dev-env/
 web-readiness JSON and screenshot directories. Computer-only runs record the
-skipped phone path as `__phone_not_run__.json`.
+skipped phone path as `__phone_not_run__.json`; this proof is intentionally
+desktop + Chrome only and does not replace a `-IncludePhone` capture or ESP32
+serial hardware proof.
 `npm run computer:result:check` prints that compact proof line after validation
 so a successful saved-result check is readable without manually opening the JSON;
 the line includes `phone=not-run`, `phoneEvidence=__phone_not_run__.json`,
-`devEnvEvidence=...`, `webReadinessEvidence=...`, and the checked summary path.
+`source=branch@commit/dirty#statusCount:statusHash`, `devEnvEvidence=...`,
+`webReadinessEvidence=...`, and the checked summary path.
 The wrapper validates that result JSON before returning success. Use `-DryRun`
 to inspect those paths and commands without starting services or opening
 browsers. By default dry-run only prints the plan and does not overwrite the
