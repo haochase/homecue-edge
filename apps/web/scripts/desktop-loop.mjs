@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
@@ -11,6 +11,7 @@ import {
   postJson,
   setProposeOnly,
 } from './demo-flow.mjs'
+import { writeJsonFile } from './json-file.mjs'
 import { assertRuntimeHealth, createRuntimeHealthCollector } from './runtime-health.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
@@ -541,8 +542,7 @@ async function verifyExternalExecutionSync(page) {
 }
 
 async function writeEvidence(file, value) {
-  await mkdir(path.dirname(file), { recursive: true })
-  await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+  await writeJsonFile(file, value)
 }
 
 async function captureScreenshot(page, filename) {

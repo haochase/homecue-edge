@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { toAsciiJson } from './json-file.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
@@ -11,6 +12,8 @@ const chromeEvidenceFile = path.join(repoRoot, 'assets', 'demo', 'chrome-loop.js
 const outputDir = path.join(repoRoot, 'assets', 'tmp', 'desktop-evidence-validator-selftest')
 
 await mkdir(outputDir, { recursive: true })
+
+assertAsciiSafeJsonOutput()
 
 const desktopEvidence = JSON.parse(await readFile(desktopEvidenceFile, 'utf8'))
 const chromeEvidence = JSON.parse(await readFile(chromeEvidenceFile, 'utf8'))
@@ -262,4 +265,22 @@ async function runValidator(args) {
 
 async function writeJson(file, value) {
   await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+}
+
+function assertAsciiSafeJsonOutput() {
+  const source = {
+    title: '\u5bb6\u5ead\u667a\u80fd\u7ba1\u5bb6',
+    emoji: '\ud83c\udfe0',
+  }
+  const text = toAsciiJson(source)
+  if (/[^\x00-\x7F]/u.test(text)) {
+    throw new Error('ASCII-safe JSON output contains non-ASCII bytes')
+  }
+
+  const parsed = JSON.parse(text)
+  if (parsed.title !== source.title || parsed.emoji !== source.emoji) {
+    throw new Error('ASCII-safe JSON output did not preserve parsed values')
+  }
+
+  console.log('PASS ASCII-safe JSON output')
 }

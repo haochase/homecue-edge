@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeJsonFile } from './json-file.mjs'
 import { recomputeBrowserParity } from './summary-parity.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
@@ -86,7 +87,7 @@ const report = [
 await mkdir(path.dirname(outputFile), { recursive: true })
 await mkdir(path.dirname(summaryFile), { recursive: true })
 await writeFile(outputFile, report, 'utf8')
-await writeFile(summaryFile, `${JSON.stringify(summary, null, 2)}\n`, 'utf8')
+await writeJsonFile(summaryFile, summary)
 console.log(`Full loop report: ${outputFile}`)
 console.log(`Full loop summary: ${summaryFile}`)
 if (!requiredEvidence.success) {

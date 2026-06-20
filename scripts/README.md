@@ -328,7 +328,10 @@ resolved from the repository root, and direct desktop/Chrome wrapper runs queue
 on the shared browser-loop lock if another wrapper is already mutating API
 execution state. Standalone wrapper runs stamp raw evidence with a generated
 `desktop-loop-*` or `chrome-loop-*` run id; full-loop invocations still inherit
-the shared full-loop run id.
+the shared full-loop run id. Raw loop and summary JSON is emitted as
+ASCII-safe JSON, so Windows PowerShell can parse it with
+`Get-Content -Raw | ConvertFrom-Json` while UTF-8 JSON readers still recover
+the original Chinese labels after parsing.
 
 ```powershell
 .\scripts\verify-qwen.ps1

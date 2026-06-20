@@ -1,8 +1,9 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { buildDemoUrl, pause } from './demo-flow.mjs'
+import { writeJsonFile } from './json-file.mjs'
 import { assertRuntimeHealth, createRuntimeHealthCollector } from './runtime-health.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
@@ -450,8 +451,7 @@ async function fetchJson(url) {
 }
 
 async function writeEvidence(file, value) {
-  await mkdir(path.dirname(file), { recursive: true })
-  await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+  await writeJsonFile(file, value)
 }
 
 async function tapButton(page, name) {

@@ -219,7 +219,10 @@ without opening a browser. Direct desktop and Chrome wrappers also share a
 named local lock around the API-mutating loop steps, so accidental parallel
 starts queue instead of racing the same execution state. Standalone wrapper
 runs stamp raw evidence with a generated `desktop-loop-*` or `chrome-loop-*`
-run id; full-loop invocations still inherit the shared full-loop run id.
+run id; full-loop invocations still inherit the shared full-loop run id. Raw
+loop and summary JSON is emitted as ASCII-safe JSON, so Windows PowerShell can
+parse it with `Get-Content -Raw | ConvertFrom-Json` while UTF-8 JSON readers
+still recover the original Chinese labels after parsing.
 
 For a one-command computer-side loop that covers both bundled Playwright
 Chromium and installed Windows Chrome without phone hardware:
