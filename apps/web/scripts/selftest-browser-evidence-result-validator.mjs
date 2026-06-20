@@ -42,6 +42,61 @@ if (
 }
 console.log('PASS positive browser evidence result')
 
+const fresh = structuredClone(positive)
+fresh.generatedAt = new Date().toISOString()
+const freshFile = path.join(outputDir, 'fresh.json')
+setResultJsonPath(fresh, freshFile)
+await writeJson(freshFile, fresh)
+const freshResult = await runValidator(freshFile, ['--max-age-minutes', '60'])
+if (freshResult.code !== 0) {
+  console.error(freshResult.output)
+  throw new Error('Expected fresh browser evidence result to pass freshness validation.')
+}
+console.log('PASS fresh browser evidence result')
+
+const staleResult = await runValidator(positiveFile, ['--max-age-minutes', '1'])
+if (staleResult.code === 0 || !staleResult.output.includes('generatedAt is older than --max-age-minutes=1.')) {
+  console.error(staleResult.output)
+  throw new Error('Expected stale browser evidence result to fail freshness validation.')
+}
+console.log('PASS stale browser evidence result')
+
+const future = structuredClone(positive)
+future.generatedAt = new Date(Date.now() + 60_000).toISOString()
+const futureFile = path.join(outputDir, 'future.json')
+setResultJsonPath(future, futureFile)
+await writeJson(futureFile, future)
+const futureResult = await runValidator(futureFile, ['--max-age-minutes', '60'])
+if (
+  futureResult.code === 0 ||
+  !futureResult.output.includes('generatedAt must not be in the future when --max-age-minutes is set.')
+) {
+  console.error(futureResult.output)
+  throw new Error('Expected future browser evidence result to fail freshness validation.')
+}
+console.log('PASS future browser evidence result')
+
+const invalidFreshnessResult = await runValidator(positiveFile, ['--max-age-minutes', '0'])
+if (invalidFreshnessResult.code === 0 || !invalidFreshnessResult.output.includes('--max-age-minutes must be a positive number.')) {
+  console.error(invalidFreshnessResult.output)
+  throw new Error('Expected invalid browser evidence freshness option to fail.')
+}
+console.log('PASS invalid browser evidence freshness option')
+
+const duplicateFreshnessResult = await runValidator(positiveFile, [
+  '--max-age-minutes',
+  '30',
+  '--max-age-minutes=60',
+])
+if (
+  duplicateFreshnessResult.code === 0 ||
+  !duplicateFreshnessResult.output.includes('--max-age-minutes must be provided at most once.')
+) {
+  console.error(duplicateFreshnessResult.output)
+  throw new Error('Expected duplicate browser evidence freshness option to fail.')
+}
+console.log('PASS duplicate browser evidence freshness option')
+
 const dryRun = createResult({ mode: 'dry-run' })
 const dryRunFile = path.join(outputDir, 'dry-run.json')
 setResultJsonPath(dryRun, dryRunFile)
@@ -1354,9 +1409,9 @@ function setResultJsonPath(result, file) {
   result.plan.resultJsonPath = toRepoPath(file)
 }
 
-async function runValidator(file) {
+async function runValidator(file, args = []) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [validatorScript, file], {
+    const child = spawn(process.execPath, [validatorScript, file, ...args], {
       cwd: path.join(repoRoot, 'apps', 'web'),
       stdio: ['ignore', 'pipe', 'pipe'],
     })

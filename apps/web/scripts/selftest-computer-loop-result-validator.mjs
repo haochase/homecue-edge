@@ -40,6 +40,62 @@ assertOutputIncludes(
 )
 console.log('PASS positive computer loop result')
 
+const fresh = structuredClone(positive)
+fresh.generatedAt = new Date().toISOString()
+fresh.plan.options.maxAgeMinutes = 60
+const freshFile = path.join(outputDir, 'fresh.json')
+setResultJsonPath(fresh, freshFile)
+await writeJson(freshFile, fresh)
+const freshResult = await runValidator(freshFile, ['--max-age-minutes', '60'])
+if (freshResult.code !== 0) {
+  console.error(freshResult.output)
+  throw new Error('Expected fresh computer loop result to pass freshness validation.')
+}
+console.log('PASS fresh computer loop result')
+
+const staleResult = await runValidator(positiveFile, ['--max-age-minutes', '1'])
+if (staleResult.code === 0 || !staleResult.output.includes('generatedAt is older than --max-age-minutes=1.')) {
+  console.error(staleResult.output)
+  throw new Error('Expected stale computer loop result to fail freshness validation.')
+}
+console.log('PASS stale computer loop result')
+
+const future = structuredClone(positive)
+future.generatedAt = new Date(Date.now() + 60_000).toISOString()
+const futureFile = path.join(outputDir, 'future.json')
+setResultJsonPath(future, futureFile)
+await writeJson(futureFile, future)
+const futureResult = await runValidator(futureFile, ['--max-age-minutes', '60'])
+if (
+  futureResult.code === 0 ||
+  !futureResult.output.includes('generatedAt must not be in the future when --max-age-minutes is set.')
+) {
+  console.error(futureResult.output)
+  throw new Error('Expected future computer loop result to fail freshness validation.')
+}
+console.log('PASS future computer loop result')
+
+const invalidFreshnessResult = await runValidator(positiveFile, ['--max-age-minutes', '0'])
+if (invalidFreshnessResult.code === 0 || !invalidFreshnessResult.output.includes('--max-age-minutes must be a positive number.')) {
+  console.error(invalidFreshnessResult.output)
+  throw new Error('Expected invalid computer loop freshness option to fail.')
+}
+console.log('PASS invalid computer loop freshness option')
+
+const duplicateFreshnessResult = await runValidator(positiveFile, [
+  '--max-age-minutes',
+  '30',
+  '--max-age-minutes=60',
+])
+if (
+  duplicateFreshnessResult.code === 0 ||
+  !duplicateFreshnessResult.output.includes('--max-age-minutes must be provided at most once.')
+) {
+  console.error(duplicateFreshnessResult.output)
+  throw new Error('Expected duplicate computer loop freshness option to fail.')
+}
+console.log('PASS duplicate computer loop freshness option')
+
 const dryRun = createResult({ mode: 'dry-run', browserEvidence: null })
 const dryRunFile = path.join(outputDir, 'dry-run.json')
 setResultJsonPath(dryRun, dryRunFile)
@@ -157,6 +213,13 @@ const cases = [
     expectedError: 'plan.options must not include unexpected field: debug.',
     mutate: (result) => {
       result.plan.options.debug = true
+    },
+  },
+  {
+    name: 'plan-options-max-age-invalid',
+    expectedError: 'plan.options.maxAgeMinutes must be null or a positive number.',
+    mutate: (result) => {
+      result.plan.options.maxAgeMinutes = 0
     },
   },
   {
@@ -1712,6 +1775,7 @@ function createResult({ mode = 'validate', browserEvidence = undefined, selfTest
       startupTimeoutSeconds: 60,
       stepTimeoutSeconds: 180,
       browserWrapperSharedStateLockTimeoutSeconds: 1200,
+      maxAgeMinutes: null,
     },
     outputs: {
       outputDir: 'assets/tmp/computer-loop-result-validator-selftest',
@@ -2033,9 +2097,9 @@ function displayCommand(executable, args) {
   return [executable, ...args].join(' ')
 }
 
-async function runValidator(file) {
+async function runValidator(file, args = []) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [validatorScript, file], {
+    const child = spawn(process.execPath, [validatorScript, file, ...args], {
       cwd: path.join(repoRoot, 'apps', 'web'),
       stdio: ['ignore', 'pipe', 'pipe'],
     })

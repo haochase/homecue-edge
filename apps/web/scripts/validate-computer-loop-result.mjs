@@ -15,7 +15,8 @@ import {
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
 const defaultResultFile = path.join(repoRoot, 'assets', 'tmp', 'computer-loop-check.json')
-const resultFile = resolveCliPath(process.argv[2] ?? defaultResultFile)
+const cliOptions = parseCliOptions(process.argv.slice(2))
+const resultFile = resolveCliPath(cliOptions.resultFile ?? defaultResultFile)
 const MIN_LOCALIZED_PHRASE_COUNT = 7
 const PROOF_SUMMARY_PARITY_KEYS = ['checked', 'success', 'errorCount']
 const PROOF_SUMMARY_WEB_READINESS_KEYS = [
@@ -87,7 +88,7 @@ const BROWSER_PROOF_SUMMARY_EVIDENCE_KEYS = [
 const PROOF_SUMMARY_LOOP_GROUP_KEYS = ['desktop', 'phone', 'windowsChrome']
 const PROOF_SUMMARY_BOOLEAN_GROUP_KEYS = ['desktop', 'phone', 'windowsChrome']
 const result = JSON.parse(await readFile(resultFile, 'utf8'))
-const errors = await validateComputerLoopResult(result, resultFile)
+const errors = await validateComputerLoopResult(result, resultFile, cliOptions)
 
 if (errors.length) {
   console.error(`Computer loop result validation failed: ${resultFile}`)
@@ -102,7 +103,7 @@ if (result.mode === 'validate') {
   console.log(formatProofSummary(result.proofSummary, result.sourceState))
 }
 
-async function validateComputerLoopResult(value, validatedResultFile) {
+async function validateComputerLoopResult(value, validatedResultFile, options = {}) {
   const errors = []
 
   if (!value || typeof value !== 'object') {
@@ -130,6 +131,7 @@ async function validateComputerLoopResult(value, validatedResultFile) {
   if (!Number.isFinite(Date.parse(value.generatedAt))) {
     errors.push('generatedAt must be a valid timestamp.')
   }
+  validateFreshness(errors, value.generatedAt, options.maxAgeMinutes)
   if (!['dry-run', 'validate', 'failed'].includes(value.mode)) errors.push('mode must be dry-run, validate, or failed.')
   if (value.mode === 'failed') {
     if (value.success !== false) errors.push('success must be false in failed mode.')
@@ -159,6 +161,69 @@ async function validateComputerLoopResult(value, validatedResultFile) {
   }
 
   return errors
+}
+
+function parseCliOptions(args) {
+  const options = { resultFile: null, maxAgeMinutes: null }
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+    if (arg === '--max-age-minutes') {
+      setMaxAgeMinutes(options, args[index + 1])
+      index += 1
+      continue
+    }
+    if (arg?.startsWith('--max-age-minutes=')) {
+      setMaxAgeMinutes(options, arg.slice('--max-age-minutes='.length))
+      continue
+    }
+    if (arg?.startsWith('--')) {
+      console.error(`Unknown option: ${arg}`)
+      process.exit(2)
+    }
+    if (options.resultFile) {
+      console.error(`Unexpected extra argument: ${arg}`)
+      process.exit(2)
+    }
+    options.resultFile = arg
+  }
+
+  return options
+}
+
+function setMaxAgeMinutes(options, value) {
+  if (options.maxAgeMinutes !== null) {
+    console.error('--max-age-minutes must be provided at most once.')
+    process.exit(2)
+  }
+
+  options.maxAgeMinutes = parseMaxAgeMinutes(value)
+}
+
+function parseMaxAgeMinutes(value) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    console.error('--max-age-minutes must be a positive number.')
+    process.exit(2)
+  }
+
+  return parsed
+}
+
+function validateFreshness(errors, generatedAt, maxAgeMinutes) {
+  if (!maxAgeMinutes) return
+
+  const generatedAtMs = Date.parse(generatedAt)
+  if (!Number.isFinite(generatedAtMs)) return
+
+  const ageMs = Date.now() - generatedAtMs
+  if (ageMs < 0) {
+    errors.push('generatedAt must not be in the future when --max-age-minutes is set.')
+    return
+  }
+  if (ageMs > maxAgeMinutes * 60 * 1000) {
+    errors.push(`generatedAt is older than --max-age-minutes=${maxAgeMinutes}.`)
+  }
 }
 
 function validateSourceState(errors, sourceState, label = 'sourceState') {
@@ -252,7 +317,14 @@ function validatePlan(errors, plan, validatedResultFile) {
   validateAllowedKeys(
     errors,
     plan.options,
-    ['skipPreflight', 'selfTest', 'startupTimeoutSeconds', 'stepTimeoutSeconds', 'browserWrapperSharedStateLockTimeoutSeconds'],
+    [
+      'skipPreflight',
+      'selfTest',
+      'startupTimeoutSeconds',
+      'stepTimeoutSeconds',
+      'browserWrapperSharedStateLockTimeoutSeconds',
+      'maxAgeMinutes',
+    ],
     'plan.options',
   )
   assertString(errors, plan.runId, 'plan.runId')
@@ -268,6 +340,11 @@ function validatePlan(errors, plan, validatedResultFile) {
   }
   if (!positiveInteger(plan.options?.browserWrapperSharedStateLockTimeoutSeconds)) {
     errors.push('plan.options.browserWrapperSharedStateLockTimeoutSeconds must be a positive integer.')
+  }
+  if (plan.options?.maxAgeMinutes !== null && plan.options?.maxAgeMinutes !== undefined) {
+    if (typeof plan.options.maxAgeMinutes !== 'number' || !Number.isFinite(plan.options.maxAgeMinutes) || plan.options.maxAgeMinutes <= 0) {
+      errors.push('plan.options.maxAgeMinutes must be null or a positive number.')
+    }
   }
   if (typeof plan.options?.skipPreflight !== 'boolean') errors.push('plan.options.skipPreflight must be boolean.')
   if (typeof plan.options?.selfTest !== 'boolean') errors.push('plan.options.selfTest must be boolean.')
