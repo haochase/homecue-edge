@@ -259,6 +259,11 @@ try {
   Assert-Contains $ComputerLoopScriptSource "webReadinessEvidence={" "Wrapper proof summary should print the web readiness evidence path label."
   Assert-Contains $ComputerLoopScriptSource '$ProofSummary.evidence.devEnvEvidencePath' "Wrapper proof summary should use proofSummary dev environment evidence."
   Assert-Contains $ComputerLoopScriptSource '$ProofSummary.evidence.webReadinessEvidencePath' "Wrapper proof summary should use proofSummary web readiness evidence."
+  $LatestWrapperSource = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "check-computer-loop-latest.ps1")
+  Assert-Contains $LatestWrapperSource "assets\tmp\computer-loop-check-latest.json" "Latest wrapper should target the stable latest result JSON path."
+  Assert-Contains $LatestWrapperSource "check-computer-loop.ps1" "Latest wrapper should delegate to the full computer loop wrapper."
+  Assert-Contains $LatestWrapperSource "-ResultJsonPath" "Latest wrapper should pass ResultJsonPath explicitly."
+  Assert-Contains $LatestWrapperSource "-DryRun" "Latest wrapper should guard against dry-run overwriting latest evidence."
 
   $Implicit = Invoke-Plan @()
   Assert-ComputerLoopPlanManifest $Implicit "Implicit"

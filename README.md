@@ -224,6 +224,7 @@ Chromium and installed Windows Chrome without phone hardware:
 
 ```powershell
 .\scripts\check-computer-loop.ps1
+.\scripts\check-computer-loop-latest.ps1
 .\scripts\check-computer-loop.ps1 -ResultJsonPath .\assets\tmp\computer-loop-check-latest.json
 .\scripts\check-computer-loop.ps1 -SelfTest
 .\scripts\check-computer-loop.ps1 -DryRun
