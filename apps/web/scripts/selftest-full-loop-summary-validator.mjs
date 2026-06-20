@@ -25,6 +25,27 @@ const validatorArgs = [
 ]
 const cases = [
   {
+    name: 'summary-root-unexpected-field',
+    expectedError: 'summary root must not include unexpected field: proofSummary.',
+    mutate: async (summary) => {
+      summary.proofSummary = {}
+    },
+  },
+  {
+    name: 'desktop-loop-unexpected-field',
+    expectedError: 'loops.desktop must not include unexpected field: trace.',
+    mutate: async (summary) => {
+      summary.loops.desktop.trace = {}
+    },
+  },
+  {
+    name: 'evidence-file-unexpected-field',
+    expectedError: 'evidence.files Desktop JSON must not include unexpected field: absolutePath.',
+    mutate: async (summary) => {
+      manifestEntry(summary, 'Desktop JSON').absolutePath = sourceDesktopEntry.file
+    },
+  },
+  {
     name: 'chrome-product-mismatch',
     expectedError: 'executableProductName must identify Google Chrome',
     mutate: async (summary) => {
@@ -105,6 +126,15 @@ const cases = [
     },
   },
   {
+    name: 'dev-env-raw-unexpected-field',
+    expectedError: 'environment.preflight raw evidence must not include unexpected field: artifacts.',
+    mutate: async (summary) => {
+      const raw = await readManifestJson(summary, 'Dev Environment JSON')
+      raw.artifacts = []
+      await replaceManifestJson(summary, 'Dev Environment JSON', raw, 'bad-dev-env-field.json')
+    },
+  },
+  {
     name: 'dev-env-after-loop-start',
     expectedError: 'environment.preflight.generatedAt must not be later than loops.desktop.startedAt',
     mutate: async (summary) => {
@@ -139,6 +169,13 @@ const cases = [
     expectedError: 'environment.webReadiness.appUrl raw evidence mismatch',
     mutate: async (summary) => {
       await attachWebReadiness(summary, { appUrl: 'http://127.0.0.1:9999' })
+    },
+  },
+  {
+    name: 'web-readiness-raw-unexpected-field',
+    expectedError: 'environment.webReadiness raw evidence must not include unexpected field: artifacts.',
+    mutate: async (summary) => {
+      await attachWebReadiness(summary, { artifacts: [] })
     },
   },
 ]
