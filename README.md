@@ -202,8 +202,9 @@ next to its ignored JSON evidence so the Markdown report does not rely on stale
 screen captures. The screenshot proof requires the six expected step images and
 unique image digests so repeated or stale captures fail the loop. Standalone
 desktop and Chrome wrappers also validate their raw loop JSON and screenshot
-files before returning success. Desktop and Windows Chrome checks also send a
-sentinel image payload and fail if
+files before returning success, including root/checks field-boundary checks so
+unexpected raw-evidence fields fail closed. Desktop and Windows Chrome checks
+also send a sentinel image payload and fail if
 `/vision/scene` echoes it back or marks it retained.
 They also validate key Chinese phrases and fail on common mojibake markers so
 desktop evidence covers page localization integrity, not just selector presence.
@@ -265,8 +266,15 @@ Chrome JSON files must also share the summary run id and expected browser roles.
 It also verifies that
 `plan.outputs.resultJsonPath` is the file being checked and that the saved
 command arguments still match the planned output paths, timeout options, and
-browser-evidence gates. Keep custom report, summary, and browser evidence result
-paths inside `-OutputDir`; the result checker rejects split output roots.
+browser-evidence gates. The saved plan must still point at
+`scripts/check-full-loop.ps1` and `scripts/check-browser-evidence.ps1`, and the
+top-level result must contain exactly the ordered `computer full loop` and
+`saved browser evidence recheck` entries with only their expected fields. Nested
+browser-evidence checks are also treated as a manifest: command order, names,
+required flags, allowed fields, and optional self-test commands must match the
+computer-only plan. Failed results keep the same narrow failure manifest. Keep
+custom report, summary, and browser evidence result paths inside `-OutputDir`;
+the result checker rejects split output roots.
 
 To minimize manual setup, run the full loop wrapper. It starts the API and Vite
 dev server if they are not already running, then runs the requested browser,
@@ -387,7 +395,10 @@ commands for CI, local automation, or demo handoff notes. The browser evidence
 result checker revalidates that saved JSON against the referenced summary,
 required evidence, screenshot directories, loop success flags, browser parity,
 web readiness, raw desktop/Windows Chrome run ids, browser roles, and self-test
-gates without opening browsers. In validate mode it also prints a compact
+gates without opening browsers. It also treats the saved `checks` array as a
+manifest: required entries, names, command order, required flags, allowed
+fields, and optional self-test commands must match the inferred plan. In
+validate mode it also prints a compact
 `Browser evidence proof summary` line with loop status, browser parity,
 web-readiness strategy, screenshot counts, self-test state, external execution
 source, and the summary path.

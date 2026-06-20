@@ -112,8 +112,15 @@ The raw desktop/Windows Chrome JSON files must also share the summary run id and
 expected browser roles. It also verifies that
 `plan.outputs.resultJsonPath` is the file being checked and that the saved
 command arguments still match the planned output paths, timeout options, and
-browser-evidence gates. Keep custom report, summary, and browser evidence result
-paths inside `-OutputDir`; the result checker rejects split output roots.
+browser-evidence gates. The saved plan must still point at
+`scripts/check-full-loop.ps1` and `scripts/check-browser-evidence.ps1`, and the
+top-level result must contain exactly the ordered `computer full loop` and
+`saved browser evidence recheck` entries with only their expected fields. Nested
+browser-evidence checks are also treated as a manifest: command order, names,
+required flags, allowed fields, and optional self-test commands must match the
+computer-only plan. Failed results keep the same narrow failure manifest. Keep
+custom report, summary, and browser evidence result paths inside `-OutputDir`;
+the result checker rejects split output roots.
 
 Starts the API and Vite dev server when they are not already listening, then
 runs the requested desktop, phone, and Windows Chrome loops. Complete desktop +
@@ -204,8 +211,9 @@ the report generator against generated bad phone JSON so weak front-camera proof
 cannot be summarized as a passing report; the full-loop wrapper runs it only
 for a complete desktop + phone + Windows Chrome evidence run. The
 `desktop:evidence:selftest` command replays the raw desktop/Chrome evidence
-validator against generated bad loop JSON; `-IncludeChrome` also runs it
-automatically. The `phone:evidence:selftest` command replays the phone raw
+validator against generated bad loop JSON, including root/checks field-boundary
+regressions; `-IncludeChrome` also runs it automatically. The
+`phone:evidence:selftest` command replays the phone raw
 evidence validator against generated bad phone JSON for front-camera,
 localized-text, and ESP32-sync regressions; `-IncludePhone` runs it
 automatically.
@@ -251,7 +259,10 @@ check commands for CI, local automation, or demo handoff notes. The browser
 evidence result checker revalidates that saved JSON against the referenced
 summary, required evidence, screenshot directories, loop success flags, browser
 parity, web readiness, raw desktop/Windows Chrome run ids, browser roles, and
-self-test gates without opening browsers. In validate mode it also prints a
+self-test gates without opening browsers. It also treats the saved `checks`
+array as a manifest: required entries, names, command order, required flags,
+allowed fields, and optional self-test commands must match the inferred plan. In
+validate mode it also prints a
 compact `Browser evidence proof summary` line with loop status, browser parity,
 web-readiness strategy, screenshot counts, self-test state, external execution
 source, and the summary path.
