@@ -265,6 +265,9 @@ try {
   Assert-Contains $LatestWrapperSource "check-computer-loop.ps1" "Latest wrapper should delegate to the full computer loop wrapper."
   Assert-Contains $LatestWrapperSource "-ResultJsonPath" "Latest wrapper should pass ResultJsonPath explicitly."
   Assert-Contains $LatestWrapperSource "-DryRun" "Latest wrapper should guard against dry-run overwriting latest evidence."
+  Assert-Contains $LatestWrapperSource "@Arguments" "Latest wrapper should delegate with named splatting so switch parameters are preserved."
+  Assert-Contains $LatestWrapperSource '$Arguments.SelfTest = $true' "Latest wrapper should forward SelfTest as a switch parameter."
+  Assert-Contains $LatestWrapperSource "ResultJsonPath = `$LatestResultJsonPath" "Latest wrapper should force the stable latest result path by name."
 
   $LatestDryRunFailure = Invoke-ComputerLoopExpectFailure -ScriptName "check-computer-loop-latest.ps1" -Arguments @("-DryRun")
   Assert-Contains $LatestDryRunFailure "without overwriting latest result evidence" "Latest wrapper dry-run guard output"
