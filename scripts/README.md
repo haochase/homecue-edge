@@ -71,6 +71,7 @@ Starts the FastAPI edge gateway on `http://127.0.0.1:8723` and the Vite web cons
 .\scripts\selftest-computer-loop-plan.ps1
 .\scripts\selftest-full-loop-path-plan.ps1
 npm --prefix apps/web run computer:result:check -- ..\..\assets\tmp\computer-loop-check.json
+npm --prefix apps/web run computer:result:check -- ..\..\assets\tmp\computer-loop-check-latest.json
 npm --prefix apps/web run computer:result:selftest
 ```
 
