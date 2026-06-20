@@ -1251,6 +1251,37 @@ const cases = [
     },
   },
   {
+    name: 'report-dev-env-preflight-mismatch',
+    expectedError: 'report must include "- Dev environment preflight: pass (1 ok, 0 warn, 0 fail, phone optional)".',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, async (summary) => {
+        await writeReport(resolveRepoPath(result.plan.outputs.reportPath), {
+          ...summary,
+          environment: {
+            ...summary.environment,
+            preflight: summaryDevEnv({ okCount: 2 }),
+          },
+        })
+      })
+    },
+  },
+  {
+    name: 'report-browser-parity-mismatch',
+    expectedError: 'report must include "- Browser parity: pass".',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, async (summary) => {
+        await writeReport(resolveRepoPath(result.plan.outputs.reportPath), {
+          ...summary,
+          browserParity: {
+            ...summary.browserParity,
+            success: false,
+            errors: ['desktop and chrome mismatch'],
+          },
+        })
+      })
+    },
+  },
+  {
     name: 'raw-desktop-run-id-mismatch',
     expectedError: 'desktop raw evidence.runId must match summary.runId.',
     prepare: async (result, name) => {
@@ -2289,12 +2320,23 @@ async function writeReport(file, summary) {
       '- Windows Chrome loop: pass',
       '- Phone loop: not run',
       `- Run ID: ${summary.runId}`,
+      `- Dev environment preflight: ${formatDevEnvPreflight(summary.environment?.preflight)}`,
       `- Web readiness: ${formatWebReadiness(summary.environment?.webReadiness)}`,
+      `- Browser parity: ${formatBrowserParity(summary.browserParity)}`,
       `- App URL: ${summary.appUrl}`,
       `- API base: ${summary.apiBase}`,
       '',
     ].join('\n'),
   )
+}
+
+function formatDevEnvPreflight(value) {
+  if (!value?.run) return 'not run'
+  const status = value.success === true ? 'pass' : 'fail'
+  const phone = value.requirePhone ? 'phone required' : 'phone optional'
+  return `${status} (${value.okCount ?? 'unknown'} ok, ${value.warnCount ?? 'unknown'} warn, ${
+    value.failCount ?? 'unknown'
+  } fail, ${phone})`
 }
 
 function formatWebReadiness(value) {
@@ -2303,6 +2345,12 @@ function formatWebReadiness(value) {
   return `${status} (${value.strategy ?? 'unknown'}, port before:${formatBoolean(
     value.portListeningBefore,
   )}, http before:${formatBoolean(value.httpReadyBefore)})`
+}
+
+function formatBrowserParity(value) {
+  if (!value?.checked) return 'not checked'
+  if (value.success) return 'pass'
+  return `fail (${Array.isArray(value.errors) ? value.errors.join('; ') : 'unknown'})`
 }
 
 function formatBoolean(value) {

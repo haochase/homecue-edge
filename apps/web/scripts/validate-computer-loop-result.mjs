@@ -1508,7 +1508,9 @@ function validateReportEvidence(errors, report, summary) {
     ['Windows Chrome loop', 'pass'],
     ['Phone loop', 'not run'],
     ['Run ID', summary.runId],
+    ['Dev environment preflight', formatDevEnvPreflight(summary.environment?.preflight)],
     ['Web readiness', formatWebReadiness(summary.environment?.webReadiness)],
+    ['Browser parity', formatBrowserParity(summary.browserParity)],
     ['App URL', summary.appUrl],
     ['API base', summary.apiBase],
   ]) {
@@ -1518,6 +1520,21 @@ function validateReportEvidence(errors, report, summary) {
       errors.push(`report must include "${line}".`)
     }
   }
+}
+
+function formatDevEnvPreflight(value) {
+  if (!value?.run) return 'not run'
+  const status = value.success === true ? 'pass' : 'fail'
+  const phone = value.requirePhone ? 'phone required' : 'phone optional'
+  return `${status} (${value.okCount ?? 'unknown'} ok, ${value.warnCount ?? 'unknown'} warn, ${
+    value.failCount ?? 'unknown'
+  } fail, ${phone})`
+}
+
+function formatBrowserParity(value) {
+  if (!value?.checked) return 'not checked'
+  if (value.success) return 'pass'
+  return `fail (${Array.isArray(value.errors) ? value.errors.join('; ') : 'unknown'})`
 }
 
 async function validateSummaryEvidence(errors, summary, browserEvidencePlan, resultPlan) {
