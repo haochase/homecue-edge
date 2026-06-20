@@ -265,9 +265,11 @@ stable `assets/tmp/computer-loop-check.json`; pass `-ResultJsonPath` when you
 want a dry-run result JSON for automation. Add `--max-age-minutes N` to
 `npm run computer:result:check`, or pass `-MaxAgeMinutes N` to
 `check-computer-loop.ps1` / `check-computer-loop-latest.ps1`, when a demo or
-handoff must prove the saved result was generated within the last N minutes; the
-default checker still accepts older saved evidence when source state and
-manifests match.
+handoff must prove the saved result was generated within the last N minutes.
+The wrapper option is also forwarded into the nested browser-evidence recheck,
+so the computer-loop result and its browser-evidence result record the same
+freshness requirement. The default checker still accepts older saved evidence
+when source state and manifests match.
 `result-validator-cli:selftest` covers the shared saved-result checker CLI
 parsing and freshness gate before the browser/computer result validators reuse
 it.
@@ -292,12 +294,15 @@ command arguments still match the planned output paths, timeout options, and
 browser-evidence gates. The saved plan must still point at
 `scripts/check-full-loop.ps1` and `scripts/check-browser-evidence.ps1`, and the
 saved plan and its nested option, output, gate, command, and expected-evidence
-objects reject unknown fields. The top-level result must contain exactly the
-ordered `computer full loop` and `saved browser evidence recheck` entries with
-only their expected fields. The embedded browser-evidence result, its nested
-plan, and its nested checks are also treated as manifests: command order, names,
-required flags, allowed fields, and optional self-test commands must match the
-computer-only plan. Failed results keep the same narrow failure manifest. Keep
+objects reject unknown fields. When `plan.options.maxAgeMinutes` is set, the
+browser-evidence command must include the matching `-MaxAgeMinutes` argument,
+and the embedded browser-evidence plan must record the same value. The top-level
+result must contain exactly the ordered `computer full loop` and
+`saved browser evidence recheck` entries with only their expected fields. The
+embedded browser-evidence result, its nested plan, and its nested checks are
+also treated as manifests: command order, names, required flags, allowed fields,
+and optional self-test commands must match the computer-only plan. Failed
+results keep the same narrow failure manifest. Keep
 custom report, summary, and browser evidence result paths inside `-OutputDir`;
 the result checker rejects split output roots.
 
@@ -399,6 +404,7 @@ or touching ADB, run:
 .\scripts\check-browser-evidence.ps1 -RequireChrome -RequirePhone -SelfTest
 .\scripts\check-browser-evidence.ps1 -DryRun
 .\scripts\check-browser-evidence.ps1 -RequireDesktop -RequireChrome -RequirePhone -ResultJsonPath .\assets\tmp\browser-evidence-check.json
+.\scripts\check-browser-evidence.ps1 -RequireDesktop -RequireChrome -ResultJsonPath .\assets\tmp\browser-evidence-check.json -MaxAgeMinutes 30
 npm --prefix apps/web run browser:evidence-result:check -- ..\..\assets\tmp\browser-evidence-check.json
 npm --prefix apps/web run browser:evidence-result:check -- ..\..\assets\tmp\browser-evidence-check.json --max-age-minutes 30
 npm --prefix apps/web run result-validator-cli:selftest
@@ -436,11 +442,13 @@ match the inferred plan. In validate mode it also prints a compact
 `Browser evidence proof summary` line with loop status, browser parity,
 web-readiness strategy, source state, screenshot counts, self-test state,
 external execution source, and the summary path. The source field includes the
-branch, short commit, dirty state, status-line count, and status hash. Add
-`--max-age-minutes N` when the saved browser-evidence result must be fresh, for
-example before a live demo or handoff. `result-validator-cli:selftest` covers
-the shared saved-result checker CLI parsing and freshness gate used by both the
-browser-evidence and computer-loop result checkers.
+branch, short commit, dirty state, status-line count, and status hash. Pass
+`-MaxAgeMinutes N` to the wrapper when it writes a result JSON that must be
+fresh, or add `--max-age-minutes N` when rechecking an existing saved
+browser-evidence result before a live demo or handoff.
+`result-validator-cli:selftest` covers the shared saved-result checker CLI
+parsing and freshness gate used by both the browser-evidence and computer-loop
+result checkers.
 
 ## Contributing & Security
 
