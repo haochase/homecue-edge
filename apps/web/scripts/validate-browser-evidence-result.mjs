@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseResultValidatorCliOptions, validateResultFreshness } from './result-validator-cli.mjs'
 import { parityErrorsSignature, recomputeBrowserParity, validateBrowserParityInputs } from './summary-parity.mjs'
 import {
   validateRawDevEnvManifest,
@@ -15,7 +16,7 @@ import {
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
 const defaultResultFile = path.join(repoRoot, 'assets', 'tmp', 'browser-evidence-check.json')
-const cliOptions = parseCliOptions(process.argv.slice(2))
+const cliOptions = parseResultValidatorCliOptions(process.argv.slice(2))
 const resultFile = resolveCliPath(cliOptions.resultFile ?? defaultResultFile)
 const MIN_LOCALIZED_PHRASE_COUNT = 7
 const PROOF_SUMMARY_KEYS = [
@@ -98,7 +99,7 @@ async function validateBrowserEvidenceResult(value, validatedResultFile, options
   if (!Number.isFinite(Date.parse(value.generatedAt))) {
     errors.push('generatedAt must be a valid timestamp.')
   }
-  validateFreshness(errors, value.generatedAt, options.maxAgeMinutes)
+  validateResultFreshness(errors, value.generatedAt, options.maxAgeMinutes)
   if (value.success !== true) errors.push('success must be true.')
   if (!['dry-run', 'validate'].includes(value.mode)) errors.push('mode must be dry-run or validate.')
 
@@ -113,69 +114,6 @@ async function validateBrowserEvidenceResult(value, validatedResultFile, options
   }
 
   return errors
-}
-
-function parseCliOptions(args) {
-  const options = { resultFile: null, maxAgeMinutes: null }
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index]
-    if (arg === '--max-age-minutes') {
-      setMaxAgeMinutes(options, args[index + 1])
-      index += 1
-      continue
-    }
-    if (arg?.startsWith('--max-age-minutes=')) {
-      setMaxAgeMinutes(options, arg.slice('--max-age-minutes='.length))
-      continue
-    }
-    if (arg?.startsWith('--')) {
-      console.error(`Unknown option: ${arg}`)
-      process.exit(2)
-    }
-    if (options.resultFile) {
-      console.error(`Unexpected extra argument: ${arg}`)
-      process.exit(2)
-    }
-    options.resultFile = arg
-  }
-
-  return options
-}
-
-function setMaxAgeMinutes(options, value) {
-  if (options.maxAgeMinutes !== null) {
-    console.error('--max-age-minutes must be provided at most once.')
-    process.exit(2)
-  }
-
-  options.maxAgeMinutes = parseMaxAgeMinutes(value)
-}
-
-function parseMaxAgeMinutes(value) {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    console.error('--max-age-minutes must be a positive number.')
-    process.exit(2)
-  }
-
-  return parsed
-}
-
-function validateFreshness(errors, generatedAt, maxAgeMinutes) {
-  if (!maxAgeMinutes) return
-
-  const generatedAtMs = Date.parse(generatedAt)
-  if (!Number.isFinite(generatedAtMs)) return
-
-  const ageMs = Date.now() - generatedAtMs
-  if (ageMs < 0) {
-    errors.push('generatedAt must not be in the future when --max-age-minutes is set.')
-    return
-  }
-  if (ageMs > maxAgeMinutes * 60 * 1000) {
-    errors.push(`generatedAt is older than --max-age-minutes=${maxAgeMinutes}.`)
-  }
 }
 
 function validateSourceState(errors, sourceState) {

@@ -60,6 +60,7 @@ try {
   Invoke-Checked { npm run phone:evidence:selftest }
   Invoke-Checked { npm run summary:selftest }
   Invoke-Checked { npm run report:selftest }
+  Invoke-Checked { npm run result-validator-cli:selftest }
   Invoke-Checked { npm run browser:evidence-result:selftest }
   Invoke-Checked { npm run computer:result:selftest }
 }

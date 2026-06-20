@@ -233,6 +233,7 @@ npm --prefix apps/web run computer:result:check -- ..\..\assets\tmp\computer-loo
 npm --prefix apps/web run computer:result:check -- ..\..\assets\tmp\computer-loop-check-latest.json
 npm --prefix apps/web run computer:result:check:latest -- --max-age-minutes 30
 npm --prefix apps/web run computer:result:check:latest
+npm --prefix apps/web run result-validator-cli:selftest
 npm --prefix apps/web run computer:result:selftest
 ```
 
@@ -267,6 +268,9 @@ want a dry-run result JSON for automation. Add `--max-age-minutes N` to
 handoff must prove the saved result was generated within the last N minutes; the
 default checker still accepts older saved evidence when source state and
 manifests match.
+`result-validator-cli:selftest` covers the shared saved-result checker CLI
+parsing and freshness gate before the browser/computer result validators reuse
+it.
 `computer:result:selftest` replays positive and negative result JSON cases so
 phone-only drift, missing nested browser evidence, mismatched summary paths,
 missing computer-only `expectedEvidence.phoneEvidence` sentinels, source-state
@@ -397,6 +401,7 @@ or touching ADB, run:
 .\scripts\check-browser-evidence.ps1 -RequireDesktop -RequireChrome -RequirePhone -ResultJsonPath .\assets\tmp\browser-evidence-check.json
 npm --prefix apps/web run browser:evidence-result:check -- ..\..\assets\tmp\browser-evidence-check.json
 npm --prefix apps/web run browser:evidence-result:check -- ..\..\assets\tmp\browser-evidence-check.json --max-age-minutes 30
+npm --prefix apps/web run result-validator-cli:selftest
 npm --prefix apps/web run browser:evidence-result:selftest
 ```
 
@@ -433,7 +438,9 @@ web-readiness strategy, source state, screenshot counts, self-test state,
 external execution source, and the summary path. The source field includes the
 branch, short commit, dirty state, status-line count, and status hash. Add
 `--max-age-minutes N` when the saved browser-evidence result must be fresh, for
-example before a live demo or handoff.
+example before a live demo or handoff. `result-validator-cli:selftest` covers
+the shared saved-result checker CLI parsing and freshness gate used by both the
+browser-evidence and computer-loop result checkers.
 
 ## Contributing & Security
 

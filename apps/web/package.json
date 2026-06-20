@@ -21,6 +21,7 @@
     "preview": "vite preview",
     "report:loop": "node scripts/summarize-full-loop.mjs",
     "report:selftest": "node scripts/selftest-full-loop-reporter.mjs",
+    "result-validator-cli:selftest": "node scripts/selftest-result-validator-cli.mjs",
     "summary:check": "node scripts/validate-full-loop-summary.mjs",
     "summary:parity:selftest": "node scripts/selftest-summary-parity.mjs",
     "summary:selftest": "node scripts/selftest-full-loop-summary-validator.mjs"
