@@ -663,6 +663,27 @@ const cases = [
     },
   },
   {
+    name: 'browser-evidence-proof-summary-unexpected-field',
+    expectedError: 'browserEvidence.proofSummary must not include unexpected field: artifacts.',
+    mutate: (result) => {
+      result.browserEvidence.proofSummary.artifacts = []
+    },
+  },
+  {
+    name: 'browser-evidence-proof-summary-loop-unexpected-field',
+    expectedError: 'browserEvidence.proofSummary.loops.windowsChrome must not include unexpected field: trace.',
+    mutate: (result) => {
+      result.browserEvidence.proofSummary.loops.windowsChrome.trace = {}
+    },
+  },
+  {
+    name: 'browser-evidence-proof-summary-evidence-unexpected-field',
+    expectedError: 'browserEvidence.proofSummary.evidence must not include unexpected field: reportPath.',
+    mutate: (result) => {
+      result.browserEvidence.proofSummary.evidence.reportPath = result.plan.outputs.reportPath
+    },
+  },
+  {
     name: 'browser-evidence-proof-summary-run-id-mismatch',
     expectedError: 'browserEvidence.proofSummary.summaryRunId must match summary.runId.',
     mutate: (result) => {
@@ -699,6 +720,27 @@ const cases = [
     expectedError: 'proofSummary is missing in validate mode.',
     mutate: (result) => {
       result.proofSummary = null
+    },
+  },
+  {
+    name: 'proof-summary-unexpected-field',
+    expectedError: 'proofSummary must not include unexpected field: artifacts.',
+    mutate: (result) => {
+      result.proofSummary.artifacts = []
+    },
+  },
+  {
+    name: 'proof-summary-loop-unexpected-field',
+    expectedError: 'proofSummary.loops.desktop must not include unexpected field: trace.',
+    mutate: (result) => {
+      result.proofSummary.loops.desktop.trace = {}
+    },
+  },
+  {
+    name: 'proof-summary-evidence-unexpected-field',
+    expectedError: 'proofSummary.evidence must not include unexpected field: browserEvidenceReportPath.',
+    mutate: (result) => {
+      result.proofSummary.evidence.browserEvidenceReportPath = result.plan.outputs.reportPath
     },
   },
   {

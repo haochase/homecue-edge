@@ -130,6 +130,27 @@ const cases = [
     },
   },
   {
+    name: 'proof-summary-unexpected-field',
+    expectedError: 'proofSummary must not include unexpected field: artifacts.',
+    mutate: (result) => {
+      result.proofSummary.artifacts = []
+    },
+  },
+  {
+    name: 'proof-summary-loop-unexpected-field',
+    expectedError: 'proofSummary.loops.desktop must not include unexpected field: trace.',
+    mutate: (result) => {
+      result.proofSummary.loops.desktop.trace = {}
+    },
+  },
+  {
+    name: 'proof-summary-evidence-unexpected-field',
+    expectedError: 'proofSummary.evidence must not include unexpected field: reportPath.',
+    mutate: (result) => {
+      result.proofSummary.evidence.reportPath = 'assets/tmp/browser-evidence-result-validator-selftest/report.md'
+    },
+  },
+  {
     name: 'proof-summary-run-id-mismatch',
     expectedError: 'proofSummary.summaryRunId must match summary.runId.',
     mutate: (result) => {

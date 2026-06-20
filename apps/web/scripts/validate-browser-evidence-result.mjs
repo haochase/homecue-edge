@@ -9,6 +9,51 @@ const repoRoot = path.resolve(scriptDir, '..', '..', '..')
 const defaultResultFile = path.join(repoRoot, 'assets', 'tmp', 'browser-evidence-check.json')
 const resultFile = resolveCliPath(process.argv[2] ?? defaultResultFile)
 const MIN_LOCALIZED_PHRASE_COUNT = 7
+const PROOF_SUMMARY_KEYS = [
+  'summaryRunId',
+  'appUrl',
+  'apiBase',
+  'requiredEvidence',
+  'browserParity',
+  'webReadiness',
+  'loops',
+  'evidence',
+]
+const PROOF_SUMMARY_BOOLEAN_GROUP_KEYS = ['desktop', 'phone', 'windowsChrome']
+const PROOF_SUMMARY_PARITY_KEYS = ['checked', 'success', 'errorCount']
+const PROOF_SUMMARY_WEB_READINESS_KEYS = [
+  'run',
+  'success',
+  'strategy',
+  'httpReadyAfter',
+  'duplicateStartAvoided',
+]
+const PROOF_SUMMARY_LOOPS_KEYS = ['desktop', 'phone', 'windowsChrome']
+const PROOF_SUMMARY_LOOP_KEYS = [
+  'run',
+  'success',
+  'title',
+  'runButton',
+  'textRequiredPhrases',
+  'textMissingPhrases',
+  'textMojibake',
+  'firstViewportMinVisibleRatio',
+  'runtimeIssueCount',
+  'screenshotCount',
+  'uniqueScreenshotDigestCount',
+  'externalExecutionSource',
+  'acceptedActionCount',
+]
+const PROOF_SUMMARY_PHONE_LOOP_KEYS = ['run', 'success']
+const PROOF_SUMMARY_EVIDENCE_KEYS = [
+  'summaryPath',
+  'desktopEvidencePath',
+  'windowsChromeEvidencePath',
+  'phoneEvidencePath',
+  'webReadinessEvidencePath',
+  'desktopScreenshotDir',
+  'windowsChromeScreenshotDir',
+]
 const result = JSON.parse(await readFile(resultFile, 'utf8'))
 const errors = await validateBrowserEvidenceResult(result, resultFile)
 
@@ -617,6 +662,7 @@ function validateProofSummary(errors, proofSummary, summary, plan) {
     errors.push('proofSummary is missing in validate mode.')
     return
   }
+  validateProofSummaryManifest(errors, proofSummary, 'proofSummary')
   if (!summary || typeof summary !== 'object') return
 
   compareValue(errors, proofSummary.summaryRunId, summary.runId, 'proofSummary.summaryRunId', 'summary.runId')
@@ -643,6 +689,23 @@ function validateProofSummary(errors, proofSummary, summary, plan) {
     'summary.loops.phone.success',
   )
   validateProofSummaryEvidence(errors, proofSummary.evidence, plan)
+}
+
+function validateProofSummaryManifest(errors, proofSummary, label) {
+  validateAllowedKeys(errors, proofSummary, PROOF_SUMMARY_KEYS, label)
+  validateAllowedKeys(errors, proofSummary?.requiredEvidence, PROOF_SUMMARY_BOOLEAN_GROUP_KEYS, `${label}.requiredEvidence`)
+  validateAllowedKeys(errors, proofSummary?.browserParity, PROOF_SUMMARY_PARITY_KEYS, `${label}.browserParity`)
+  validateAllowedKeys(errors, proofSummary?.webReadiness, PROOF_SUMMARY_WEB_READINESS_KEYS, `${label}.webReadiness`)
+  validateAllowedKeys(errors, proofSummary?.loops, PROOF_SUMMARY_LOOPS_KEYS, `${label}.loops`)
+  validateAllowedKeys(errors, proofSummary?.loops?.desktop, PROOF_SUMMARY_LOOP_KEYS, `${label}.loops.desktop`)
+  validateAllowedKeys(
+    errors,
+    proofSummary?.loops?.windowsChrome,
+    PROOF_SUMMARY_LOOP_KEYS,
+    `${label}.loops.windowsChrome`,
+  )
+  validateAllowedKeys(errors, proofSummary?.loops?.phone, PROOF_SUMMARY_PHONE_LOOP_KEYS, `${label}.loops.phone`)
+  validateAllowedKeys(errors, proofSummary?.evidence, PROOF_SUMMARY_EVIDENCE_KEYS, `${label}.evidence`)
 }
 
 function validateProofSummaryParity(errors, proof, summary) {
