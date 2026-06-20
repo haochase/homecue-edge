@@ -10,10 +10,11 @@ const desktopEvidenceFile = path.join(repoRoot, 'assets', 'demo', 'desktop-loop.
 const phoneEvidenceFile = path.join(repoRoot, 'assets', 'demo', 'phone-loop.json')
 const chromeEvidenceFile = path.join(repoRoot, 'assets', 'demo', 'chrome-loop.json')
 const legacyScreensArg = '__legacy_desktop_screens_unused__'
-const devEnvEvidenceFile = path.join(repoRoot, 'assets', 'tmp', 'dev-env-check.json')
 const outputDir = path.join(repoRoot, 'assets', 'tmp', 'full-loop-reporter-selftest')
+const devEnvEvidenceFile = path.join(outputDir, 'dev-env-check.json')
 
 await mkdir(outputDir, { recursive: true })
+await writeJson(devEnvEvidenceFile, buildDevEnvEvidence())
 
 const positive = await runReporter('positive', phoneEvidenceFile)
 if (positive.code !== 0) {
@@ -148,4 +149,32 @@ function assertReportExcludes(report, unexpected) {
 
 async function writeJson(file, value) {
   await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+}
+
+function buildDevEnvEvidence() {
+  const checks = [
+    ['node', 'host'],
+    ['npm', 'host'],
+    ['api directory', 'repo'],
+    ['api requirements', 'repo'],
+    ['api env template', 'repo'],
+    ['web package', 'repo'],
+    ['web package lock', 'repo'],
+    ['Windows Chrome', 'browser'],
+  ].map(([name, category]) => ({
+    name,
+    category,
+    ok: true,
+    required: true,
+    status: 'OK',
+    detail: 'selftest fixture',
+  }))
+
+  return {
+    generatedAt: new Date(Date.now() - 1000).toISOString(),
+    success: true,
+    required: true,
+    requirePhone: false,
+    checks,
+  }
 }
