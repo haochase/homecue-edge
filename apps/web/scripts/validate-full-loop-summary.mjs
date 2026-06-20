@@ -3,6 +3,13 @@ import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parityErrorsSignature, recomputeBrowserParity } from './summary-parity.mjs'
+import {
+  validateRawDevEnvMatchesSummary,
+  validateRawDevEnvManifest,
+  validateRawWebReadinessManifest,
+  validateRawWebReadinessMatchesSummary,
+  validateSummaryManifest,
+} from './summary-manifest.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
@@ -17,162 +24,6 @@ const EXPECTED_SCREENSHOT_FILES = [
   '06-external-sync.png',
 ]
 const MIN_LOCALIZED_PHRASE_COUNT = 7
-const SUMMARY_ROOT_KEYS = [
-  'generatedAt',
-  'success',
-  'runId',
-  'appUrl',
-  'apiBase',
-  'environment',
-  'loops',
-  'browserParity',
-  'evidence',
-]
-const SUMMARY_ENVIRONMENT_KEYS = ['preflight', 'webReadiness']
-const SUMMARY_PREFLIGHT_KEYS = [
-  'run',
-  'success',
-  'generatedAt',
-  'required',
-  'requirePhone',
-  'okCount',
-  'warnCount',
-  'failCount',
-  'checks',
-]
-const SUMMARY_PREFLIGHT_CHECK_KEYS = ['name', 'category', 'ok', 'required', 'status', 'detail']
-const SUMMARY_WEB_READINESS_KEYS = [
-  'run',
-  'success',
-  'generatedAt',
-  'runId',
-  'appUrl',
-  'webPort',
-  'strategy',
-  'portListeningBefore',
-  'httpReadyBefore',
-  'httpReadyAfter',
-  'duplicateStartAvoided',
-  'gates',
-]
-const SUMMARY_WEB_READINESS_GATE_KEYS = ['httpProbeBeforePortReuse', 'stalePortBlocksDuplicateStart']
-const SUMMARY_LOOPS_KEYS = ['desktop', 'windowsChrome', 'phone']
-const SUMMARY_DESKTOP_LOOP_KEYS = [
-  'run',
-  'success',
-  'runId',
-  'startedAt',
-  'finishedAt',
-  'browserName',
-  'pageUrl',
-  'title',
-  'textIntegrity',
-  'localizedUi',
-  'firstViewportVisibility',
-  'hostEnvironment',
-  'browserEnvironment',
-  'responsiveLayout',
-  'runtimeHealth',
-  'screenshotEvidence',
-  'scenePromptHandoff',
-  'proposeOnly',
-  'webConfirmExecute',
-  'offlineFallback',
-  'externalExecutionSync',
-]
-const SUMMARY_PHONE_LOOP_KEYS = [
-  'run',
-  'success',
-  'runId',
-  'startedAt',
-  'finishedAt',
-  'pageUrl',
-  'title',
-  'textIntegrity',
-  'frontCamera',
-  'speechInput',
-  'scene',
-  'scenePromptHandoff',
-  'externalExecution',
-  'runtimeHealth',
-]
-const SUMMARY_SKIPPED_LOOP_KEYS = ['run', 'success']
-const SUMMARY_TEXT_INTEGRITY_KEYS = ['requiredPhraseCount', 'missingPhraseCount', 'mojibakeCount']
-const SUMMARY_LOCALIZED_UI_KEYS = ['title', 'runButton', 'resetButtonCount', 'textIntegrity']
-const SUMMARY_FIRST_VIEWPORT_KEYS = ['minVisibleRatio', 'panelCount', 'hiddenPanelCount']
-const SUMMARY_HOST_ENVIRONMENT_KEYS = ['platform', 'arch', 'nodeVersion', 'nodeMajorVersion', 'ci']
-const SUMMARY_BROWSER_ENVIRONMENT_KEYS = [
-  'browserName',
-  'userAgent',
-  'language',
-  'viewport',
-  'getUserMedia',
-  'speechRecognition',
-  'headed',
-  'executablePath',
-  'executableFileName',
-  'executableSource',
-  'executableProductName',
-  'executableCompanyName',
-  'executableProductVersion',
-  'runtimeMajorVersion',
-  'executableMajorVersion',
-  'channel',
-]
-const SUMMARY_BROWSER_VIEWPORT_KEYS = ['innerWidth', 'innerHeight', 'devicePixelRatio']
-const SUMMARY_RESPONSIVE_LAYOUT_KEYS = [
-  'label',
-  'width',
-  'height',
-  'overflowX',
-  'overflowingButtonCount',
-  'overlappingPanelPairCount',
-  'panelCount',
-  'minPanelWidth',
-  'minPanelHeight',
-]
-const SUMMARY_RUNTIME_HEALTH_KEYS = ['success', 'issueCount', 'counts']
-const SUMMARY_SCREENSHOT_EVIDENCE_KEYS = [
-  'success',
-  'count',
-  'expectedFiles',
-  'uniqueDigestCount',
-  'minWidth',
-  'minHeight',
-  'minBytes',
-  'minImageDataBytes',
-]
-const SUMMARY_PROMPT_HANDOFF_KEYS = [
-  'ready',
-  'proposeOnly',
-  'promptPresent',
-  'scene',
-  'rawImageRetained',
-  'rawImageEchoed',
-]
-const SUMMARY_PROPOSE_ONLY_KEYS = ['status', 'latestSource', 'latestExecuted']
-const SUMMARY_WEB_CONFIRM_KEYS = ['latestSource', 'latestSequence', 'acceptedRows']
-const SUMMARY_OFFLINE_FALLBACK_KEYS = ['latestSource', 'latestSequence', 'executionCount']
-const SUMMARY_EXTERNAL_EXECUTION_KEYS = ['latestSource', 'latestSequence', 'acceptedActionCount']
-const SUMMARY_FRONT_CAMERA_KEYS = ['ready', 'facingMode', 'width', 'height', 'status', 'mirrored', 'objectFit']
-const SUMMARY_SPEECH_INPUT_KEYS = ['available', 'skipped', 'status']
-const SUMMARY_SCENE_KEYS = ['frameSize', 'rawImageRetained', 'rawImageNotRetained']
-const SUMMARY_BROWSER_PARITY_KEYS = ['checked', 'success', 'errors']
-const SUMMARY_EVIDENCE_KEYS = ['validationErrors', 'files']
-const SUMMARY_EVIDENCE_FILE_KEYS = ['label', 'file', 'present', 'bytes', 'sha256']
-const RAW_DEV_ENV_KEYS = ['generatedAt', 'success', 'required', 'requirePhone', 'checks']
-const RAW_WEB_READINESS_KEYS = [
-  'generatedAt',
-  'runId',
-  'appUrl',
-  'webPort',
-  'strategy',
-  'portListeningBefore',
-  'httpReadyBefore',
-  'httpReadyAfter',
-  'duplicateStartAvoided',
-  'gates',
-]
 const options = parseOptions(optionArgs)
 const summary = JSON.parse(await readFile(summaryFile, 'utf8'))
 const errors = await validateSummary(summary, options)
@@ -274,75 +125,6 @@ async function validateSummary(value, { requirePhone, requireChrome, requireDesk
   await validateRawEvidence(errors, value, { requireDesktop, requirePhone, requireChrome })
 
   return errors
-}
-
-function validateSummaryManifest(errors, value) {
-  validateAllowedKeys(errors, value, SUMMARY_ROOT_KEYS, 'summary root')
-  validateAllowedKeys(errors, value.environment, SUMMARY_ENVIRONMENT_KEYS, 'environment')
-  validateAllowedKeys(errors, value.environment?.preflight, SUMMARY_PREFLIGHT_KEYS, 'environment.preflight')
-  if (Array.isArray(value.environment?.preflight?.checks)) {
-    for (const check of value.environment.preflight.checks) {
-      validateAllowedKeys(errors, check, SUMMARY_PREFLIGHT_CHECK_KEYS, 'environment.preflight.checks entry')
-    }
-  }
-  validateAllowedKeys(errors, value.environment?.webReadiness, SUMMARY_WEB_READINESS_KEYS, 'environment.webReadiness')
-  validateAllowedKeys(
-    errors,
-    value.environment?.webReadiness?.gates,
-    SUMMARY_WEB_READINESS_GATE_KEYS,
-    'environment.webReadiness.gates',
-  )
-  validateAllowedKeys(errors, value.loops, SUMMARY_LOOPS_KEYS, 'loops')
-  validateDesktopLoopManifest(errors, value.loops?.desktop, 'loops.desktop')
-  validateDesktopLoopManifest(errors, value.loops?.windowsChrome, 'loops.windowsChrome')
-  validatePhoneLoopManifest(errors, value.loops?.phone, 'loops.phone')
-  validateAllowedKeys(errors, value.browserParity, SUMMARY_BROWSER_PARITY_KEYS, 'browserParity')
-  validateAllowedKeys(errors, value.evidence, SUMMARY_EVIDENCE_KEYS, 'evidence')
-  if (Array.isArray(value.evidence?.files)) {
-    for (const entry of value.evidence.files) {
-      validateAllowedKeys(errors, entry, SUMMARY_EVIDENCE_FILE_KEYS, `evidence.files ${entry?.label ?? 'entry'}`)
-    }
-  }
-}
-
-function validateDesktopLoopManifest(errors, loop, label) {
-  if (!loop || typeof loop !== 'object') return
-  validateAllowedKeys(errors, loop, loop.run === true ? SUMMARY_DESKTOP_LOOP_KEYS : SUMMARY_SKIPPED_LOOP_KEYS, label)
-  if (loop.run !== true) return
-
-  validateAllowedKeys(errors, loop.textIntegrity, SUMMARY_TEXT_INTEGRITY_KEYS, `${label}.textIntegrity`)
-  validateAllowedKeys(errors, loop.localizedUi, SUMMARY_LOCALIZED_UI_KEYS, `${label}.localizedUi`)
-  validateAllowedKeys(errors, loop.localizedUi?.textIntegrity, SUMMARY_TEXT_INTEGRITY_KEYS, `${label}.localizedUi.textIntegrity`)
-  validateAllowedKeys(errors, loop.firstViewportVisibility, SUMMARY_FIRST_VIEWPORT_KEYS, `${label}.firstViewportVisibility`)
-  validateAllowedKeys(errors, loop.hostEnvironment, SUMMARY_HOST_ENVIRONMENT_KEYS, `${label}.hostEnvironment`)
-  validateAllowedKeys(errors, loop.browserEnvironment, SUMMARY_BROWSER_ENVIRONMENT_KEYS, `${label}.browserEnvironment`)
-  validateAllowedKeys(errors, loop.browserEnvironment?.viewport, SUMMARY_BROWSER_VIEWPORT_KEYS, `${label}.browserEnvironment.viewport`)
-  if (Array.isArray(loop.responsiveLayout)) {
-    for (const item of loop.responsiveLayout) {
-      validateAllowedKeys(errors, item, SUMMARY_RESPONSIVE_LAYOUT_KEYS, `${label}.responsiveLayout entry`)
-    }
-  }
-  validateAllowedKeys(errors, loop.runtimeHealth, SUMMARY_RUNTIME_HEALTH_KEYS, `${label}.runtimeHealth`)
-  validateAllowedKeys(errors, loop.screenshotEvidence, SUMMARY_SCREENSHOT_EVIDENCE_KEYS, `${label}.screenshotEvidence`)
-  validateAllowedKeys(errors, loop.scenePromptHandoff, SUMMARY_PROMPT_HANDOFF_KEYS, `${label}.scenePromptHandoff`)
-  validateAllowedKeys(errors, loop.proposeOnly, SUMMARY_PROPOSE_ONLY_KEYS, `${label}.proposeOnly`)
-  validateAllowedKeys(errors, loop.webConfirmExecute, SUMMARY_WEB_CONFIRM_KEYS, `${label}.webConfirmExecute`)
-  validateAllowedKeys(errors, loop.offlineFallback, SUMMARY_OFFLINE_FALLBACK_KEYS, `${label}.offlineFallback`)
-  validateAllowedKeys(errors, loop.externalExecutionSync, SUMMARY_EXTERNAL_EXECUTION_KEYS, `${label}.externalExecutionSync`)
-}
-
-function validatePhoneLoopManifest(errors, loop, label) {
-  if (!loop || typeof loop !== 'object') return
-  validateAllowedKeys(errors, loop, loop.run === true ? SUMMARY_PHONE_LOOP_KEYS : SUMMARY_SKIPPED_LOOP_KEYS, label)
-  if (loop.run !== true) return
-
-  validateAllowedKeys(errors, loop.textIntegrity, SUMMARY_TEXT_INTEGRITY_KEYS, `${label}.textIntegrity`)
-  validateAllowedKeys(errors, loop.frontCamera, SUMMARY_FRONT_CAMERA_KEYS, `${label}.frontCamera`)
-  validateAllowedKeys(errors, loop.speechInput, SUMMARY_SPEECH_INPUT_KEYS, `${label}.speechInput`)
-  validateAllowedKeys(errors, loop.scene, SUMMARY_SCENE_KEYS, `${label}.scene`)
-  validateAllowedKeys(errors, loop.scenePromptHandoff, SUMMARY_PROMPT_HANDOFF_KEYS, `${label}.scenePromptHandoff`)
-  validateAllowedKeys(errors, loop.externalExecution, SUMMARY_EXTERNAL_EXECUTION_KEYS, `${label}.externalExecution`)
-  validateAllowedKeys(errors, loop.runtimeHealth, SUMMARY_RUNTIME_HEALTH_KEYS, `${label}.runtimeHealth`)
 }
 
 function validateDesktopLoop(
@@ -1220,16 +1002,7 @@ async function validateRawDevEnvEvidence(errors, preflight, manifestEntry, label
   if (!raw) return
 
   validateRawDevEnvManifest(errors, raw, label)
-  compareValue(errors, raw.success === true, preflight.success, `${label}.success raw evidence`)
-  compareValue(errors, raw.generatedAt ?? null, preflight.generatedAt ?? null, `${label}.generatedAt raw evidence`)
-  compareValue(errors, raw.required ?? null, preflight.required ?? null, `${label}.required raw evidence`)
-  compareValue(errors, raw.requirePhone ?? null, preflight.requirePhone ?? null, `${label}.requirePhone raw evidence`)
-  compareValue(
-    errors,
-    devEnvChecksSignature(raw.checks),
-    devEnvChecksSignature(preflight.checks),
-    `${label}.checks raw evidence`,
-  )
+  validateRawDevEnvMatchesSummary(errors, raw, preflight, label, compareValue)
 }
 
 async function validateRawWebReadinessEvidence(errors, webReadiness, manifestEntry, label) {
@@ -1243,51 +1016,7 @@ async function validateRawWebReadinessEvidence(errors, webReadiness, manifestEnt
   if (!raw) return
 
   validateRawWebReadinessManifest(errors, raw, label)
-  compareValue(errors, raw.generatedAt ?? null, webReadiness.generatedAt ?? null, `${label}.generatedAt raw evidence`)
-  compareValue(errors, raw.runId ?? null, webReadiness.runId ?? null, `${label}.runId raw evidence`)
-  compareValue(errors, raw.appUrl ?? null, webReadiness.appUrl ?? null, `${label}.appUrl raw evidence`)
-  compareValue(errors, raw.webPort ?? null, webReadiness.webPort ?? null, `${label}.webPort raw evidence`)
-  compareValue(errors, raw.strategy ?? null, webReadiness.strategy ?? null, `${label}.strategy raw evidence`)
-  compareValue(
-    errors,
-    raw.portListeningBefore ?? null,
-    webReadiness.portListeningBefore ?? null,
-    `${label}.portListeningBefore raw evidence`,
-  )
-  compareValue(errors, raw.httpReadyBefore ?? null, webReadiness.httpReadyBefore ?? null, `${label}.httpReadyBefore raw evidence`)
-  compareValue(errors, raw.httpReadyAfter ?? null, webReadiness.httpReadyAfter ?? null, `${label}.httpReadyAfter raw evidence`)
-  compareValue(
-    errors,
-    raw.duplicateStartAvoided ?? null,
-    webReadiness.duplicateStartAvoided ?? null,
-    `${label}.duplicateStartAvoided raw evidence`,
-  )
-  compareValue(
-    errors,
-    raw.gates?.httpProbeBeforePortReuse ?? null,
-    webReadiness.gates?.httpProbeBeforePortReuse ?? null,
-    `${label}.gates.httpProbeBeforePortReuse raw evidence`,
-  )
-  compareValue(
-    errors,
-    raw.gates?.stalePortBlocksDuplicateStart ?? null,
-    webReadiness.gates?.stalePortBlocksDuplicateStart ?? null,
-    `${label}.gates.stalePortBlocksDuplicateStart raw evidence`,
-  )
-}
-
-function validateRawDevEnvManifest(errors, raw, label) {
-  validateAllowedKeys(errors, raw, RAW_DEV_ENV_KEYS, `${label} raw evidence`)
-  if (Array.isArray(raw?.checks)) {
-    for (const check of raw.checks) {
-      validateAllowedKeys(errors, check, SUMMARY_PREFLIGHT_CHECK_KEYS, `${label} raw evidence checks entry`)
-    }
-  }
-}
-
-function validateRawWebReadinessManifest(errors, raw, label) {
-  validateAllowedKeys(errors, raw, RAW_WEB_READINESS_KEYS, `${label} raw evidence`)
-  validateAllowedKeys(errors, raw?.gates, SUMMARY_WEB_READINESS_GATE_KEYS, `${label} raw evidence gates`)
+  validateRawWebReadinessMatchesSummary(errors, raw, webReadiness, label, compareValue)
 }
 
 async function readManifestJson(errors, manifestEntry, label) {
@@ -1350,22 +1079,6 @@ function hostEnvironmentSignature(value) {
     value.nodeMajorVersion ?? null,
     value.ci ?? null,
   ].join(':')
-}
-
-function devEnvChecksSignature(value) {
-  if (!Array.isArray(value)) return null
-  return value
-    .map((check) =>
-      [
-        check?.name ?? null,
-        check?.category ?? null,
-        check?.ok ?? null,
-        check?.required ?? null,
-        check?.status ?? null,
-        check?.detail ?? null,
-      ].join(':'),
-    )
-    .join('|')
 }
 
 function validateDevEnvPreflight(errors, value, label, { generatedAt, requirePhone }) {
@@ -1744,17 +1457,6 @@ function assertBoolean(errors, value, label) {
 function assertArray(errors, value, label) {
   if (!Array.isArray(value)) {
     errors.push(`${label} must be an array.`)
-  }
-}
-
-function validateAllowedKeys(errors, value, allowedKeys, label) {
-  if (!value || typeof value !== 'object') return
-
-  const allowed = new Set(allowedKeys)
-  for (const key of Object.keys(value)) {
-    if (!allowed.has(key)) {
-      errors.push(`${label} must not include unexpected field: ${key}.`)
-    }
   }
 }
 
