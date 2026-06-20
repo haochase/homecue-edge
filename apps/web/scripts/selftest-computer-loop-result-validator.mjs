@@ -10,6 +10,7 @@ const validatorScript = path.join(scriptDir, 'validate-computer-loop-result.mjs'
 const outputDir = path.join(repoRoot, 'assets', 'tmp', 'computer-loop-result-validator-selftest')
 const desktopEvidenceCommand = 'npm run desktop:evidence:check'
 const windowsChromeEvidenceCommand = 'npm run desktop:evidence:check -- --require-installed-chrome'
+const sourceSummary = formatSourceState(currentSourceState())
 
 await mkdir(outputDir, { recursive: true })
 await writeScreenshotFiles({
@@ -34,7 +35,7 @@ if (positiveResult.code !== 0) {
 }
 assertOutputIncludes(
   positiveResult.output,
-  'Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial phoneEvidence=__phone_not_run__.json devEnvEvidence=assets/tmp/computer-loop-result-validator-selftest/dev-env-check.json webReadinessEvidence=assets/tmp/computer-loop-result-validator-selftest/web-readiness.json summary=assets/tmp/computer-loop-result-validator-selftest/computer-loop-report.json',
+  `Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready source=${sourceSummary} screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial phoneEvidence=__phone_not_run__.json devEnvEvidence=assets/tmp/computer-loop-result-validator-selftest/dev-env-check.json webReadinessEvidence=assets/tmp/computer-loop-result-validator-selftest/web-readiness.json summary=assets/tmp/computer-loop-result-validator-selftest/computer-loop-report.json`,
   'positive proof summary output',
 )
 console.log('PASS positive computer loop result')
@@ -89,7 +90,7 @@ if (selfTestPositiveResult.code !== 0) {
 }
 assertOutputIncludes(
   selfTestPositiveResult.output,
-  'Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial phoneEvidence=__phone_not_run__.json devEnvEvidence=assets/tmp/computer-loop-result-validator-selftest/dev-env-check.json webReadinessEvidence=assets/tmp/computer-loop-result-validator-selftest/web-readiness.json summary=assets/tmp/computer-loop-result-validator-selftest/selftest-computer-loop-report.json',
+  `Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready source=${sourceSummary} screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial phoneEvidence=__phone_not_run__.json devEnvEvidence=assets/tmp/computer-loop-result-validator-selftest/dev-env-check.json webReadinessEvidence=assets/tmp/computer-loop-result-validator-selftest/web-readiness.json summary=assets/tmp/computer-loop-result-validator-selftest/selftest-computer-loop-report.json`,
   'self-test proof summary output',
 )
 console.log('PASS self-test computer loop result')
@@ -1828,6 +1829,12 @@ function currentSourceState() {
     statusCount: statusLines.length,
     statusSha256: createHash('sha256').update(statusText).digest('hex').slice(0, 12),
   }
+}
+
+function formatSourceState(sourceState) {
+  const commit = typeof sourceState.commit === 'string' ? sourceState.commit.slice(0, 7) : 'unknown'
+  const dirty = sourceState.dirty === true ? 'dirty' : sourceState.dirty === false ? 'clean' : 'unknown'
+  return `${sourceState.branch ?? 'unknown'}@${commit}/${dirty}`
 }
 
 function gitOutput(args) {

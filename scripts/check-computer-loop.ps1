@@ -523,6 +523,27 @@ function Format-LoopRunStatus {
   return Format-ProofStatus $Loop.success
 }
 
+function Format-SourceState {
+  param($SourceState)
+
+  if (-not $SourceState) {
+    return "unknown"
+  }
+
+  $Commit = if ($SourceState.commit) { ([string]$SourceState.commit).Substring(0, [Math]::Min(7, ([string]$SourceState.commit).Length)) } else { "unknown" }
+  $Dirty = if ($SourceState.dirty -eq $true) {
+    "dirty"
+  }
+  elseif ($SourceState.dirty -eq $false) {
+    "clean"
+  }
+  else {
+    "unknown"
+  }
+
+  return ("{0}@{1}/{2}" -f $SourceState.branch, $Commit, $Dirty)
+}
+
 $Plan = New-ComputerLoopPlan
 
 if ($DryRun) {
@@ -537,6 +558,7 @@ Invoke-CheckedScriptWithResult -Name "computer full loop" -Command $Plan.command
 Invoke-CheckedScriptWithResult -Name "saved browser evidence recheck" -Command $Plan.commands.browserEvidence -Plan $Plan
 
 $ProofSummary = Invoke-PostProcessWithResult -Plan $Plan
+$SourceState = Get-SourceState
 Write-Host ("Computer loop check JSON: {0}" -f $ResultJsonPath)
-Write-Host ("Computer loop proof summary: desktop={0}, chrome={1}, phone={2}, parity={3}, web={4}, text={5}/{6}/{7}+{8}/{9}/{10}, screenshots={11}+{12}, phoneEvidence={13}, devEnvEvidence={14}, webReadinessEvidence={15}, summary={16}" -f (Format-ProofStatus $ProofSummary.loops.desktop.success), (Format-ProofStatus $ProofSummary.loops.windowsChrome.success), (Format-LoopRunStatus $ProofSummary.loops.phone), (Format-ProofStatus $ProofSummary.browserParity.success), $ProofSummary.webReadiness.strategy, $ProofSummary.loops.desktop.textRequiredPhrases, $ProofSummary.loops.desktop.textMissingPhrases, $ProofSummary.loops.desktop.textMojibake, $ProofSummary.loops.windowsChrome.textRequiredPhrases, $ProofSummary.loops.windowsChrome.textMissingPhrases, $ProofSummary.loops.windowsChrome.textMojibake, $ProofSummary.loops.desktop.screenshotCount, $ProofSummary.loops.windowsChrome.screenshotCount, $ProofSummary.evidence.phoneEvidencePath, $ProofSummary.evidence.devEnvEvidencePath, $ProofSummary.evidence.webReadinessEvidencePath, $ProofSummary.evidence.summaryPath)
+Write-Host ("Computer loop proof summary: desktop={0}, chrome={1}, phone={2}, parity={3}, web={4}, source={5}, text={6}/{7}/{8}+{9}/{10}/{11}, screenshots={12}+{13}, phoneEvidence={14}, devEnvEvidence={15}, webReadinessEvidence={16}, summary={17}" -f (Format-ProofStatus $ProofSummary.loops.desktop.success), (Format-ProofStatus $ProofSummary.loops.windowsChrome.success), (Format-LoopRunStatus $ProofSummary.loops.phone), (Format-ProofStatus $ProofSummary.browserParity.success), $ProofSummary.webReadiness.strategy, (Format-SourceState $SourceState), $ProofSummary.loops.desktop.textRequiredPhrases, $ProofSummary.loops.desktop.textMissingPhrases, $ProofSummary.loops.desktop.textMojibake, $ProofSummary.loops.windowsChrome.textRequiredPhrases, $ProofSummary.loops.windowsChrome.textMissingPhrases, $ProofSummary.loops.windowsChrome.textMojibake, $ProofSummary.loops.desktop.screenshotCount, $ProofSummary.loops.windowsChrome.screenshotCount, $ProofSummary.evidence.phoneEvidencePath, $ProofSummary.evidence.devEnvEvidencePath, $ProofSummary.evidence.webReadinessEvidencePath, $ProofSummary.evidence.summaryPath)
 Write-Host "Computer loop check passed."

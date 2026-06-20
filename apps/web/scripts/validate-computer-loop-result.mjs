@@ -99,7 +99,7 @@ if (errors.length) {
 
 console.log(`Computer loop result validation passed: ${resultFile}`)
 if (result.mode === 'validate') {
-  console.log(formatProofSummary(result.proofSummary))
+  console.log(formatProofSummary(result.proofSummary, result.sourceState))
 }
 
 async function validateComputerLoopResult(value, validatedResultFile) {
@@ -1267,7 +1267,7 @@ function validateBrowserEvidenceProofSummaryWebReadinessPath(errors, evidence, s
   )
 }
 
-function formatProofSummary(proofSummary) {
+function formatProofSummary(proofSummary, sourceState) {
   if (!proofSummary || typeof proofSummary !== 'object') {
     return 'Computer loop proof summary: unavailable'
   }
@@ -1280,6 +1280,7 @@ function formatProofSummary(proofSummary) {
     `phone=${formatLoopRun(proofSummary.loops?.phone)}`,
     `parity=${formatProofBoolean(proofSummary.browserParity?.success)}`,
     `web=${proofSummary.webReadiness?.strategy ?? 'unknown'}`,
+    `source=${formatSourceState(sourceState)}`,
     `screenshots=${proofSummary.loops?.desktop?.screenshotCount ?? 'unknown'}+${
       proofSummary.loops?.windowsChrome?.screenshotCount ?? 'unknown'
     }`,
@@ -1290,6 +1291,13 @@ function formatProofSummary(proofSummary) {
     `webReadinessEvidence=${proofSummary.evidence?.webReadinessEvidencePath ?? 'unknown'}`,
     `summary=${proofSummary.evidence?.summaryPath ?? 'unknown'}`,
   ].join(' ')
+}
+
+function formatSourceState(sourceState) {
+  if (!sourceState || typeof sourceState !== 'object') return 'unknown'
+  const commit = typeof sourceState.commit === 'string' ? sourceState.commit.slice(0, 7) : 'unknown'
+  const dirty = sourceState.dirty === true ? 'dirty' : sourceState.dirty === false ? 'clean' : 'unknown'
+  return `${sourceState.branch ?? 'unknown'}@${commit}/${dirty}`
 }
 
 function formatLoopRun(loop) {
