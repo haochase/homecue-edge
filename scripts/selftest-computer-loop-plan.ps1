@@ -176,6 +176,49 @@ function Assert-NotContains {
   }
 }
 
+function Assert-ObjectKeys {
+  param(
+    [object]$Value,
+    [string[]]$ExpectedKeys,
+    [string]$Message
+  )
+
+  $ActualKeys = @($Value.PSObject.Properties.Name | Sort-Object)
+  $ExpectedSorted = @($ExpectedKeys | Sort-Object)
+  Assert-Equal ($ActualKeys -join ",") ($ExpectedSorted -join ",") $Message
+}
+
+function Assert-ComputerResultChecksManifest {
+  param(
+    [object]$Result,
+    [object]$Plan,
+    [string]$Message
+  )
+
+  $Checks = @($Result.checks)
+  Assert-True ($Checks.Count -eq 2) "$Message should describe the two computer-loop checks."
+  Assert-Equal $Checks[0].name "computer full loop" "$Message first check name"
+  Assert-Equal $Checks[1].name "saved browser evidence recheck" "$Message second check name"
+  Assert-Equal $Checks[0].command $Plan.commands.fullLoop.display "$Message full-loop check command"
+  Assert-Equal $Checks[1].command $Plan.commands.browserEvidence.display "$Message browser-evidence check command"
+  Assert-Equal $Checks[0].required $true "$Message full-loop check required flag"
+  Assert-Equal $Checks[1].required $true "$Message browser-evidence check required flag"
+  Assert-Equal $Checks[0].summaryPath $Plan.outputs.summaryPath "$Message full-loop summary path"
+  Assert-Equal $Checks[0].reportPath $Plan.outputs.reportPath "$Message full-loop report path"
+  Assert-Equal $Checks[1].resultJsonPath $Plan.outputs.browserEvidenceResultJsonPath "$Message browser-evidence result path"
+  Assert-ObjectKeys $Checks[0] @("name", "command", "required", "summaryPath", "reportPath") "$Message full-loop check fields"
+  Assert-ObjectKeys $Checks[1] @("name", "command", "required", "resultJsonPath") "$Message browser-evidence check fields"
+}
+
+function Assert-FailureManifest {
+  param(
+    [object]$Failure,
+    [string]$Message
+  )
+
+  Assert-ObjectKeys $Failure @("stage", "checkName", "command", "exitCode", "message") "$Message failure fields"
+}
+
 function Get-ArgumentValue {
   param(
     [object[]]$Arguments,
@@ -246,7 +289,7 @@ try {
   Assert-Equal $DefaultResult.plan.expectedEvidence.phoneEvidence "__phone_not_run__.json" "Dry-run result should preserve the skipped phone evidence sentinel."
   Assert-Equal $DefaultResult.proofSummary $null "Dry-run result should not include proof summary evidence."
   Assert-Equal $DefaultResult.browserEvidence $null "Dry-run result should not include nested browser evidence."
-  Assert-True (@($DefaultResult.checks).Count -eq 2) "Dry-run result should describe the two computer-loop checks."
+  Assert-ComputerResultChecksManifest $DefaultResult $Default "Dry-run result"
 
   $CustomResultPath = Join-Path $OutputDir "custom-result.json"
   $Custom = Invoke-Plan @(
@@ -281,6 +324,7 @@ try {
   Assert-Equal $CustomResult.plan.expectedEvidence.phoneEvidence "__phone_not_run__.json" "Custom dry-run result should preserve the skipped phone evidence sentinel."
   Assert-Equal $CustomResult.proofSummary $null "Custom dry-run result should not include proof summary evidence."
   Assert-Equal $CustomResult.browserEvidence $null "Custom dry-run result should not include nested browser evidence."
+  Assert-ComputerResultChecksManifest $CustomResult $Custom "Custom dry-run result"
 
   $FailureResultPath = Join-Path $OutputDir "failed-result.json"
   $FailureOutput = Invoke-ComputerLoopExpectFailure @(
@@ -297,6 +341,8 @@ try {
   Assert-Equal $FailureResult.mode "failed" "Failed result mode"
   Assert-Equal $FailureResult.success $false "Failed result success"
   Assert-Equal $FailureResult.failure.stage "computer full loop" "Failed result stage"
+  Assert-Equal $FailureResult.failure.checkName "computer full loop" "Failed result check name"
+  Assert-FailureManifest $FailureResult.failure "Failed result"
   Assert-Contains $FailureResult.failure.command "check-full-loop.ps1" "Failed result command"
   Assert-Contains $FailureOutput "computer full loop failed" "Failed command output"
 
@@ -316,7 +362,9 @@ try {
   Assert-Equal $PostProcessFailureResult.mode "failed" "Post-process failed result mode"
   Assert-Equal $PostProcessFailureResult.success $false "Post-process failed result success"
   Assert-Equal $PostProcessFailureResult.failure.stage "result validation" "Post-process failed result stage"
+  Assert-Equal $PostProcessFailureResult.failure.checkName "result validation" "Post-process failed result check name"
   Assert-Equal $PostProcessFailureResult.failure.command "post-process computer loop evidence" "Post-process failed result command"
+  Assert-FailureManifest $PostProcessFailureResult.failure "Post-process failed result"
   Assert-Contains $PostProcessFailureOutput "post-process computer loop evidence" "Post-process failed command output"
 }
 finally {

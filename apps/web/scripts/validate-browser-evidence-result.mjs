@@ -33,6 +33,7 @@ async function validateBrowserEvidenceResult(value, validatedResultFile) {
     return ['Browser evidence result root must be an object.']
   }
 
+  validateAllowedKeys(errors, value, ['generatedAt', 'success', 'mode', 'plan', 'checks', 'proofSummary'], 'result root')
   assertString(errors, value.generatedAt, 'generatedAt')
   if (!Number.isFinite(Date.parse(value.generatedAt))) {
     errors.push('generatedAt must be a valid timestamp.')
@@ -186,12 +187,15 @@ function validateChecks(errors, checks, plan) {
     return
   }
 
+  const expectedChecks = expectedCheckSpecs(plan)
+  validateChecksManifest(errors, checks, expectedChecks)
   validateEvidenceCheck(errors, checks, {
     name: 'desktop raw evidence',
     command: 'npm run desktop:evidence:check',
     expected: plan?.requiredEvidence?.desktop === true,
     path: plan?.paths?.desktopEvidence,
     screenshotDir: plan?.paths?.desktopScreenshotDir,
+    allowedKeys: ['name', 'command', 'required', 'path', 'screenshotDir'],
   })
   validateEvidenceCheck(errors, checks, {
     name: 'Windows Chrome raw evidence',
@@ -199,12 +203,14 @@ function validateChecks(errors, checks, plan) {
     expected: plan?.requiredEvidence?.windowsChrome === true,
     path: plan?.paths?.windowsChromeEvidence,
     screenshotDir: plan?.paths?.windowsChromeScreenshotDir,
+    allowedKeys: ['name', 'command', 'required', 'path', 'screenshotDir'],
   })
   validateEvidenceCheck(errors, checks, {
     name: 'Android Chrome phone evidence',
     command: 'npm run phone:evidence:check',
     expected: plan?.requiredEvidence?.phone === true,
     path: plan?.paths?.phoneEvidence,
+    allowedKeys: ['name', 'command', 'required', 'path'],
   })
 
   validateEvidenceCheck(errors, checks, {
@@ -212,6 +218,7 @@ function validateChecks(errors, checks, plan) {
     command: 'npm run summary:check',
     expected: true,
     path: plan?.summaryPath,
+    allowedKeys: ['name', 'command', 'required', 'path'],
   })
   validateSelfTestCheck(errors, checks, 'phone evidence validator self-test', 'npm run phone:evidence:selftest', plan?.selfTest?.phoneEvidence)
   validateSelfTestCheck(errors, checks, 'desktop evidence validator self-test', 'npm run desktop:evidence:selftest', plan?.selfTest?.desktopEvidence)
@@ -219,7 +226,119 @@ function validateChecks(errors, checks, plan) {
   validateSelfTestCheck(errors, checks, 'full-loop reporter self-test', 'npm run report:selftest', plan?.selfTest?.report)
 }
 
-function validateEvidenceCheck(errors, checks, { name, command, expected, path: expectedPath, screenshotDir }) {
+function expectedCheckSpecs(plan) {
+  const specs = []
+  if (plan?.requiredEvidence?.desktop === true) {
+    specs.push({
+      name: 'desktop raw evidence',
+      command: 'npm run desktop:evidence:check',
+    })
+  }
+  if (plan?.requiredEvidence?.windowsChrome === true) {
+    specs.push({
+      name: 'Windows Chrome raw evidence',
+      command: 'npm run desktop:evidence:check -- --require-installed-chrome',
+    })
+  }
+  if (plan?.requiredEvidence?.phone === true) {
+    specs.push({
+      name: 'Android Chrome phone evidence',
+      command: 'npm run phone:evidence:check',
+    })
+  }
+  specs.push({
+    name: 'full-loop summary evidence',
+    command: 'npm run summary:check',
+  })
+  if (plan?.selfTest?.phoneEvidence === true) {
+    specs.push({
+      name: 'phone evidence validator self-test',
+      command: 'npm run phone:evidence:selftest',
+    })
+  }
+  if (plan?.selfTest?.desktopEvidence === true) {
+    specs.push({
+      name: 'desktop evidence validator self-test',
+      command: 'npm run desktop:evidence:selftest',
+    })
+  }
+  if (plan?.selfTest?.summary === true) {
+    specs.push({
+      name: 'summary validator self-test',
+      command: `npm run summary:selftest -- ${plan?.summaryPath}`,
+    })
+  }
+  if (plan?.selfTest?.report === true) {
+    specs.push({
+      name: 'full-loop reporter self-test',
+      command: 'npm run report:selftest',
+    })
+  }
+
+  return specs
+}
+
+function validateChecksManifest(errors, checks, expectedChecks) {
+  const expectedNames = expectedChecks.map((check) => check.name)
+  const expectedCommands = expectedChecks.map((check) => check.command)
+  const actualNames = checks.map((check) => check?.name)
+  const actualCommands = checks.map((check) => check?.command)
+  if (checks.length !== expectedChecks.length) {
+    errors.push(`checks must contain exactly ${expectedChecks.length} entries for this browser evidence plan.`)
+  }
+  if (stableJson(actualNames) !== stableJson(expectedNames)) {
+    errors.push('checks order must match browser evidence plan.')
+  }
+  if (stableJson(actualCommands) !== stableJson(expectedCommands)) {
+    errors.push('checks command order must match browser evidence plan.')
+  }
+
+  validateUniqueCheckField(errors, checks, 'name', 'checks entry name')
+  validateUniqueCheckField(errors, checks, 'command', 'checks command')
+
+  for (const check of checks) {
+    if (typeof check?.name === 'string' && check.name.length > 0 && !expectedNames.includes(check.name)) {
+      errors.push(`checks contains unexpected entry: ${check.name}.`)
+    }
+    if (
+      typeof check?.command === 'string' &&
+      check.command.length > 0 &&
+      !expectedCommands.includes(check.command)
+    ) {
+      errors.push(`checks command is not allowed for this browser evidence plan: ${check.command}.`)
+    }
+  }
+}
+
+function validateUniqueCheckField(errors, checks, field, label) {
+  const seen = new Set()
+  for (const check of checks) {
+    const value = check?.[field]
+    if (typeof value !== 'string' || value.length === 0) continue
+    if (seen.has(value)) {
+      errors.push(`${label} must be unique: ${value}.`)
+      continue
+    }
+    seen.add(value)
+  }
+}
+
+function validateAllowedKeys(errors, value, allowedKeys, label) {
+  if (!value || typeof value !== 'object') return
+
+  const allowed = new Set(allowedKeys)
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      errors.push(`${label} must not include unexpected field: ${key}.`)
+    }
+  }
+}
+
+function validateEvidenceCheck(
+  errors,
+  checks,
+  { name, command, expected, path: expectedPath, screenshotDir, allowedKeys },
+) {
   const entries = checks.filter((check) => check?.name === name)
   if (!expected) {
     if (entries.length) errors.push(`checks must not include ${name} when it is not required.`)
@@ -231,6 +350,7 @@ function validateEvidenceCheck(errors, checks, { name, command, expected, path: 
   }
 
   const [entry] = entries
+  validateAllowedKeys(errors, entry, allowedKeys, name)
   if (entry.required !== true) errors.push(`${name} check must be required.`)
   if (entry.command !== command) errors.push(`${name} command must be ${command}.`)
   validatePortableRepoPath(errors, entry.path, `${name} path`)
@@ -257,6 +377,7 @@ function validateSelfTestCheck(errors, checks, name, command, expected) {
     errors.push(`checks must include exactly one ${name} entry.`)
     return
   }
+  validateAllowedKeys(errors, entries[0], ['name', 'command', 'required'], name)
   if (entries[0].required !== true) errors.push(`${name} check must be required.`)
   if (entries[0].command !== command) errors.push(`${name} command must be ${command}.`)
 }

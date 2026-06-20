@@ -32,6 +32,12 @@ async function validateComputerLoopResult(value, validatedResultFile) {
     return ['Computer loop result root must be an object.']
   }
 
+  validateAllowedKeys(
+    errors,
+    value,
+    ['generatedAt', 'success', 'mode', 'runId', 'plan', 'checks', 'proofSummary', 'browserEvidence', 'failure'],
+    'result root',
+  )
   assertString(errors, value.generatedAt, 'generatedAt')
   if (!Number.isFinite(Date.parse(value.generatedAt))) {
     errors.push('generatedAt must be a valid timestamp.')

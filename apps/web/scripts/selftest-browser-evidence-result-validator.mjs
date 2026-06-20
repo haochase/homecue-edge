@@ -58,6 +58,13 @@ console.log('PASS dry-run browser evidence result')
 
 const cases = [
   {
+    name: 'result-root-unexpected-field',
+    expectedError: 'result root must not include unexpected field: failure.',
+    mutate: (result) => {
+      result.failure = null
+    },
+  },
+  {
     name: 'result-path-mismatch',
     expectedError: 'plan.resultJsonPath must match validated result file.',
     mutate: (result) => {
@@ -278,6 +285,70 @@ const cases = [
     },
   },
   {
+    name: 'checks-order-mismatch',
+    expectedError: 'checks order must match browser evidence plan.',
+    mutate: (result) => {
+      const [desktopCheck, chromeCheck, ...rest] = result.checks
+      result.checks = [chromeCheck, desktopCheck, ...rest]
+    },
+  },
+  {
+    name: 'checks-command-order-mismatch',
+    expectedError: 'checks command order must match browser evidence plan.',
+    mutate: (result) => {
+      const [desktopCheck, chromeCheck, ...rest] = result.checks
+      result.checks = [
+        { ...desktopCheck, command: chromeCheck.command },
+        { ...chromeCheck, command: desktopCheck.command },
+        ...rest,
+      ]
+    },
+  },
+  {
+    name: 'checks-duplicate-name',
+    expectedError: 'checks entry name must be unique: desktop raw evidence.',
+    mutate: (result) => {
+      result.checks[1].name = 'desktop raw evidence'
+    },
+  },
+  {
+    name: 'checks-duplicate-command',
+    expectedError: 'checks command must be unique: npm run desktop:evidence:check.',
+    mutate: (result) => {
+      result.checks[1].command = 'npm run desktop:evidence:check'
+    },
+  },
+  {
+    name: 'checks-unexpected-entry',
+    expectedError: 'checks contains unexpected entry: other raw evidence.',
+    mutate: (result) => {
+      result.checks.push({
+        name: 'other raw evidence',
+        command: 'npm run other:evidence:check',
+        required: true,
+      })
+    },
+  },
+  {
+    name: 'checks-unknown-command',
+    expectedError: 'checks command is not allowed for this browser evidence plan: npm run other:evidence:check.',
+    mutate: (result) => {
+      result.checks.push({
+        name: 'full-loop summary evidence',
+        command: 'npm run other:evidence:check',
+        required: true,
+      })
+    },
+  },
+  {
+    name: 'desktop-check-unexpected-field',
+    expectedError: 'desktop raw evidence must not include unexpected field: resultJsonPath.',
+    mutate: (result) => {
+      result.checks.find((check) => check.name === 'desktop raw evidence').resultJsonPath =
+        result.plan.resultJsonPath
+    },
+  },
+  {
     name: 'chrome-screenshot-dir-mismatch',
     expectedError: 'Windows Chrome raw evidence screenshotDir must match plan screenshotDir for Windows Chrome raw evidence.',
     mutate: (result) => {
@@ -426,6 +497,24 @@ const cases = [
       result.plan.selfTest.requested = true
       result.plan.selfTest.desktopEvidence = true
       result.plan.selfTest.summary = true
+    },
+  },
+  {
+    name: 'selftest-summary-unexpected-field',
+    expectedError: 'summary validator self-test must not include unexpected field: path.',
+    mutate: (result) => {
+      result.plan.selfTest.requested = true
+      result.plan.selfTest.desktopEvidence = true
+      result.plan.selfTest.summary = true
+      result.checks.push(
+        { name: 'desktop evidence validator self-test', command: 'npm run desktop:evidence:selftest', required: true },
+        {
+          name: 'summary validator self-test',
+          command: `npm run summary:selftest -- ${result.plan.summaryPath}`,
+          required: true,
+          path: result.plan.summaryPath,
+        },
+      )
     },
   },
   {

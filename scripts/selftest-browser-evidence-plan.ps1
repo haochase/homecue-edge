@@ -223,6 +223,91 @@ function Assert-PortableEvidencePath {
   }
 }
 
+function Assert-ObjectKeys {
+  param(
+    [Parameter(Mandatory = $true)][object]$Value,
+    [Parameter(Mandatory = $true)][string[]]$ExpectedKeys,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+
+  $ActualKeys = @($Value.PSObject.Properties.Name | Sort-Object)
+  $ExpectedSorted = @($ExpectedKeys | Sort-Object)
+  Assert-Equal ($ActualKeys -join ",") ($ExpectedSorted -join ",") $Label
+}
+
+function Assert-BrowserEvidenceChecksManifest {
+  param(
+    [Parameter(Mandatory = $true)][object]$Result,
+    [Parameter(Mandatory = $true)][object]$Plan,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+
+  $Expected = @()
+  if ($Plan.requiredEvidence.desktop) {
+    $Expected += [pscustomobject]@{
+      name = "desktop raw evidence"
+      command = "npm run desktop:evidence:check"
+      keys = @("name", "command", "required", "path", "screenshotDir")
+    }
+  }
+  if ($Plan.requiredEvidence.windowsChrome) {
+    $Expected += [pscustomobject]@{
+      name = "Windows Chrome raw evidence"
+      command = "npm run desktop:evidence:check -- --require-installed-chrome"
+      keys = @("name", "command", "required", "path", "screenshotDir")
+    }
+  }
+  if ($Plan.requiredEvidence.phone) {
+    $Expected += [pscustomobject]@{
+      name = "Android Chrome phone evidence"
+      command = "npm run phone:evidence:check"
+      keys = @("name", "command", "required", "path")
+    }
+  }
+  $Expected += [pscustomobject]@{
+    name = "full-loop summary evidence"
+    command = "npm run summary:check"
+    keys = @("name", "command", "required", "path")
+  }
+  if ($Plan.selfTest.phoneEvidence) {
+    $Expected += [pscustomobject]@{
+      name = "phone evidence validator self-test"
+      command = "npm run phone:evidence:selftest"
+      keys = @("name", "command", "required")
+    }
+  }
+  if ($Plan.selfTest.desktopEvidence) {
+    $Expected += [pscustomobject]@{
+      name = "desktop evidence validator self-test"
+      command = "npm run desktop:evidence:selftest"
+      keys = @("name", "command", "required")
+    }
+  }
+  if ($Plan.selfTest.summary) {
+    $Expected += [pscustomobject]@{
+      name = "summary validator self-test"
+      command = "npm run summary:selftest -- $($Plan.summaryPath)"
+      keys = @("name", "command", "required")
+    }
+  }
+  if ($Plan.selfTest.report) {
+    $Expected += [pscustomobject]@{
+      name = "full-loop reporter self-test"
+      command = "npm run report:selftest"
+      keys = @("name", "command", "required")
+    }
+  }
+
+  $Checks = @($Result.checks)
+  Assert-Equal $Checks.Count $Expected.Count "$Label checks count"
+  for ($Index = 0; $Index -lt $Expected.Count; $Index++) {
+    Assert-Equal $Checks[$Index].name $Expected[$Index].name "$Label check[$Index] name"
+    Assert-Equal $Checks[$Index].command $Expected[$Index].command "$Label check[$Index] command"
+    Assert-Equal $Checks[$Index].required $true "$Label check[$Index] required"
+    Assert-ObjectKeys $Checks[$Index] $Expected[$Index].keys "$Label check[$Index] fields"
+  }
+}
+
 $CompleteSummary = Write-Summary -Name "complete" -Desktop $true -Phone $true -Chrome $true -WithManifest
 $DesktopOnlySummary = Write-Summary -Name "desktop-only" -Desktop $true -Phone $false -Chrome $false
 $ChromeOnlySummary = Write-Summary -Name "chrome-only" -Desktop $false -Phone $false -Chrome $true
@@ -270,12 +355,7 @@ Assert-Equal $CompleteWithResult.result.plan.requiredEvidence.phone $true "resul
 Assert-Equal $CompleteWithResult.result.plan.selfTest.report $true "result-json report self-test"
 Assert-PortableEvidencePath $CompleteWithResult.result.plan.summaryPath "result-json plan summary path"
 Assert-PortableEvidencePath $CompleteWithResult.result.plan.resultJsonPath "result-json plan result path"
-if (-not (@($CompleteWithResult.result.checks | Where-Object { $_.command -eq "npm run phone:evidence:check" }).Count -eq 1)) {
-  throw "result JSON did not include the phone evidence check command."
-}
-if (-not (@($CompleteWithResult.result.checks | Where-Object { $_.command -eq "npm run report:selftest" }).Count -eq 1)) {
-  throw "result JSON did not include the report self-test command."
-}
+Assert-BrowserEvidenceChecksManifest $CompleteWithResult.result $CompleteWithResult.plan "complete result-json"
 
 $DesktopOnlyPlan = Read-Plan @("-SummaryPath", $DesktopOnlySummary)
 Assert-Equal $DesktopOnlyPlan.requiredEvidence.desktop $true "desktop-only desktop required"

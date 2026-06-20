@@ -96,6 +96,13 @@ console.log('PASS self-test computer loop result')
 
 const cases = [
   {
+    name: 'result-root-unexpected-field',
+    expectedError: 'result root must not include unexpected field: artifacts.',
+    mutate: (result) => {
+      result.artifacts = []
+    },
+  },
+  {
     name: 'result-path-mismatch',
     expectedError: 'plan.outputs.resultJsonPath must match validated result file.',
     mutate: (result) => {
