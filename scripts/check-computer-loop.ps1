@@ -328,6 +328,7 @@ function New-ComputerLoopProofSummary {
       desktopEvidencePath = $BrowserEvidenceResult.proofSummary.evidence.desktopEvidencePath
       windowsChromeEvidencePath = $BrowserEvidenceResult.proofSummary.evidence.windowsChromeEvidencePath
       phoneEvidencePath = $BrowserEvidenceResult.proofSummary.evidence.phoneEvidencePath
+      devEnvEvidencePath = $BrowserEvidenceResult.proofSummary.evidence.devEnvEvidencePath
       webReadinessEvidencePath = $BrowserEvidenceResult.proofSummary.evidence.webReadinessEvidencePath
       desktopScreenshotDir = $BrowserEvidenceResult.proofSummary.evidence.desktopScreenshotDir
       windowsChromeScreenshotDir = $BrowserEvidenceResult.proofSummary.evidence.windowsChromeScreenshotDir

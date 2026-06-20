@@ -708,6 +708,15 @@ const cases = [
     },
   },
   {
+    name: 'browser-evidence-proof-summary-dev-env-path-mismatch',
+    expectedError:
+      'browserEvidence.proofSummary.evidence.devEnvEvidencePath must match summary.evidence Dev Environment JSON.',
+    mutate: (result) => {
+      result.browserEvidence.proofSummary.evidence.devEnvEvidencePath =
+        'assets/tmp/computer-loop-result-validator-selftest/other-dev-env.json'
+    },
+  },
+  {
     name: 'browser-evidence-proof-summary-web-readiness-mismatch',
     expectedError:
       'browserEvidence.proofSummary.webReadiness.strategy must match summary.environment.webReadiness.strategy.',
@@ -764,6 +773,15 @@ const cases = [
     mutate: (result) => {
       result.proofSummary.evidence.windowsChromeScreenshotDir =
         'assets/tmp/computer-loop-result-validator-selftest/other-windows-chrome-screens'
+    },
+  },
+  {
+    name: 'proof-summary-dev-env-path-mismatch',
+    expectedError:
+      'proofSummary.evidence.devEnvEvidencePath must match browserEvidence.proofSummary.evidence.devEnvEvidencePath.',
+    mutate: (result) => {
+      result.proofSummary.evidence.devEnvEvidencePath =
+        'assets/tmp/computer-loop-result-validator-selftest/other-dev-env.json'
     },
   },
   {
@@ -844,6 +862,52 @@ const cases = [
     prepare: async (result, name) => {
       await attachSummary(result, name, (summary) => {
         summary.environment.webReadiness.gates.httpProbeBeforePortReuse = false
+      })
+    },
+  },
+  {
+    name: 'summary-root-unexpected-field',
+    expectedError: 'summary root must not include unexpected field: proofSummary.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.proofSummary = {}
+      })
+    },
+  },
+  {
+    name: 'summary-loop-unexpected-field',
+    expectedError: 'summary.loops.desktop must not include unexpected field: trace.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.loops.desktop.trace = {}
+      })
+    },
+  },
+  {
+    name: 'summary-evidence-file-unexpected-field',
+    expectedError: 'summary.evidence.files Desktop JSON must not include unexpected field: absolutePath.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.evidence.files.find((entry) => entry.label === 'Desktop JSON').absolutePath =
+          result.browserEvidence.plan.paths.desktopEvidence
+      })
+    },
+  },
+  {
+    name: 'summary-web-readiness-raw-unexpected-field',
+    expectedError: 'summary.environment.webReadiness raw evidence must not include unexpected field: artifacts.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, async (summary) => {
+        await attachWebReadiness(summary, { artifacts: [] })
+      })
+    },
+  },
+  {
+    name: 'summary-dev-env-raw-unexpected-field',
+    expectedError: 'summary.environment.preflight raw evidence must not include unexpected field: artifacts.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, async (summary) => {
+        await attachDevEnv(summary, { artifacts: [] })
       })
     },
   },
@@ -1118,6 +1182,16 @@ async function attachSummary(result, name, mutate) {
   await writeJson(resolveRepoPath(summaryPath), summary)
 }
 
+async function attachWebReadiness(summary, overrides = {}) {
+  const entry = summary.evidence.files.find((item) => item.label === 'Web Readiness JSON')
+  Object.assign(entry, await writeWebReadinessEvidence(overrides))
+}
+
+async function attachDevEnv(summary, overrides = {}) {
+  const entry = summary.evidence.files.find((item) => item.label === 'Dev Environment JSON')
+  Object.assign(entry, await writeDevEnvEvidence(overrides))
+}
+
 async function attachRunLocalEvidence(result, name, { desktop = {}, chrome = {} } = {}) {
   const baseDir = `assets/tmp/computer-loop-result-validator-selftest/${name}`
   result.plan.outputs.outputDir = baseDir
@@ -1144,6 +1218,7 @@ async function attachRunLocalEvidence(result, name, { desktop = {}, chrome = {} 
   result.proofSummary.evidence.windowsChromeEvidencePath =
     result.browserEvidence.proofSummary.evidence.windowsChromeEvidencePath
   result.proofSummary.evidence.phoneEvidencePath = result.browserEvidence.proofSummary.evidence.phoneEvidencePath
+  result.proofSummary.evidence.devEnvEvidencePath = result.browserEvidence.proofSummary.evidence.devEnvEvidencePath
   result.proofSummary.evidence.webReadinessEvidencePath =
     result.browserEvidence.proofSummary.evidence.webReadinessEvidencePath
   result.proofSummary.evidence.desktopScreenshotDir = result.browserEvidence.proofSummary.evidence.desktopScreenshotDir
@@ -1218,6 +1293,7 @@ async function createSummary(paths) {
       errors: [],
     },
     environment: {
+      preflight: summaryDevEnv(),
       webReadiness: summaryWebReadiness(),
     },
     evidence: {
@@ -1225,6 +1301,12 @@ async function createSummary(paths) {
         { label: 'Desktop JSON', file: paths.desktopEvidence, present: true },
         { label: 'Windows Chrome JSON', file: paths.windowsChromeEvidence, present: true },
         { label: 'Phone JSON', file: null, present: false },
+        {
+          label: 'Dev Environment JSON',
+          file: 'assets/tmp/computer-loop-result-validator-selftest/dev-env-check.json',
+          present: true,
+          ...(await writeDevEnvEvidence()),
+        },
         {
           label: 'Web Readiness JSON',
           file: 'assets/tmp/computer-loop-result-validator-selftest/web-readiness.json',
@@ -1236,6 +1318,41 @@ async function createSummary(paths) {
       ],
     },
   }
+}
+
+function summaryDevEnv(overrides = {}) {
+  return {
+    run: true,
+    success: true,
+    generatedAt: '2026-06-18T23:59:48.000Z',
+    required: true,
+    requirePhone: false,
+    okCount: 1,
+    warnCount: 0,
+    failCount: 0,
+    checks: [
+      {
+        name: 'node',
+        category: 'host',
+        ok: true,
+        required: true,
+        status: 'OK',
+        detail: 'v24.14.0',
+      },
+    ],
+    ...overrides,
+  }
+}
+
+async function writeDevEnvEvidence(overrides = {}) {
+  const file = resolveRepoPath('assets/tmp/computer-loop-result-validator-selftest/dev-env-check.json')
+  const raw = summaryDevEnv(overrides)
+  delete raw.run
+  delete raw.okCount
+  delete raw.warnCount
+  delete raw.failCount
+  await writeJson(file, raw)
+  return fileDigest(file)
 }
 
 function summaryWebReadiness(overrides = {}) {
@@ -1261,7 +1378,10 @@ function summaryWebReadiness(overrides = {}) {
 
 async function writeWebReadinessEvidence(overrides = {}) {
   const file = resolveRepoPath('assets/tmp/computer-loop-result-validator-selftest/web-readiness.json')
-  await writeJson(file, summaryWebReadiness(overrides))
+  const raw = summaryWebReadiness(overrides)
+  delete raw.run
+  delete raw.success
+  await writeJson(file, raw)
   return fileDigest(file)
 }
 
@@ -1697,6 +1817,7 @@ function browserEvidenceProofSummary(browserEvidencePlan) {
       desktopEvidencePath: browserEvidencePlan.paths.desktopEvidence,
       windowsChromeEvidencePath: browserEvidencePlan.paths.windowsChromeEvidence,
       phoneEvidencePath: browserEvidencePlan.paths.phoneEvidence,
+      devEnvEvidencePath: 'assets/tmp/computer-loop-result-validator-selftest/dev-env-check.json',
       webReadinessEvidencePath: 'assets/tmp/computer-loop-result-validator-selftest/web-readiness.json',
       desktopScreenshotDir: browserEvidencePlan.paths.desktopScreenshotDir,
       windowsChromeScreenshotDir: browserEvidencePlan.paths.windowsChromeScreenshotDir,
@@ -1738,6 +1859,7 @@ function proofSummary(plan) {
       desktopEvidencePath: 'assets/tmp/computer-loop-result-validator-selftest/desktop-loop.json',
       windowsChromeEvidencePath: 'assets/tmp/computer-loop-result-validator-selftest/chrome-loop.json',
       phoneEvidencePath: '__phone_not_run__.json',
+      devEnvEvidencePath: 'assets/tmp/computer-loop-result-validator-selftest/dev-env-check.json',
       webReadinessEvidencePath: 'assets/tmp/computer-loop-result-validator-selftest/web-readiness.json',
       desktopScreenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/playwright-chromium-screens',
       windowsChromeScreenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/windows-chrome-screens',

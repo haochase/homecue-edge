@@ -3,6 +3,13 @@ import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parityErrorsSignature, recomputeBrowserParity, validateBrowserParityInputs } from './summary-parity.mjs'
+import {
+  validateRawDevEnvManifest,
+  validateRawDevEnvMatchesSummary,
+  validateRawWebReadinessManifest,
+  validateRawWebReadinessMatchesSummary,
+  validateSummaryManifest,
+} from './summary-manifest.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
@@ -50,6 +57,7 @@ const PROOF_SUMMARY_EVIDENCE_KEYS = [
   'desktopEvidencePath',
   'windowsChromeEvidencePath',
   'phoneEvidencePath',
+  'devEnvEvidencePath',
   'webReadinessEvidencePath',
   'desktopScreenshotDir',
   'windowsChromeScreenshotDir',
@@ -579,6 +587,7 @@ function formatDisplayPath(value) {
 async function validateSummary(errors, summary, plan) {
   if (!summary || typeof summary !== 'object') return
 
+  validateSummaryManifest(errors, summary, { labelPrefix: 'summary' })
   assertString(errors, summary.generatedAt, 'summary.generatedAt')
   if (!Number.isFinite(timestampMs(summary.generatedAt))) {
     errors.push('summary.generatedAt must be a valid timestamp.')
@@ -623,8 +632,23 @@ async function validateSummary(errors, summary, plan) {
   validateSummaryWebReadiness(errors, summary)
 
   const manifest = manifestByLabel(summary.evidence?.files)
+  if (summary.environment?.preflight?.run === true) {
+    await validateRawDevEnvEvidence(
+      errors,
+      summary.environment.preflight,
+      manifest.get('Dev Environment JSON'),
+      'summary.environment.preflight',
+    )
+  }
   if (manifest.get('Web Readiness JSON')?.present !== true) {
     errors.push('summary.evidence Web Readiness JSON must be present.')
+  } else {
+    await validateRawWebReadinessEvidence(
+      errors,
+      summary.environment?.webReadiness,
+      manifest.get('Web Readiness JSON'),
+      'summary.environment.webReadiness',
+    )
   }
   if (plan.inferredFromSummary?.desktop) {
     compareRepoPaths(
@@ -655,6 +679,30 @@ async function validateSummary(errors, summary, plan) {
       'plan.paths.phoneEvidence',
     )
   }
+}
+
+async function validateRawDevEnvEvidence(errors, preflight, manifestEntry, label) {
+  if (!manifestEntry?.present) {
+    errors.push(`${label} manifest entry is missing.`)
+    return
+  }
+  if (!preflight?.run) return
+
+  const raw = await readReferencedJson(errors, manifestEntry.file, `${label} raw evidence`)
+  if (!raw) return
+
+  validateRawDevEnvManifest(errors, raw, label)
+  validateRawDevEnvMatchesSummary(errors, raw, preflight, label, compareValue)
+}
+
+async function validateRawWebReadinessEvidence(errors, webReadiness, manifestEntry, label) {
+  if (!webReadiness?.run || !manifestEntry?.present) return
+
+  const raw = await readReferencedJson(errors, manifestEntry.file, `${label} raw evidence`)
+  if (!raw) return
+
+  validateRawWebReadinessManifest(errors, raw, label)
+  validateRawWebReadinessMatchesSummary(errors, raw, webReadiness, label, compareValue)
 }
 
 function validateProofSummary(errors, proofSummary, summary, plan) {
@@ -855,6 +903,14 @@ function validateProofSummaryWebReadinessEvidence(errors, evidence, summary) {
   if (!evidence || typeof evidence !== 'object') return
 
   const manifest = manifestByLabel(summary?.evidence?.files)
+  validatePortableRepoPath(errors, evidence.devEnvEvidencePath, 'proofSummary.evidence.devEnvEvidencePath')
+  compareRepoPaths(
+    errors,
+    evidence.devEnvEvidencePath,
+    manifest.get('Dev Environment JSON')?.file,
+    'proofSummary.evidence.devEnvEvidencePath',
+    'summary.evidence Dev Environment JSON',
+  )
   validatePortableRepoPath(errors, evidence.webReadinessEvidencePath, 'proofSummary.evidence.webReadinessEvidencePath')
   compareRepoPaths(
     errors,

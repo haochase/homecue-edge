@@ -203,6 +203,14 @@ const cases = [
     },
   },
   {
+    name: 'proof-summary-dev-env-path-mismatch',
+    expectedError: 'proofSummary.evidence.devEnvEvidencePath must match summary.evidence Dev Environment JSON.',
+    mutate: (result) => {
+      result.proofSummary.evidence.devEnvEvidencePath =
+        'assets/tmp/browser-evidence-result-validator-selftest/other-dev-env.json'
+    },
+  },
+  {
     name: 'summary-phone-run-mismatch',
     expectedError: 'summary.loops.phone.run must match plan.inferredFromSummary.phone.',
     prepare: async (result, name) => {
@@ -417,6 +425,52 @@ const cases = [
       await attachSummary(result, name, (summary) => {
         summary.evidence.files.find((entry) => entry.label === 'Windows Chrome JSON').file =
           'assets/tmp/browser-evidence-result-validator-selftest/other-chrome-loop.json'
+      })
+    },
+  },
+  {
+    name: 'summary-root-unexpected-field',
+    expectedError: 'summary root must not include unexpected field: proofSummary.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.proofSummary = {}
+      })
+    },
+  },
+  {
+    name: 'summary-loop-unexpected-field',
+    expectedError: 'summary.loops.desktop must not include unexpected field: trace.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.loops.desktop.trace = {}
+      })
+    },
+  },
+  {
+    name: 'summary-evidence-file-unexpected-field',
+    expectedError: 'summary.evidence.files Desktop JSON must not include unexpected field: absolutePath.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, (summary) => {
+        summary.evidence.files.find((entry) => entry.label === 'Desktop JSON').absolutePath =
+          result.plan.paths.desktopEvidence
+      })
+    },
+  },
+  {
+    name: 'summary-web-readiness-raw-unexpected-field',
+    expectedError: 'summary.environment.webReadiness raw evidence must not include unexpected field: artifacts.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, async (summary) => {
+        await attachWebReadiness(summary, { artifacts: [] })
+      })
+    },
+  },
+  {
+    name: 'summary-dev-env-raw-unexpected-field',
+    expectedError: 'summary.environment.preflight raw evidence must not include unexpected field: artifacts.',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, async (summary) => {
+        await attachDevEnv(summary, { artifacts: [] })
       })
     },
   },
@@ -703,8 +757,18 @@ async function attachSummary(result, name, mutate) {
   result.plan.summaryPath = summaryPath
   result.proofSummary.evidence.summaryPath = summaryPath
   const summary = await createSummary(result.plan)
-  mutate(summary)
+  await mutate(summary)
   await writeJson(resolveRepoPath(summaryPath), summary)
+}
+
+async function attachWebReadiness(summary, overrides = {}) {
+  const entry = summary.evidence.files.find((item) => item.label === 'Web Readiness JSON')
+  Object.assign(entry, await writeWebReadinessEvidence(overrides))
+}
+
+async function attachDevEnv(summary, overrides = {}) {
+  const entry = summary.evidence.files.find((item) => item.label === 'Dev Environment JSON')
+  Object.assign(entry, await writeDevEnvEvidence(overrides))
 }
 
 async function attachRunLocalEvidence(result, name, { desktop = {}, chrome = {} } = {}) {
@@ -800,6 +864,7 @@ async function createSummary(plan) {
       errors: [],
     },
     environment: {
+      preflight: summaryDevEnv(),
       webReadiness: summaryWebReadiness(),
     },
     evidence: {
@@ -807,6 +872,12 @@ async function createSummary(plan) {
         { label: 'Desktop JSON', file: plan.paths.desktopEvidence, present: true },
         { label: 'Windows Chrome JSON', file: plan.paths.windowsChromeEvidence, present: true },
         { label: 'Phone JSON', file: null, present: false },
+        {
+          label: 'Dev Environment JSON',
+          file: 'assets/tmp/browser-evidence-result-validator-selftest/dev-env-check.json',
+          present: true,
+          ...(await writeDevEnvEvidence()),
+        },
         {
           label: 'Web Readiness JSON',
           file: 'assets/tmp/browser-evidence-result-validator-selftest/web-readiness.json',
@@ -818,6 +889,41 @@ async function createSummary(plan) {
       ],
     },
   }
+}
+
+function summaryDevEnv(overrides = {}) {
+  return {
+    run: true,
+    success: true,
+    generatedAt: '2026-06-18T23:59:48.000Z',
+    required: true,
+    requirePhone: false,
+    okCount: 1,
+    warnCount: 0,
+    failCount: 0,
+    checks: [
+      {
+        name: 'node',
+        category: 'host',
+        ok: true,
+        required: true,
+        status: 'OK',
+        detail: 'v24.14.0',
+      },
+    ],
+    ...overrides,
+  }
+}
+
+async function writeDevEnvEvidence(overrides = {}) {
+  const file = resolveRepoPath('assets/tmp/browser-evidence-result-validator-selftest/dev-env-check.json')
+  const raw = summaryDevEnv(overrides)
+  delete raw.run
+  delete raw.okCount
+  delete raw.warnCount
+  delete raw.failCount
+  await writeJson(file, raw)
+  return fileDigest(file)
 }
 
 function summaryWebReadiness(overrides = {}) {
@@ -843,7 +949,10 @@ function summaryWebReadiness(overrides = {}) {
 
 async function writeWebReadinessEvidence(overrides = {}) {
   const file = resolveRepoPath('assets/tmp/browser-evidence-result-validator-selftest/web-readiness.json')
-  await writeJson(file, summaryWebReadiness(overrides))
+  const raw = summaryWebReadiness(overrides)
+  delete raw.run
+  delete raw.success
+  await writeJson(file, raw)
   return fileDigest(file)
 }
 
@@ -1136,6 +1245,7 @@ function proofSummary(plan) {
       desktopEvidencePath: plan.paths.desktopEvidence,
       windowsChromeEvidencePath: plan.paths.windowsChromeEvidence,
       phoneEvidencePath: plan.paths.phoneEvidence,
+      devEnvEvidencePath: 'assets/tmp/browser-evidence-result-validator-selftest/dev-env-check.json',
       webReadinessEvidencePath: 'assets/tmp/browser-evidence-result-validator-selftest/web-readiness.json',
       desktopScreenshotDir: plan.paths.desktopScreenshotDir,
       windowsChromeScreenshotDir: plan.paths.windowsChromeScreenshotDir,
