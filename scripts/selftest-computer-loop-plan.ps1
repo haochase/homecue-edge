@@ -86,7 +86,8 @@ function Normalize-ProcessPathEnvironment {
 function Invoke-ComputerLoopExpectFailure {
   param(
     [string[]]$Arguments,
-    [hashtable]$Environment = @{}
+    [hashtable]$Environment = @{},
+    [string]$ScriptName = "check-computer-loop.ps1"
   )
 
   $StdoutPath = Join-Path $OutputDir "failed-command.out.txt"
@@ -102,7 +103,7 @@ function Invoke-ComputerLoopExpectFailure {
   try {
     $Process = Start-Process `
       -FilePath "powershell" `
-      -ArgumentList (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$PSScriptRoot\check-computer-loop.ps1") + $Arguments) `
+      -ArgumentList (@("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$PSScriptRoot\$ScriptName") + $Arguments) `
       -WorkingDirectory $Root `
       -RedirectStandardOutput $StdoutPath `
       -RedirectStandardError $StderrPath `
@@ -123,7 +124,7 @@ function Invoke-ComputerLoopExpectFailure {
   ) -join [Environment]::NewLine
 
   if ($Process.ExitCode -eq 0) {
-    throw "check-computer-loop.ps1 should have failed: $($Arguments -join ' ')"
+    throw "$ScriptName should have failed: $($Arguments -join ' ')"
   }
 
   return $Output
@@ -264,6 +265,14 @@ try {
   Assert-Contains $LatestWrapperSource "check-computer-loop.ps1" "Latest wrapper should delegate to the full computer loop wrapper."
   Assert-Contains $LatestWrapperSource "-ResultJsonPath" "Latest wrapper should pass ResultJsonPath explicitly."
   Assert-Contains $LatestWrapperSource "-DryRun" "Latest wrapper should guard against dry-run overwriting latest evidence."
+
+  $LatestDryRunFailure = Invoke-ComputerLoopExpectFailure -ScriptName "check-computer-loop-latest.ps1" -Arguments @("-DryRun")
+  Assert-Contains $LatestDryRunFailure "without overwriting latest result evidence" "Latest wrapper dry-run guard output"
+  $LatestResultPathFailure = Invoke-ComputerLoopExpectFailure -ScriptName "check-computer-loop-latest.ps1" -Arguments @(
+    "-ResultJsonPath",
+    "assets/tmp/computer-loop-plan-selftest/should-not-write.json"
+  )
+  Assert-Contains $LatestResultPathFailure "always writes assets/tmp/computer-loop-check-latest.json" "Latest wrapper result-path guard output"
 
   $Implicit = Invoke-Plan @()
   Assert-ComputerLoopPlanManifest $Implicit "Implicit"
