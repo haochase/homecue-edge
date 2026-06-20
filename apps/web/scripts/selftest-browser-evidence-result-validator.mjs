@@ -756,6 +756,16 @@ const cases = [
     },
   },
   {
+    name: 'referenced-raw-chrome-ascii-safe-json-required',
+    expectedError:
+      'plan.paths.windowsChromeEvidence JSON cannot be read: plan.paths.windowsChromeEvidence must be ASCII-safe JSON',
+    prepare: async (result, name) => {
+      await attachRunLocalEvidence(result, name)
+      const raw = JSON.parse(await readFile(resolveRepoPath(result.plan.paths.windowsChromeEvidence), 'utf8'))
+      await writeNonAsciiJson(resolveRepoPath(result.plan.paths.windowsChromeEvidence), raw)
+    },
+  },
+  {
     name: 'raw-desktop-app-url-mismatch',
     expectedError: 'desktop raw evidence.appUrl must match summary.appUrl.',
     prepare: async (result, name) => {
