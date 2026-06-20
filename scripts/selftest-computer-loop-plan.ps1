@@ -254,6 +254,12 @@ function Get-ArgumentValue {
 }
 
 try {
+  $ComputerLoopScriptSource = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "check-computer-loop.ps1")
+  Assert-Contains $ComputerLoopScriptSource "devEnvEvidence={" "Wrapper proof summary should print the dev environment evidence path label."
+  Assert-Contains $ComputerLoopScriptSource "webReadinessEvidence={" "Wrapper proof summary should print the web readiness evidence path label."
+  Assert-Contains $ComputerLoopScriptSource '$ProofSummary.evidence.devEnvEvidencePath' "Wrapper proof summary should use proofSummary dev environment evidence."
+  Assert-Contains $ComputerLoopScriptSource '$ProofSummary.evidence.webReadinessEvidencePath' "Wrapper proof summary should use proofSummary web readiness evidence."
+
   $Implicit = Invoke-Plan @()
   Assert-ComputerLoopPlanManifest $Implicit "Implicit"
   Assert-Equal $Implicit.outputs.resultJsonPath "assets/tmp/computer-loop-check.json" "Implicit result path should use the stable default."
