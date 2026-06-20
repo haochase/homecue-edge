@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeJsonFile } from './json-file.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
@@ -242,6 +243,8 @@ if (sourceSummary.loops?.windowsChrome?.run) {
   console.log(`PASS generated Chrome-only skip-preflight summary: ${path.relative(repoRoot, chromeOnlySummaryFile)}`)
 }
 
+await assertAsciiSafeJsonIsRequired()
+
 for (const testCase of cases) {
   const summary = structuredClone(sourceSummary)
   await testCase.mutate(summary)
@@ -388,7 +391,23 @@ function manifestEntry(summary, label) {
 }
 
 async function writeJson(file, value) {
-  await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+  await writeJsonFile(file, value)
+}
+
+async function assertAsciiSafeJsonIsRequired() {
+  const file = path.join(outputDir, 'summary-ascii-safe-json-required.json')
+  await writeFile(file, `${JSON.stringify(sourceSummary, null, 2)}\n`, 'utf8')
+
+  const result = await runValidator(file)
+  if (result.code === 0) {
+    throw new Error('Expected summary-ascii-safe-json-required to fail validation.')
+  }
+  if (!result.output.includes('full loop summary must be ASCII-safe JSON')) {
+    console.error(result.output)
+    throw new Error('Expected summary-ascii-safe-json-required failure to include ASCII-safe JSON error.')
+  }
+
+  console.log('PASS negative case: summary-ascii-safe-json-required')
 }
 
 async function copyChromeOnlyScreenshots(chromeRaw) {

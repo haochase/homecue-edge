@@ -4,6 +4,36 @@ $Root = Resolve-Path "$PSScriptRoot\.."
 $OutputDir = Join-Path $Root "assets\tmp\browser-evidence-plan-selftest"
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
+function ConvertTo-AsciiSafeJsonText {
+  param(
+    [Parameter(Mandatory = $true)]$Value,
+    [int]$Depth = 6
+  )
+
+  $Json = $Value | ConvertTo-Json -Depth $Depth
+  $JsonText = [string]::Join([Environment]::NewLine, @($Json))
+  return [regex]::Replace($JsonText, '[^\x00-\x7F]', {
+      param($Match)
+      '\u{0:x4}' -f [int][char]$Match.Value[0]
+    })
+}
+
+function Write-JsonFile {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)]$Value,
+    [int]$Depth = 6
+  )
+
+  $Dir = Split-Path -Parent $Path
+  if ($Dir) {
+    New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+  }
+
+  $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($Path, ((ConvertTo-AsciiSafeJsonText -Value $Value -Depth $Depth) + [Environment]::NewLine), $Utf8NoBom)
+}
+
 function Write-Summary {
   param(
     [Parameter(Mandatory = $true)][string]$Name,
@@ -50,7 +80,7 @@ function Write-Summary {
       files = $EvidenceFiles
     }
   }
-  $Summary | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Path -Encoding UTF8
+  Write-JsonFile -Path $Path -Value $Summary -Depth 5
 
   if ($JsonOnlyManifest) {
     $EvidenceDir = Join-Path $OutputDir $Name
@@ -66,7 +96,7 @@ function Write-Summary {
         -ScreenshotPath "assets/tmp/browser-evidence-plan-selftest/$Name/raw-chrome-screens/01-control-console.png"
     }
     if ($Phone) {
-      [pscustomobject]@{ success = $true } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $EvidenceDir "phone-loop.json") -Encoding UTF8
+      Write-JsonFile -Path (Join-Path $EvidenceDir "phone-loop.json") -Value ([pscustomobject]@{ success = $true }) -Depth 2
     }
   }
 
@@ -88,7 +118,7 @@ function Write-RawBrowserEvidence {
       }
     }
   }
-  $Evidence | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $Path -Encoding UTF8
+  Write-JsonFile -Path $Path -Value $Evidence -Depth 6
 }
 
 function Read-Plan {

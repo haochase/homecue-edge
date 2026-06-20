@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { assertAsciiSafeJsonText } from './json-file.mjs'
 import { parityErrorsSignature, recomputeBrowserParity } from './summary-parity.mjs'
 import {
   validateRawDevEnvMatchesSummary,
@@ -25,8 +26,11 @@ const EXPECTED_SCREENSHOT_FILES = [
 ]
 const MIN_LOCALIZED_PHRASE_COUNT = 7
 const options = parseOptions(optionArgs)
-const summary = JSON.parse(await readFile(summaryFile, 'utf8'))
-const errors = await validateSummary(summary, options)
+const errors = []
+const summary = await readSummaryJson(errors, summaryFile)
+if (summary) {
+  errors.push(...(await validateSummary(summary, options)))
+}
 
 if (errors.length) {
   console.error(`Full loop summary validation failed: ${summaryFile}`)
@@ -37,6 +41,17 @@ if (errors.length) {
 }
 
 console.log(`Full loop summary validation passed: ${summaryFile}`)
+
+async function readSummaryJson(errors, file) {
+  try {
+    const text = await readFile(file, 'utf8')
+    assertAsciiSafeJsonText(text, 'full loop summary')
+    return JSON.parse(text)
+  } catch (error) {
+    errors.push(`full loop summary JSON cannot be read: ${error?.code ?? error.message ?? error}`)
+    return null
+  }
+}
 
 function parseCliArgs(args, defaultFile) {
   const [firstArg, ...remainingArgs] = args
@@ -1022,7 +1037,9 @@ async function validateRawWebReadinessEvidence(errors, webReadiness, manifestEnt
 async function readManifestJson(errors, manifestEntry, label) {
   try {
     const absolutePath = path.resolve(repoRoot, manifestEntry.file)
-    return JSON.parse(await readFile(absolutePath, 'utf8'))
+    const text = await readFile(absolutePath, 'utf8')
+    assertAsciiSafeJsonText(text, `${label} raw evidence`)
+    return JSON.parse(text)
   } catch (error) {
     errors.push(`${label} raw evidence JSON cannot be read: ${error?.code ?? error.message ?? error}`)
     return null

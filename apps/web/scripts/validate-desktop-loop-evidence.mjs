@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { assertAsciiSafeJsonText } from './json-file.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
@@ -22,8 +23,11 @@ const EXPECTED_LOCALIZED_UI = {
 }
 const MIN_LOCALIZED_PHRASE_COUNT = 7
 const options = parseOptions(optionArgs)
-const evidence = JSON.parse(await readFile(evidenceFile, 'utf8'))
-const errors = await validateEvidence(evidence, options)
+const errors = []
+const evidence = await readEvidenceJson(errors, evidenceFile)
+if (evidence) {
+  errors.push(...(await validateEvidence(evidence, options)))
+}
 
 if (errors.length) {
   console.error(`Desktop loop evidence validation failed: ${evidenceFile}`)
@@ -34,6 +38,17 @@ if (errors.length) {
 }
 
 console.log(`Desktop loop evidence validation passed: ${evidenceFile}`)
+
+async function readEvidenceJson(errors, file) {
+  try {
+    const text = await readFile(file, 'utf8')
+    assertAsciiSafeJsonText(text, 'desktop loop evidence')
+    return JSON.parse(text)
+  } catch (error) {
+    errors.push(`desktop loop evidence JSON cannot be read: ${error?.code ?? error.message ?? error}`)
+    return null
+  }
+}
 
 function parseCliArgs(args, defaultFile) {
   const [firstArg, ...remainingArgs] = args

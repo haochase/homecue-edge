@@ -12,6 +12,15 @@ export function toAsciiJson(value) {
   return JSON.stringify(value, null, 2).replace(nonAsciiPattern, escapeJsonCodePoint)
 }
 
+export function assertAsciiSafeJsonText(text, label) {
+  nonAsciiPattern.lastIndex = 0
+  const hasNonAscii = nonAsciiPattern.test(text)
+  nonAsciiPattern.lastIndex = 0
+  if (hasNonAscii) {
+    throw new Error(`${label} must be ASCII-safe JSON`)
+  }
+}
+
 function escapeJsonCodePoint(char) {
   const codePoint = char.codePointAt(0)
   if (codePoint <= 0xffff) {

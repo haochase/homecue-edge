@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { toAsciiJson } from './json-file.mjs'
+import { toAsciiJson, writeJsonFile } from './json-file.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
@@ -194,6 +194,8 @@ if (defaultFileWithFlags.code !== 0) {
 }
 console.log('PASS default desktop evidence path with flags-only arguments')
 
+await assertAsciiSafeJsonIsRequired()
+
 for (const testCase of negativeCases) {
   const evidence = structuredClone(testCase.base)
   testCase.mutate(evidence)
@@ -264,7 +266,23 @@ async function runValidator(args) {
 }
 
 async function writeJson(file, value) {
-  await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+  await writeJsonFile(file, value)
+}
+
+async function assertAsciiSafeJsonIsRequired() {
+  const file = path.join(outputDir, 'desktop-ascii-safe-json-required.json')
+  await writeFile(file, `${JSON.stringify(desktopEvidence, null, 2)}\n`, 'utf8')
+
+  const result = await runValidator(desktopArgs(file))
+  if (result.code === 0) {
+    throw new Error('Expected desktop-ascii-safe-json-required to fail validation.')
+  }
+  if (!result.output.includes('desktop loop evidence must be ASCII-safe JSON')) {
+    console.error(result.output)
+    throw new Error('Expected desktop-ascii-safe-json-required failure to include ASCII-safe JSON error.')
+  }
+
+  console.log('PASS negative case: desktop-ascii-safe-json-required')
 }
 
 function assertAsciiSafeJsonOutput() {

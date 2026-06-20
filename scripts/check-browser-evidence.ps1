@@ -100,6 +100,20 @@ function Read-JsonFile {
   return [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
 }
 
+function ConvertTo-AsciiSafeJsonText {
+  param(
+    [Parameter(Mandatory = $true)]$Value,
+    [int]$Depth = 10
+  )
+
+  $Json = $Value | ConvertTo-Json -Depth $Depth
+  $JsonText = [string]::Join([Environment]::NewLine, @($Json))
+  return [regex]::Replace($JsonText, '[^\x00-\x7F]', {
+      param($Match)
+      '\u{0:x4}' -f [int][char]$Match.Value[0]
+    })
+}
+
 function Write-JsonFile {
   param(
     [Parameter(Mandatory = $true)][string]$Path,
@@ -112,7 +126,7 @@ function Write-JsonFile {
   }
 
   $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-  [System.IO.File]::WriteAllText($Path, (($Value | ConvertTo-Json -Depth 10) + [Environment]::NewLine), $Utf8NoBom)
+  [System.IO.File]::WriteAllText($Path, ((ConvertTo-AsciiSafeJsonText -Value $Value -Depth 10) + [Environment]::NewLine), $Utf8NoBom)
 }
 
 function Convert-ToRepoRelativePath {
