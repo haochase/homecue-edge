@@ -232,6 +232,14 @@ function validatePlanConsistency(errors, plan, validatedResultFile) {
     'plan.commands.fullLoop -SkipPreflight',
     'plan.options.skipPreflight',
   )
+  validateCommandArgPath(
+    errors,
+    commands.fullLoop?.args,
+    '-File',
+    'scripts/check-full-loop.ps1',
+    'plan.commands.fullLoop -File',
+    'scripts/check-full-loop.ps1',
+  )
   validateCommandArgValue(
     errors,
     commands.fullLoop?.args,
@@ -316,6 +324,14 @@ function validatePlanConsistency(errors, plan, validatedResultFile) {
   validateCommandArgPath(
     errors,
     commands.browserEvidence?.args,
+    '-File',
+    'scripts/check-browser-evidence.ps1',
+    'plan.commands.browserEvidence -File',
+    'scripts/check-browser-evidence.ps1',
+  )
+  validateCommandArgPath(
+    errors,
+    commands.browserEvidence?.args,
     '-SummaryPath',
     outputs.summaryPath,
     'plan.commands.browserEvidence -SummaryPath',
@@ -391,12 +407,20 @@ function validateChecks(errors, checks, plan) {
     return
   }
 
+  validateTopLevelCheckManifest(errors, checks)
   const fullLoop = checks.find((check) => check?.name === 'computer full loop')
   const browserEvidence = checks.find((check) => check?.name === 'saved browser evidence recheck')
   if (!fullLoop) errors.push('checks missing computer full loop entry.')
   if (!browserEvidence) errors.push('checks missing saved browser evidence recheck entry.')
   if (fullLoop?.required !== true) errors.push('computer full loop check must be required.')
   if (browserEvidence?.required !== true) errors.push('saved browser evidence recheck must be required.')
+  validateAllowedKeys(errors, fullLoop, ['name', 'command', 'required', 'summaryPath', 'reportPath'], 'computer full loop check')
+  validateAllowedKeys(
+    errors,
+    browserEvidence,
+    ['name', 'command', 'required', 'resultJsonPath'],
+    'saved browser evidence recheck',
+  )
   if (plan?.outputs?.summaryPath && fullLoop?.summaryPath !== plan.outputs.summaryPath) {
     errors.push('computer full loop summaryPath must match plan.outputs.summaryPath.')
   }
@@ -411,6 +435,38 @@ function validateChecks(errors, checks, plan) {
   }
   if (plan?.commands?.browserEvidence?.display && browserEvidence?.command !== plan.commands.browserEvidence.display) {
     errors.push('saved browser evidence command must match plan.commands.browserEvidence.display.')
+  }
+}
+
+function validateAllowedKeys(errors, value, allowedKeys, label) {
+  if (!value || typeof value !== 'object') return
+
+  const allowed = new Set(allowedKeys)
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      errors.push(`${label} must not include unexpected field: ${key}.`)
+    }
+  }
+}
+
+function validateTopLevelCheckManifest(errors, checks) {
+  const expectedNames = ['computer full loop', 'saved browser evidence recheck']
+  const actualNames = checks.map((check) => check?.name)
+  if (stableJson(actualNames) !== stableJson(expectedNames)) {
+    errors.push('checks order must be computer full loop then saved browser evidence recheck.')
+  }
+
+  const seen = new Set()
+  for (const name of actualNames) {
+    if (typeof name !== 'string' || name.length === 0) continue
+    if (!expectedNames.includes(name)) {
+      errors.push(`checks contains unexpected entry: ${name}.`)
+    }
+    if (seen.has(name)) {
+      errors.push(`checks entry name must be unique: ${name}.`)
+      continue
+    }
+    seen.add(name)
   }
 }
 
@@ -501,25 +557,86 @@ async function validateValidateMode(errors, value) {
   await validateRawLoopEvidence(errors, summary, browserEvidence.plan, value.generatedAt)
 
   const browserEvidenceChecks = Array.isArray(browserEvidence.checks) ? browserEvidence.checks : []
+  validateUniqueBrowserEvidenceCheckCommands(errors, browserEvidenceChecks)
+  validateAllowedBrowserEvidenceCheckCommands(errors, browserEvidenceChecks, browserEvidence.plan)
+  validateExpectedBrowserEvidenceCheckCount(errors, browserEvidenceChecks, browserEvidence.plan)
+  validateExpectedBrowserEvidenceCheckOrder(errors, browserEvidenceChecks, browserEvidence.plan)
   const commandEntries = new Map(browserEvidenceChecks.map((check) => [check?.command, check]))
   validateBrowserEvidenceCheck(errors, commandEntries, {
+    name: 'desktop raw evidence',
     command: 'npm run desktop:evidence:check',
     path: browserEvidence.plan?.paths?.desktopEvidence,
     screenshotDir: browserEvidence.plan?.paths?.desktopScreenshotDir,
+    allowedKeys: ['name', 'command', 'required', 'path', 'screenshotDir'],
   })
   validateBrowserEvidenceCheck(errors, commandEntries, {
+    name: 'Windows Chrome raw evidence',
     command: 'npm run desktop:evidence:check -- --require-installed-chrome',
     path: browserEvidence.plan?.paths?.windowsChromeEvidence,
     screenshotDir: browserEvidence.plan?.paths?.windowsChromeScreenshotDir,
+    allowedKeys: ['name', 'command', 'required', 'path', 'screenshotDir'],
   })
   validateBrowserEvidenceCheck(errors, commandEntries, {
+    name: 'full-loop summary evidence',
     command: 'npm run summary:check',
     path: browserEvidence.plan?.summaryPath,
+    allowedKeys: ['name', 'command', 'required', 'path'],
   })
   if (commandEntries.has('npm run phone:evidence:check')) {
     errors.push('browserEvidence.checks must not include phone evidence check for computer-only result.')
   }
   validateBrowserEvidenceSelfTestCommands(errors, commandEntries, browserEvidence.plan)
+}
+
+function validateUniqueBrowserEvidenceCheckCommands(errors, checks) {
+  const seen = new Set()
+  for (const check of checks) {
+    if (typeof check?.command !== 'string' || check.command.length === 0) continue
+    if (seen.has(check.command)) {
+      errors.push(`browserEvidence.checks command must be unique: ${check.command}.`)
+      continue
+    }
+    seen.add(check.command)
+  }
+}
+
+function validateAllowedBrowserEvidenceCheckCommands(errors, checks, plan) {
+  const allowedCommands = expectedBrowserEvidenceCheckCommands(plan)
+
+  for (const check of checks) {
+    if (typeof check?.command !== 'string' || check.command.length === 0) continue
+    if (!allowedCommands.has(check.command)) {
+      errors.push(`browserEvidence.checks command is not allowed for computer-only result: ${check.command}.`)
+    }
+  }
+}
+
+function validateExpectedBrowserEvidenceCheckCount(errors, checks, plan) {
+  const expectedCount = expectedBrowserEvidenceCheckCommands(plan).size
+  if (checks.length !== expectedCount) {
+    errors.push(`browserEvidence.checks must contain exactly ${expectedCount} entries for this computer-only result.`)
+  }
+}
+
+function validateExpectedBrowserEvidenceCheckOrder(errors, checks, plan) {
+  const expectedCommands = Array.from(expectedBrowserEvidenceCheckCommands(plan))
+  const actualCommands = checks.map((check) => check?.command)
+  if (stableJson(actualCommands) !== stableJson(expectedCommands)) {
+    errors.push('browserEvidence.checks command order must match the computer-only evidence plan.')
+  }
+}
+
+function expectedBrowserEvidenceCheckCommands(plan) {
+  const commands = new Set([
+    'npm run desktop:evidence:check',
+    'npm run desktop:evidence:check -- --require-installed-chrome',
+    'npm run summary:check',
+  ])
+  for (const [key, command] of browserEvidenceSelfTestCommands(plan)) {
+    if (plan?.selfTest?.[key] === true) commands.add(command)
+  }
+
+  return commands
 }
 
 function validateFailedMode(errors, value) {
@@ -536,6 +653,7 @@ function validateFailedMode(errors, value) {
     return
   }
 
+  validateAllowedKeys(errors, failure, ['stage', 'checkName', 'command', 'exitCode', 'message'], 'failure')
   if (!['computer full loop', 'saved browser evidence recheck', 'result validation'].includes(failure.stage)) {
     errors.push('failure.stage must identify a computer loop stage.')
   }
@@ -936,14 +1054,7 @@ function validateBrowserEvidenceSelfTest(errors, value, requested) {
 }
 
 function validateBrowserEvidenceSelfTestCommands(errors, commandEntries, plan) {
-  const checks = [
-    ['phoneEvidence', 'npm run phone:evidence:selftest'],
-    ['desktopEvidence', 'npm run desktop:evidence:selftest'],
-    ['summary', `npm run summary:selftest -- ${plan?.summaryPath}`],
-    ['report', 'npm run report:selftest'],
-  ]
-
-  for (const [key, command] of checks) {
+  for (const [key, command, name] of browserEvidenceSelfTestCommands(plan)) {
     const expected = plan?.selfTest?.[key] === true
     const check = commandEntries.get(command)
     const present = Boolean(check)
@@ -953,19 +1064,42 @@ function validateBrowserEvidenceSelfTestCommands(errors, commandEntries, plan) {
     if (expected && check?.required !== true) {
       errors.push(`browserEvidence.checks self-test command must be required: ${command}`)
     }
+    if (expected && check?.name !== name) {
+      errors.push(`browserEvidence.checks self-test command name must be ${name}: ${command}`)
+    }
+    if (expected) {
+      validateAllowedKeys(errors, check, ['name', 'command', 'required'], `browserEvidence.checks ${command}`)
+    }
     if (!expected && present) {
       errors.push(`browserEvidence.checks must not include self-test command: ${command}`)
     }
   }
 }
 
-function validateBrowserEvidenceCheck(errors, commandEntries, { command, path: expectedPath, screenshotDir }) {
+function browserEvidenceSelfTestCommands(plan) {
+  return [
+    ['phoneEvidence', 'npm run phone:evidence:selftest', 'phone evidence validator self-test'],
+    ['desktopEvidence', 'npm run desktop:evidence:selftest', 'desktop evidence validator self-test'],
+    ['summary', `npm run summary:selftest -- ${plan?.summaryPath}`, 'summary validator self-test'],
+    ['report', 'npm run report:selftest', 'full-loop reporter self-test'],
+  ]
+}
+
+function validateBrowserEvidenceCheck(
+  errors,
+  commandEntries,
+  { name, command, path: expectedPath, screenshotDir, allowedKeys },
+) {
   const check = commandEntries.get(command)
   if (!check) {
     errors.push(`browserEvidence.checks missing command: ${command}`)
     return
   }
 
+  validateAllowedKeys(errors, check, allowedKeys, `browserEvidence.checks ${command}`)
+  if (check.name !== name) {
+    errors.push(`browserEvidence.checks ${command} name must be ${name}.`)
+  }
   if (check.required !== true) {
     errors.push(`browserEvidence.checks ${command} must be required.`)
   }
