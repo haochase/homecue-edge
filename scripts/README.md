@@ -114,9 +114,11 @@ expected browser roles. It also verifies that
 command arguments still match the planned output paths, timeout options, and
 browser-evidence gates. The saved plan must still point at
 `scripts/check-full-loop.ps1` and `scripts/check-browser-evidence.ps1`, and the
-top-level result must contain exactly the ordered `computer full loop` and
-`saved browser evidence recheck` entries with only their expected fields. Nested
-browser-evidence checks are also treated as a manifest: command order, names,
+saved plan and its nested option, output, gate, command, and expected-evidence
+objects reject unknown fields. The top-level result must contain exactly the
+ordered `computer full loop` and `saved browser evidence recheck` entries with
+only their expected fields. The embedded browser-evidence result, its nested
+plan, and its nested checks are also treated as manifests: command order, names,
 required flags, allowed fields, and optional self-test commands must match the
 computer-only plan. Failed results keep the same narrow failure manifest. Keep
 custom report, summary, and browser evidence result paths inside `-OutputDir`;

@@ -103,6 +103,27 @@ const cases = [
     },
   },
   {
+    name: 'plan-unexpected-field',
+    expectedError: 'plan must not include unexpected field: artifacts.',
+    mutate: (result) => {
+      result.plan.artifacts = []
+    },
+  },
+  {
+    name: 'plan-options-unexpected-field',
+    expectedError: 'plan.options must not include unexpected field: debug.',
+    mutate: (result) => {
+      result.plan.options.debug = true
+    },
+  },
+  {
+    name: 'plan-command-unexpected-field',
+    expectedError: 'plan.commands.fullLoop must not include unexpected field: cwd.',
+    mutate: (result) => {
+      result.plan.commands.fullLoop.cwd = '.'
+    },
+  },
+  {
     name: 'result-path-mismatch',
     expectedError: 'plan.outputs.resultJsonPath must match validated result file.',
     mutate: (result) => {
@@ -352,6 +373,27 @@ const cases = [
     expectedError: 'browserEvidence.plan.requiredEvidence.phone must be false.',
     mutate: (result) => {
       result.browserEvidence.plan.requiredEvidence.phone = true
+    },
+  },
+  {
+    name: 'browser-evidence-root-unexpected-field',
+    expectedError: 'browserEvidence must not include unexpected field: failure.',
+    mutate: (result) => {
+      result.browserEvidence.failure = null
+    },
+  },
+  {
+    name: 'browser-evidence-plan-unexpected-field',
+    expectedError: 'browserEvidence.plan must not include unexpected field: artifacts.',
+    mutate: (result) => {
+      result.browserEvidence.plan.artifacts = []
+    },
+  },
+  {
+    name: 'browser-evidence-plan-paths-unexpected-field',
+    expectedError: 'browserEvidence.plan.paths must not include unexpected field: reportPath.',
+    mutate: (result) => {
+      result.browserEvidence.plan.paths.reportPath = result.plan.outputs.reportPath
     },
   },
   {

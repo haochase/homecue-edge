@@ -78,6 +78,19 @@ function validatePlan(errors, plan, validatedResultFile) {
     return
   }
 
+  validateAllowedKeys(
+    errors,
+    plan,
+    ['runId', 'requestedLoops', 'options', 'outputs', 'expectedEvidence', 'gates', 'commands'],
+    'plan',
+  )
+  validateAllowedKeys(errors, plan.requestedLoops, ['desktop', 'phone', 'windowsChrome'], 'plan.requestedLoops')
+  validateAllowedKeys(
+    errors,
+    plan.options,
+    ['skipPreflight', 'selfTest', 'startupTimeoutSeconds', 'stepTimeoutSeconds', 'browserWrapperSharedStateLockTimeoutSeconds'],
+    'plan.options',
+  )
   assertString(errors, plan.runId, 'plan.runId')
   if (plan.requestedLoops?.desktop !== true) errors.push('plan.requestedLoops.desktop must be true.')
   if (plan.requestedLoops?.phone !== false) errors.push('plan.requestedLoops.phone must be false.')
@@ -108,6 +121,12 @@ function validateOutputs(errors, outputs) {
     return
   }
 
+  validateAllowedKeys(
+    errors,
+    outputs,
+    ['outputDir', 'reportPath', 'summaryPath', 'resultJsonPath', 'browserEvidenceResultJsonPath'],
+    'plan.outputs',
+  )
   for (const label of ['outputDir', 'reportPath', 'summaryPath', 'resultJsonPath', 'browserEvidenceResultJsonPath']) {
     assertString(errors, outputs[label], `plan.outputs.${label}`)
     if (typeof outputs[label] === 'string') validateRepoPath(errors, outputs[label], `plan.outputs.${label}`)
@@ -130,6 +149,7 @@ function validateExpectedEvidence(errors, expectedEvidence) {
     return
   }
 
+  validateAllowedKeys(errors, expectedEvidence, ['phoneEvidence'], 'plan.expectedEvidence')
   if (expectedEvidence.phoneEvidence !== '__phone_not_run__.json') {
     errors.push('plan.expectedEvidence.phoneEvidence must be __phone_not_run__.json for computer-only checks.')
   }
@@ -141,6 +161,21 @@ function validateGates(errors, gates) {
     return
   }
 
+  validateAllowedKeys(
+    errors,
+    gates,
+    [
+      'fullLoopIncludeChrome',
+      'fullLoopIncludePhone',
+      'browserEvidenceRequireDesktop',
+      'browserEvidenceRequireChrome',
+      'browserEvidenceRequirePhone',
+      'browserEvidenceSelfTest',
+      'browserWrapperSharedStateLock',
+      'fullLoopWebReadiness',
+    ],
+    'plan.gates',
+  )
   if (gates.fullLoopIncludeChrome !== true) errors.push('plan.gates.fullLoopIncludeChrome must be true.')
   if (gates.fullLoopIncludePhone !== false) errors.push('plan.gates.fullLoopIncludePhone must be false.')
   if (gates.browserEvidenceRequireDesktop !== true) {
@@ -161,6 +196,7 @@ function validateCommands(errors, commands) {
     return
   }
 
+  validateAllowedKeys(errors, commands, ['fullLoop', 'browserEvidence'], 'plan.commands')
   validateCommand(errors, commands.fullLoop, 'plan.commands.fullLoop', [
     'check-full-loop.ps1',
     '-IncludeChrome',
@@ -359,6 +395,7 @@ function validateCommand(errors, command, label, requiredTokens) {
     return
   }
 
+  validateAllowedKeys(errors, command, ['executable', 'args', 'display'], label)
   if (command.executable !== 'powershell') errors.push(`${label}.executable must be powershell.`)
   if (!Array.isArray(command.args)) errors.push(`${label}.args must be an array.`)
   assertString(errors, command.display, `${label}.display`)
@@ -385,6 +422,7 @@ function validateBrowserWrapperLock(errors, value) {
     return
   }
 
+  validateAllowedKeys(errors, value, ['name', 'timeoutSeconds'], 'plan.gates.browserWrapperSharedStateLock')
   if (value.name !== 'Global\\HCEdgeBrowserLoopGate') {
     errors.push('plan.gates.browserWrapperSharedStateLock.name must be Global\\HCEdgeBrowserLoopGate.')
   }
@@ -399,6 +437,12 @@ function validateFullLoopWebReadiness(errors, value) {
     return
   }
 
+  validateAllowedKeys(
+    errors,
+    value,
+    ['httpProbeBeforePortReuse', 'stalePortBlocksDuplicateStart'],
+    'plan.gates.fullLoopWebReadiness',
+  )
   if (value.httpProbeBeforePortReuse !== true) {
     errors.push('plan.gates.fullLoopWebReadiness.httpProbeBeforePortReuse must be true.')
   }
@@ -491,6 +535,7 @@ async function validateValidateMode(errors, value) {
     errors.push('browserEvidence is missing in validate mode.')
     return
   }
+  validateNestedBrowserEvidenceManifest(errors, browserEvidence)
   assertString(errors, browserEvidence.generatedAt, 'browserEvidence.generatedAt')
   if (!Number.isFinite(timestampMs(browserEvidence.generatedAt))) {
     errors.push('browserEvidence.generatedAt must be a valid timestamp.')
@@ -615,6 +660,52 @@ function validateAllowedBrowserEvidenceCheckCommands(errors, checks, plan) {
       errors.push(`browserEvidence.checks command is not allowed for computer-only result: ${check.command}.`)
     }
   }
+}
+
+function validateNestedBrowserEvidenceManifest(errors, browserEvidence) {
+  validateAllowedKeys(
+    errors,
+    browserEvidence,
+    ['generatedAt', 'success', 'mode', 'plan', 'checks', 'proofSummary'],
+    'browserEvidence',
+  )
+  const plan = browserEvidence?.plan
+  validateAllowedKeys(
+    errors,
+    plan,
+    ['summaryPath', 'resultJsonPath', 'inferredFromSummary', 'requiredEvidence', 'selfTest', 'paths'],
+    'browserEvidence.plan',
+  )
+  validateAllowedKeys(
+    errors,
+    plan?.inferredFromSummary,
+    ['desktop', 'phone', 'windowsChrome'],
+    'browserEvidence.plan.inferredFromSummary',
+  )
+  validateAllowedKeys(
+    errors,
+    plan?.requiredEvidence,
+    ['desktop', 'phone', 'windowsChrome'],
+    'browserEvidence.plan.requiredEvidence',
+  )
+  validateAllowedKeys(
+    errors,
+    plan?.selfTest,
+    ['requested', 'phoneEvidence', 'desktopEvidence', 'summary', 'report'],
+    'browserEvidence.plan.selfTest',
+  )
+  validateAllowedKeys(
+    errors,
+    plan?.paths,
+    [
+      'desktopEvidence',
+      'desktopScreenshotDir',
+      'phoneEvidence',
+      'windowsChromeEvidence',
+      'windowsChromeScreenshotDir',
+    ],
+    'browserEvidence.plan.paths',
+  )
 }
 
 function validateExpectedBrowserEvidenceCheckCount(errors, checks, plan) {

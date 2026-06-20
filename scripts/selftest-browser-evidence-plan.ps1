@@ -235,6 +235,19 @@ function Assert-ObjectKeys {
   Assert-Equal ($ActualKeys -join ",") ($ExpectedSorted -join ",") $Label
 }
 
+function Assert-BrowserEvidencePlanManifest {
+  param(
+    [Parameter(Mandatory = $true)][object]$Plan,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+
+  Assert-ObjectKeys $Plan @("summaryPath", "resultJsonPath", "inferredFromSummary", "requiredEvidence", "selfTest", "paths") "$Label fields"
+  Assert-ObjectKeys $Plan.inferredFromSummary @("desktop", "phone", "windowsChrome") "$Label inferredFromSummary fields"
+  Assert-ObjectKeys $Plan.requiredEvidence @("desktop", "phone", "windowsChrome") "$Label requiredEvidence fields"
+  Assert-ObjectKeys $Plan.selfTest @("requested", "phoneEvidence", "desktopEvidence", "summary", "report") "$Label selfTest fields"
+  Assert-ObjectKeys $Plan.paths @("desktopEvidence", "desktopScreenshotDir", "phoneEvidence", "windowsChromeEvidence", "windowsChromeScreenshotDir") "$Label paths fields"
+}
+
 function Assert-BrowserEvidenceChecksManifest {
   param(
     [Parameter(Mandatory = $true)][object]$Result,
@@ -314,6 +327,7 @@ $ChromeOnlySummary = Write-Summary -Name "chrome-only" -Desktop $false -Phone $f
 $JsonOnlySummary = Write-Summary -Name "json-only" -Desktop $true -Phone $false -Chrome $true -JsonOnlyManifest
 
 $DefaultPlan = Read-Plan @()
+Assert-BrowserEvidencePlanManifest $DefaultPlan "default plan"
 Assert-PathEndsWith $DefaultPlan.summaryPath "assets/tmp/browser-evidence-default-summary/full-loop-report.json" "default summary path should use an isolated temp snapshot"
 Assert-PortableEvidencePath $DefaultPlan.summaryPath "default summary path"
 $DefaultSummary = Get-Content -Raw -LiteralPath (Join-Path $Root $DefaultPlan.summaryPath) | ConvertFrom-Json
@@ -323,6 +337,7 @@ if ($DefaultDevEnvEntry.Count -ne 0 -and -not ([string]$DefaultDevEnvEntry[0].fi
 }
 
 $CompletePlan = Read-Plan @("-SummaryPath", $CompleteSummary, "-SelfTest")
+Assert-BrowserEvidencePlanManifest $CompletePlan "complete plan"
 Assert-Equal $CompletePlan.requiredEvidence.desktop $true "complete desktop required"
 Assert-Equal $CompletePlan.requiredEvidence.phone $true "complete phone required"
 Assert-Equal $CompletePlan.requiredEvidence.windowsChrome $true "complete Chrome required"
@@ -348,6 +363,8 @@ foreach ($EvidencePath in @(
 
 $ResultJsonPath = Join-Path $OutputDir "complete-result.json"
 $CompleteWithResult = Read-PlanWithResultJson -Arguments @("-SummaryPath", $CompleteSummary, "-SelfTest") -ResultJsonPath $ResultJsonPath
+Assert-BrowserEvidencePlanManifest $CompleteWithResult.plan "complete result-json dry-run plan"
+Assert-BrowserEvidencePlanManifest $CompleteWithResult.result.plan "complete result-json embedded plan"
 Assert-Equal $CompleteWithResult.plan.requiredEvidence.desktop $true "result-json dry-run desktop required"
 Assert-Equal $CompleteWithResult.result.mode "dry-run" "result-json mode"
 Assert-Equal $CompleteWithResult.result.success $true "result-json success"
@@ -358,6 +375,7 @@ Assert-PortableEvidencePath $CompleteWithResult.result.plan.resultJsonPath "resu
 Assert-BrowserEvidenceChecksManifest $CompleteWithResult.result $CompleteWithResult.plan "complete result-json"
 
 $DesktopOnlyPlan = Read-Plan @("-SummaryPath", $DesktopOnlySummary)
+Assert-BrowserEvidencePlanManifest $DesktopOnlyPlan "desktop-only plan"
 Assert-Equal $DesktopOnlyPlan.requiredEvidence.desktop $true "desktop-only desktop required"
 Assert-Equal $DesktopOnlyPlan.requiredEvidence.phone $false "desktop-only phone required"
 Assert-Equal $DesktopOnlyPlan.requiredEvidence.windowsChrome $false "desktop-only Chrome required"
@@ -366,6 +384,7 @@ Assert-Equal $DesktopOnlyPlan.paths.windowsChromeEvidence "__chrome_not_run__.js
 Assert-Equal $DesktopOnlyPlan.paths.windowsChromeScreenshotDir "__chrome_screens_not_run__" "desktop-only Chrome screenshot dir should use sentinel"
 
 $ChromeOnlyPlan = Read-Plan @("-SummaryPath", $ChromeOnlySummary, "-SelfTest")
+Assert-BrowserEvidencePlanManifest $ChromeOnlyPlan "chrome-only plan"
 Assert-Equal $ChromeOnlyPlan.requiredEvidence.desktop $false "chrome-only desktop required"
 Assert-Equal $ChromeOnlyPlan.requiredEvidence.phone $false "chrome-only phone required"
 Assert-Equal $ChromeOnlyPlan.requiredEvidence.windowsChrome $true "chrome-only Chrome required"
@@ -377,6 +396,7 @@ Assert-Equal $ChromeOnlyPlan.paths.desktopScreenshotDir "__desktop_screens_not_r
 Assert-Equal $ChromeOnlyPlan.paths.phoneEvidence "__phone_not_run__.json" "chrome-only phone path should use sentinel"
 
 $JsonOnlyPlan = Read-Plan @("-SummaryPath", $JsonOnlySummary)
+Assert-BrowserEvidencePlanManifest $JsonOnlyPlan "json-only plan"
 Assert-Equal $JsonOnlyPlan.requiredEvidence.desktop $true "json-only desktop required"
 Assert-Equal $JsonOnlyPlan.requiredEvidence.windowsChrome $true "json-only Chrome required"
 Assert-Equal $JsonOnlyPlan.paths.phoneEvidence "__phone_not_run__.json" "json-only phone path should use sentinel"

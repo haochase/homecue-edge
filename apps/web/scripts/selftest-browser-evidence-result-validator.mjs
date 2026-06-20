@@ -65,6 +65,27 @@ const cases = [
     },
   },
   {
+    name: 'plan-unexpected-field',
+    expectedError: 'plan must not include unexpected field: artifacts.',
+    mutate: (result) => {
+      result.plan.artifacts = []
+    },
+  },
+  {
+    name: 'plan-paths-unexpected-field',
+    expectedError: 'plan.paths must not include unexpected field: reportPath.',
+    mutate: (result) => {
+      result.plan.paths.reportPath = result.plan.summaryPath
+    },
+  },
+  {
+    name: 'plan-selftest-unexpected-field',
+    expectedError: 'plan.selfTest must not include unexpected field: traces.',
+    mutate: (result) => {
+      result.plan.selfTest.traces = false
+    },
+  },
+  {
     name: 'result-path-mismatch',
     expectedError: 'plan.resultJsonPath must match validated result file.',
     mutate: (result) => {

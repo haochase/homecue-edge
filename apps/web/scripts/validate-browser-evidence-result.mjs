@@ -59,6 +59,12 @@ function validatePlan(errors, plan, validatedResultFile) {
     return
   }
 
+  validateAllowedKeys(
+    errors,
+    plan,
+    ['summaryPath', 'resultJsonPath', 'inferredFromSummary', 'requiredEvidence', 'selfTest', 'paths'],
+    'plan',
+  )
   assertString(errors, plan.summaryPath, 'plan.summaryPath')
   assertString(errors, plan.resultJsonPath, 'plan.resultJsonPath')
   validateRepoPath(errors, plan.summaryPath, 'plan.summaryPath')
@@ -82,6 +88,7 @@ function validateBooleanGroup(errors, value, label) {
     return
   }
 
+  validateAllowedKeys(errors, value, ['desktop', 'phone', 'windowsChrome'], label)
   for (const key of ['desktop', 'phone', 'windowsChrome']) {
     if (typeof value[key] !== 'boolean') errors.push(`${label}.${key} must be boolean.`)
   }
@@ -93,6 +100,7 @@ function validateSelfTestPlan(errors, value) {
     return
   }
 
+  validateAllowedKeys(errors, value, ['requested', 'phoneEvidence', 'desktopEvidence', 'summary', 'report'], 'plan.selfTest')
   for (const key of ['requested', 'phoneEvidence', 'desktopEvidence', 'summary', 'report']) {
     if (typeof value[key] !== 'boolean') errors.push(`plan.selfTest.${key} must be boolean.`)
   }
@@ -138,6 +146,18 @@ function validatePaths(errors, paths) {
     return
   }
 
+  validateAllowedKeys(
+    errors,
+    paths,
+    [
+      'desktopEvidence',
+      'desktopScreenshotDir',
+      'phoneEvidence',
+      'windowsChromeEvidence',
+      'windowsChromeScreenshotDir',
+    ],
+    'plan.paths',
+  )
   for (const key of [
     'desktopEvidence',
     'desktopScreenshotDir',

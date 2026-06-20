@@ -188,6 +188,25 @@ function Assert-ObjectKeys {
   Assert-Equal ($ActualKeys -join ",") ($ExpectedSorted -join ",") $Message
 }
 
+function Assert-ComputerLoopPlanManifest {
+  param(
+    [object]$Plan,
+    [string]$Message
+  )
+
+  Assert-ObjectKeys $Plan @("runId", "requestedLoops", "options", "outputs", "expectedEvidence", "gates", "commands") "$Message plan fields"
+  Assert-ObjectKeys $Plan.requestedLoops @("desktop", "phone", "windowsChrome") "$Message requestedLoops fields"
+  Assert-ObjectKeys $Plan.options @("skipPreflight", "selfTest", "startupTimeoutSeconds", "stepTimeoutSeconds", "browserWrapperSharedStateLockTimeoutSeconds") "$Message options fields"
+  Assert-ObjectKeys $Plan.outputs @("outputDir", "reportPath", "summaryPath", "resultJsonPath", "browserEvidenceResultJsonPath") "$Message outputs fields"
+  Assert-ObjectKeys $Plan.expectedEvidence @("phoneEvidence") "$Message expectedEvidence fields"
+  Assert-ObjectKeys $Plan.gates @("fullLoopIncludeChrome", "fullLoopIncludePhone", "browserEvidenceRequireDesktop", "browserEvidenceRequireChrome", "browserEvidenceRequirePhone", "browserEvidenceSelfTest", "browserWrapperSharedStateLock", "fullLoopWebReadiness") "$Message gates fields"
+  Assert-ObjectKeys $Plan.gates.browserWrapperSharedStateLock @("name", "timeoutSeconds") "$Message browser wrapper lock fields"
+  Assert-ObjectKeys $Plan.gates.fullLoopWebReadiness @("httpProbeBeforePortReuse", "stalePortBlocksDuplicateStart") "$Message web readiness gate fields"
+  Assert-ObjectKeys $Plan.commands @("fullLoop", "browserEvidence") "$Message commands fields"
+  Assert-ObjectKeys $Plan.commands.fullLoop @("executable", "args", "display") "$Message full-loop command fields"
+  Assert-ObjectKeys $Plan.commands.browserEvidence @("executable", "args", "display") "$Message browser-evidence command fields"
+}
+
 function Assert-ComputerResultChecksManifest {
   param(
     [object]$Result,
@@ -236,14 +255,17 @@ function Get-ArgumentValue {
 
 try {
   $Implicit = Invoke-Plan @()
+  Assert-ComputerLoopPlanManifest $Implicit "Implicit"
   Assert-Equal $Implicit.outputs.resultJsonPath "assets/tmp/computer-loop-check.json" "Implicit result path should use the stable default."
   Assert-True ($Implicit.outputs.outputDir.StartsWith("assets/tmp/computer-loop/")) "Implicit output dir should stay under computer-loop temp output."
   Assert-Equal (Get-FileHashOrMissing $ImplicitResultPath) $ImplicitResultBeforeHash "Default dry-run should not overwrite the stable result JSON."
 
   $DefaultResultPath = Join-Path $OutputDir "default-result.json"
   $Default = Invoke-Plan @("-ResultJsonPath", $DefaultResultPath)
+  Assert-ComputerLoopPlanManifest $Default "Default"
   Assert-ComputerResultValid $DefaultResultPath
   $DefaultResult = Read-Result $DefaultResultPath
+  Assert-ComputerLoopPlanManifest $DefaultResult.plan "Default dry-run result"
 
   Assert-True $Default.requestedLoops.desktop "Default computer loop should include desktop."
   Assert-True $Default.requestedLoops.windowsChrome "Default computer loop should include Windows Chrome."
@@ -308,8 +330,10 @@ try {
     "-StepTimeoutSeconds",
     "42"
   )
+  Assert-ComputerLoopPlanManifest $Custom "Custom"
   Assert-ComputerResultValid $CustomResultPath
   $CustomResult = Read-Result $CustomResultPath
+  Assert-ComputerLoopPlanManifest $CustomResult.plan "Custom dry-run result"
 
   Assert-Equal $Custom.outputs.outputDir "assets/tmp/computer-loop-plan-selftest/custom-out" "Custom output dir should be honored."
   Assert-Equal $Custom.outputs.reportPath "assets/tmp/computer-loop-plan-selftest/custom-out/custom-report.md" "Custom report path should be honored."
@@ -338,6 +362,7 @@ try {
   Assert-True (Test-Path -LiteralPath $FailureResultPath -PathType Leaf) "Failed computer loop should still write result JSON."
   Assert-ComputerResultValid $FailureResultPath
   $FailureResult = Read-Result $FailureResultPath
+  Assert-ComputerLoopPlanManifest $FailureResult.plan "Failed result"
   Assert-Equal $FailureResult.mode "failed" "Failed result mode"
   Assert-Equal $FailureResult.success $false "Failed result success"
   Assert-Equal $FailureResult.failure.stage "computer full loop" "Failed result stage"
@@ -359,6 +384,7 @@ try {
   Assert-True (Test-Path -LiteralPath $PostProcessFailureResultPath -PathType Leaf) "Post-process failure should still write result JSON."
   Assert-ComputerResultValid $PostProcessFailureResultPath
   $PostProcessFailureResult = Read-Result $PostProcessFailureResultPath
+  Assert-ComputerLoopPlanManifest $PostProcessFailureResult.plan "Post-process failed result"
   Assert-Equal $PostProcessFailureResult.mode "failed" "Post-process failed result mode"
   Assert-Equal $PostProcessFailureResult.success $false "Post-process failed result success"
   Assert-Equal $PostProcessFailureResult.failure.stage "result validation" "Post-process failed result stage"
