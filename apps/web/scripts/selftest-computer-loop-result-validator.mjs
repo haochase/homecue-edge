@@ -40,11 +40,15 @@ assertOutputIncludes(
 )
 console.log('PASS positive computer loop result')
 
-const fresh = structuredClone(positive)
+const fresh = createResult({
+  maxAgeMinutes: 60,
+  browserEvidencePath: 'assets/tmp/computer-loop-result-validator-selftest/fresh-browser-evidence-check.json',
+})
 fresh.generatedAt = new Date().toISOString()
-fresh.plan.options.maxAgeMinutes = 60
+fresh.browserEvidence.generatedAt = fresh.generatedAt
 const freshFile = path.join(outputDir, 'fresh.json')
 setResultJsonPath(fresh, freshFile)
+await writeJson(resolveRepoPath(fresh.plan.outputs.browserEvidenceResultJsonPath), fresh.browserEvidence)
 await writeJson(freshFile, fresh)
 const freshResult = await runValidator(freshFile, ['--max-age-minutes', '60'])
 if (freshResult.code !== 0) {
@@ -59,6 +63,25 @@ if (staleResult.code === 0 || !staleResult.output.includes('generatedAt is older
   throw new Error('Expected stale computer loop result to fail freshness validation.')
 }
 console.log('PASS stale computer loop result')
+
+const staleBrowserEvidence = createResult({
+  maxAgeMinutes: 1,
+  browserEvidencePath: 'assets/tmp/computer-loop-result-validator-selftest/stale-browser-evidence-check.json',
+})
+staleBrowserEvidence.generatedAt = new Date().toISOString()
+const staleBrowserEvidenceFile = path.join(outputDir, 'stale-browser-evidence.json')
+setResultJsonPath(staleBrowserEvidence, staleBrowserEvidenceFile)
+await writeJson(resolveRepoPath(staleBrowserEvidence.plan.outputs.browserEvidenceResultJsonPath), staleBrowserEvidence.browserEvidence)
+await writeJson(staleBrowserEvidenceFile, staleBrowserEvidence)
+const staleBrowserEvidenceResult = await runValidator(staleBrowserEvidenceFile, ['--max-age-minutes', '1'])
+if (
+  staleBrowserEvidenceResult.code === 0 ||
+  !staleBrowserEvidenceResult.output.includes('browserEvidence.generatedAt is older than --max-age-minutes=1.')
+) {
+  console.error(staleBrowserEvidenceResult.output)
+  throw new Error('Expected stale nested browser evidence to fail freshness validation.')
+}
+console.log('PASS stale nested browser evidence result')
 
 const future = structuredClone(positive)
 future.generatedAt = new Date(Date.now() + 60_000).toISOString()
@@ -220,6 +243,36 @@ const cases = [
     expectedError: 'plan.options.maxAgeMinutes must be null or a positive number.',
     mutate: (result) => {
       result.plan.options.maxAgeMinutes = 0
+    },
+  },
+  {
+    name: 'browser-evidence-max-age-arg-missing',
+    expectedError: 'plan.commands.browserEvidence -MaxAgeMinutes must appear exactly once when plan.options.maxAgeMinutes is set.',
+    mutate: (result) => {
+      result.plan.options.maxAgeMinutes = 30
+      result.browserEvidence.plan.options.maxAgeMinutes = 30
+    },
+  },
+  {
+    name: 'browser-evidence-max-age-arg-mismatch',
+    expectedError: 'plan.commands.browserEvidence -MaxAgeMinutes must match plan.options.maxAgeMinutes.',
+    mutate: (result) => {
+      result.plan.options.maxAgeMinutes = 30
+      result.browserEvidence.plan.options.maxAgeMinutes = 30
+      result.plan.commands.browserEvidence.args.push('-MaxAgeMinutes', '60')
+      result.plan.commands.browserEvidence.display = displayCommand('powershell', result.plan.commands.browserEvidence.args)
+      result.checks.find((check) => check.name === 'saved browser evidence recheck').command =
+        result.plan.commands.browserEvidence.display
+    },
+  },
+  {
+    name: 'browser-evidence-max-age-arg-unexpected',
+    expectedError: 'plan.commands.browserEvidence -MaxAgeMinutes must be omitted when plan.options.maxAgeMinutes is null.',
+    mutate: (result) => {
+      result.plan.commands.browserEvidence.args.push('-MaxAgeMinutes', '30')
+      result.plan.commands.browserEvidence.display = displayCommand('powershell', result.plan.commands.browserEvidence.args)
+      result.checks.find((check) => check.name === 'saved browser evidence recheck').command =
+        result.plan.commands.browserEvidence.display
     },
   },
   {
@@ -535,6 +588,28 @@ const cases = [
     expectedError: 'browserEvidence.plan.paths must not include unexpected field: reportPath.',
     mutate: (result) => {
       result.browserEvidence.plan.paths.reportPath = result.plan.outputs.reportPath
+    },
+  },
+  {
+    name: 'browser-evidence-plan-options-unexpected-field',
+    expectedError: 'browserEvidence.plan.options must not include unexpected field: debug.',
+    mutate: (result) => {
+      result.browserEvidence.plan.options.debug = true
+    },
+  },
+  {
+    name: 'browser-evidence-plan-options-invalid',
+    expectedError: 'browserEvidence.plan.options.maxAgeMinutes must be null or a positive number.',
+    mutate: (result) => {
+      result.browserEvidence.plan.options.maxAgeMinutes = 0
+    },
+  },
+  {
+    name: 'browser-evidence-plan-options-max-age-mismatch',
+    expectedError: 'browserEvidence.plan.options.maxAgeMinutes must match plan.options.maxAgeMinutes.',
+    mutate: (result) => {
+      result.plan.options.maxAgeMinutes = 30
+      result.browserEvidence.plan.options.maxAgeMinutes = 60
     },
   },
   {
@@ -1722,11 +1797,18 @@ function screenshotFiles() {
   ]
 }
 
-function createResult({ mode = 'validate', browserEvidence = undefined, selfTest = false } = {}) {
+function createResult({
+  mode = 'validate',
+  browserEvidence = undefined,
+  selfTest = false,
+  maxAgeMinutes = null,
+  browserEvidencePath = undefined,
+} = {}) {
   const prefix = selfTest ? 'selftest-' : ''
   const summaryPath = `assets/tmp/computer-loop-result-validator-selftest/${prefix}computer-loop-report.json`
   const reportPath = `assets/tmp/computer-loop-result-validator-selftest/${prefix}computer-loop-report.md`
-  const browserEvidencePath = `assets/tmp/computer-loop-result-validator-selftest/${prefix}browser-evidence-check.json`
+  const resolvedBrowserEvidencePath =
+    browserEvidencePath ?? `assets/tmp/computer-loop-result-validator-selftest/${prefix}browser-evidence-check.json`
   const fullLoopArgs = [
     '-NoProfile',
     '-ExecutionPolicy',
@@ -1758,8 +1840,9 @@ function createResult({ mode = 'validate', browserEvidence = undefined, selfTest
     '-RequireDesktop',
     '-RequireChrome',
     '-ResultJsonPath',
-    browserEvidencePath,
+    resolvedBrowserEvidencePath,
     ...(selfTest ? ['-SelfTest'] : []),
+    ...(maxAgeMinutes === null ? [] : ['-MaxAgeMinutes', String(maxAgeMinutes)]),
   ]
 
   const plan = {
@@ -1775,14 +1858,14 @@ function createResult({ mode = 'validate', browserEvidence = undefined, selfTest
       startupTimeoutSeconds: 60,
       stepTimeoutSeconds: 180,
       browserWrapperSharedStateLockTimeoutSeconds: 1200,
-      maxAgeMinutes: null,
+      maxAgeMinutes,
     },
     outputs: {
       outputDir: 'assets/tmp/computer-loop-result-validator-selftest',
       reportPath,
       summaryPath,
       resultJsonPath: 'assets/tmp/computer-loop-result-validator-selftest/computer-loop-check.json',
-      browserEvidenceResultJsonPath: browserEvidencePath,
+      browserEvidenceResultJsonPath: resolvedBrowserEvidencePath,
     },
     expectedEvidence: {
       phoneEvidence: '__phone_not_run__.json',
@@ -1836,7 +1919,7 @@ function createResult({ mode = 'validate', browserEvidence = undefined, selfTest
         name: 'saved browser evidence recheck',
         command: plan.commands.browserEvidence.display,
         required: true,
-        resultJsonPath: browserEvidencePath,
+        resultJsonPath: resolvedBrowserEvidencePath,
       },
     ],
     proofSummary: mode === 'dry-run' ? null : proofSummary(plan),
@@ -1849,7 +1932,7 @@ function createResult({ mode = 'validate', browserEvidence = undefined, selfTest
             sourceState: currentSourceState(),
             plan: {
               summaryPath,
-              resultJsonPath: browserEvidencePath,
+              resultJsonPath: resolvedBrowserEvidencePath,
               inferredFromSummary: {
                 desktop: true,
                 phone: false,
@@ -1859,6 +1942,9 @@ function createResult({ mode = 'validate', browserEvidence = undefined, selfTest
                 desktop: true,
                 phone: false,
                 windowsChrome: true,
+              },
+              options: {
+                maxAgeMinutes,
               },
               selfTest: {
                 requested: selfTest,

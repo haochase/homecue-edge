@@ -87,6 +87,15 @@ validateResultFreshness(staleErrors, new Date(Date.now() - 120_000).toISOString(
 assertIncludes(staleErrors, 'generatedAt is older than --max-age-minutes=1.', 'stale timestamp')
 console.log('PASS freshness case: stale timestamp')
 
+const labeledStaleErrors = []
+validateResultFreshness(labeledStaleErrors, new Date(Date.now() - 120_000).toISOString(), 1, 'browserEvidence.generatedAt')
+assertIncludes(
+  labeledStaleErrors,
+  'browserEvidence.generatedAt is older than --max-age-minutes=1.',
+  'labeled stale timestamp',
+)
+console.log('PASS freshness case: labeled stale timestamp')
+
 const futureErrors = []
 validateResultFreshness(futureErrors, new Date(Date.now() + 60_000).toISOString(), 1)
 assertIncludes(

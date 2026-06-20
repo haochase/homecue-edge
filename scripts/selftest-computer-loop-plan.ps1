@@ -3,6 +3,7 @@ $ErrorActionPreference = "Stop"
 $Root = Resolve-Path "$PSScriptRoot\.."
 $OutputDir = Join-Path $Root "assets\tmp\computer-loop-plan-selftest"
 $ImplicitResultPath = Join-Path $Root "assets\tmp\computer-loop-check.json"
+$LatestResultPath = Join-Path $Root "assets\tmp\computer-loop-check-latest.json"
 
 function Get-FileHashOrMissing {
   param([string]$Path)
@@ -21,6 +22,12 @@ $ImplicitResultBackup = if ($HadImplicitResult) {
   $null
 }
 $ImplicitResultBeforeHash = Get-FileHashOrMissing $ImplicitResultPath
+$HadLatestResult = Test-Path -LiteralPath $LatestResultPath -PathType Leaf
+$LatestResultBackup = if ($HadLatestResult) {
+  [System.IO.File]::ReadAllBytes($LatestResultPath)
+} else {
+  $null
+}
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
 function Invoke-Plan {
@@ -325,6 +332,32 @@ try {
   )
   Assert-Contains $LatestResultPathFailure "always writes assets/tmp/computer-loop-check-latest.json" "Latest wrapper result-path guard output"
 
+  $LatestForwardFailure = Invoke-ComputerLoopExpectFailure `
+    -ScriptName "check-computer-loop-latest.ps1" `
+    -Environment @{ HOMECUE_COMPUTER_LOOP_SELFTEST_SKIP_CHILDREN = "1" } `
+    -Arguments @(
+      "-OutputDir",
+      "assets/tmp/computer-loop-plan-selftest/latest-out",
+      "-BrowserEvidenceResultJsonPath",
+      "assets/tmp/computer-loop-plan-selftest/latest-out/missing-browser-evidence.json",
+      "-SelfTest",
+      "-MaxAgeMinutes",
+      "30"
+    )
+  Assert-Contains $LatestForwardFailure "post-process computer loop evidence" "Latest wrapper forwarded-run failure output"
+  Assert-True (Test-Path -LiteralPath $LatestResultPath -PathType Leaf) "Latest wrapper should write the stable latest result JSON."
+  Assert-ComputerResultValid $LatestResultPath
+  $LatestForwardResult = Read-Result $LatestResultPath
+  Assert-ComputerLoopPlanManifest $LatestForwardResult.plan "Latest forwarded failed result"
+  Assert-Equal $LatestForwardResult.plan.outputs.resultJsonPath "assets/tmp/computer-loop-check-latest.json" "Latest wrapper should force the stable latest result path."
+  Assert-Equal $LatestForwardResult.plan.outputs.outputDir "assets/tmp/computer-loop-plan-selftest/latest-out" "Latest wrapper should forward OutputDir."
+  Assert-Equal $LatestForwardResult.plan.outputs.browserEvidenceResultJsonPath "assets/tmp/computer-loop-plan-selftest/latest-out/missing-browser-evidence.json" "Latest wrapper should forward BrowserEvidenceResultJsonPath."
+  Assert-True $LatestForwardResult.plan.options.selfTest "Latest wrapper should forward SelfTest into the delegated plan."
+  Assert-Equal $LatestForwardResult.plan.options.maxAgeMinutes 30 "Latest wrapper should forward MaxAgeMinutes into the delegated plan."
+  Assert-Contains $LatestForwardResult.plan.commands.browserEvidence.display "-SelfTest" "Latest wrapper browser evidence command should include SelfTest."
+  Assert-Contains $LatestForwardResult.plan.commands.browserEvidence.display "-MaxAgeMinutes" "Latest wrapper browser evidence command should include MaxAgeMinutes."
+  Assert-Equal (Get-ArgumentValue $LatestForwardResult.plan.commands.browserEvidence.args "-MaxAgeMinutes") "30" "Latest wrapper browser evidence MaxAgeMinutes command arg."
+
   $Implicit = Invoke-Plan @()
   Assert-ComputerLoopPlanManifest $Implicit "Implicit"
   Assert-Equal $Implicit.outputs.resultJsonPath "assets/tmp/computer-loop-check.json" "Implicit result path should use the stable default."
@@ -373,6 +406,7 @@ try {
   Assert-Equal $DefaultBrowserEvidenceScriptArg "scripts/check-browser-evidence.ps1" "Browser evidence script command path"
   Assert-Equal $DefaultBrowserEvidenceSummaryArg $Default.outputs.summaryPath "Browser evidence summary command path"
   Assert-Equal $DefaultBrowserEvidenceResultArg $Default.outputs.browserEvidenceResultJsonPath "Browser evidence result command path"
+  Assert-NotContains $Default.commands.browserEvidence.display "-MaxAgeMinutes" "Default browser evidence display command should not include MaxAgeMinutes"
   Assert-NotContains $DefaultBrowserEvidenceScriptArg ([string]$Root) "Browser evidence script command path should be portable"
   Assert-NotContains $DefaultBrowserEvidenceSummaryArg ([string]$Root) "Browser evidence summary command path should be portable"
   Assert-NotContains $DefaultBrowserEvidenceResultArg ([string]$Root) "Browser evidence result command path should be portable"
@@ -419,6 +453,8 @@ try {
   Assert-Equal $Custom.options.stepTimeoutSeconds 42 "Custom plan should preserve StepTimeoutSeconds."
   Assert-Contains $Custom.commands.fullLoop.display "-SkipPreflight" "Custom full-loop display command"
   Assert-Contains $Custom.commands.browserEvidence.display "-SelfTest" "Custom browser evidence display command"
+  Assert-Contains $Custom.commands.browserEvidence.display "-MaxAgeMinutes" "Custom browser evidence display command"
+  Assert-Equal (Get-ArgumentValue $Custom.commands.browserEvidence.args "-MaxAgeMinutes") "30" "Custom browser evidence MaxAgeMinutes command arg"
   Assert-True (-not $CustomResult.plan.gates.browserEvidenceRequirePhone) "Custom dry-run result should preserve the skipped phone evidence gate."
   Assert-Equal $CustomResult.plan.expectedEvidence.phoneEvidence "__phone_not_run__.json" "Custom dry-run result should preserve the skipped phone evidence sentinel."
   Assert-Equal $CustomResult.proofSummary $null "Custom dry-run result should not include proof summary evidence."
@@ -474,6 +510,12 @@ finally {
   }
   else {
     Remove-Item -LiteralPath $ImplicitResultPath -Force -ErrorAction SilentlyContinue
+  }
+  if ($HadLatestResult) {
+    [System.IO.File]::WriteAllBytes($LatestResultPath, $LatestResultBackup)
+  }
+  else {
+    Remove-Item -LiteralPath $LatestResultPath -Force -ErrorAction SilentlyContinue
   }
 }
 

@@ -164,6 +164,40 @@ function Read-FailingPlan {
   }
 }
 
+function Read-FailingCheck {
+  param(
+    [string[]]$Arguments,
+    [string[]]$ExpectedSubstrings
+  )
+
+  $Process = New-Object System.Diagnostics.Process
+  $ProcessArguments = @(
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "$PSScriptRoot\check-browser-evidence.ps1"
+  ) + $Arguments
+  $Process.StartInfo.FileName = "powershell"
+  $Process.StartInfo.Arguments = Join-ProcessArguments $ProcessArguments
+  $Process.StartInfo.UseShellExecute = $false
+  $Process.StartInfo.RedirectStandardOutput = $true
+  $Process.StartInfo.RedirectStandardError = $true
+  [void]$Process.Start()
+  $Output = $Process.StandardOutput.ReadToEnd() + $Process.StandardError.ReadToEnd()
+  $Process.WaitForExit()
+
+  if ($Process.ExitCode -eq 0) {
+    throw "Expected check-browser-evidence.ps1 to fail: $($Arguments -join ' ')"
+  }
+
+  foreach ($ExpectedSubstring in $ExpectedSubstrings) {
+    if (-not $Output.Contains($ExpectedSubstring)) {
+      throw "Expected failure to contain '$ExpectedSubstring', got: $Output"
+    }
+  }
+}
+
 function Join-ProcessArguments {
   param([string[]]$Arguments)
 
@@ -192,6 +226,17 @@ function Assert-Equal {
 
   if ($Actual -ne $Expected) {
     throw "$Label mismatch: expected $Expected, got $Actual"
+  }
+}
+
+function Assert-Null {
+  param(
+    $Actual,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+
+  if ($null -ne $Actual) {
+    throw "$Label mismatch: expected null, got $Actual"
   }
 }
 
@@ -241,9 +286,10 @@ function Assert-BrowserEvidencePlanManifest {
     [Parameter(Mandatory = $true)][string]$Label
   )
 
-  Assert-ObjectKeys $Plan @("summaryPath", "resultJsonPath", "inferredFromSummary", "requiredEvidence", "selfTest", "paths") "$Label fields"
+  Assert-ObjectKeys $Plan @("summaryPath", "resultJsonPath", "inferredFromSummary", "requiredEvidence", "options", "selfTest", "paths") "$Label fields"
   Assert-ObjectKeys $Plan.inferredFromSummary @("desktop", "phone", "windowsChrome") "$Label inferredFromSummary fields"
   Assert-ObjectKeys $Plan.requiredEvidence @("desktop", "phone", "windowsChrome") "$Label requiredEvidence fields"
+  Assert-ObjectKeys $Plan.options @("maxAgeMinutes") "$Label options fields"
   Assert-ObjectKeys $Plan.selfTest @("requested", "phoneEvidence", "desktopEvidence", "summary", "report") "$Label selfTest fields"
   Assert-ObjectKeys $Plan.paths @("desktopEvidence", "desktopScreenshotDir", "phoneEvidence", "windowsChromeEvidence", "windowsChromeScreenshotDir") "$Label paths fields"
 }
@@ -330,6 +376,7 @@ $DefaultPlan = Read-Plan @()
 Assert-BrowserEvidencePlanManifest $DefaultPlan "default plan"
 Assert-PathEndsWith $DefaultPlan.summaryPath "assets/tmp/browser-evidence-default-summary/full-loop-report.json" "default summary path should use an isolated temp snapshot"
 Assert-PortableEvidencePath $DefaultPlan.summaryPath "default summary path"
+Assert-Null $DefaultPlan.options.maxAgeMinutes "default plan should not require fresh saved-result validation"
 $DefaultSummary = Get-Content -Raw -LiteralPath (Join-Path $Root $DefaultPlan.summaryPath) | ConvertFrom-Json
 $DefaultDevEnvEntry = @($DefaultSummary.evidence.files | Where-Object { $_.present -eq $true -and $_.label -eq "Dev Environment JSON" } | Select-Object -First 1)
 if ($DefaultDevEnvEntry.Count -ne 0 -and -not ([string]$DefaultDevEnvEntry[0].file).EndsWith("assets/tmp/browser-evidence-default-summary/dev-env-check.json")) {
@@ -362,17 +409,24 @@ foreach ($EvidencePath in @(
 }
 
 $ResultJsonPath = Join-Path $OutputDir "complete-result.json"
-$CompleteWithResult = Read-PlanWithResultJson -Arguments @("-SummaryPath", $CompleteSummary, "-SelfTest") -ResultJsonPath $ResultJsonPath
+$CompleteWithResult = Read-PlanWithResultJson -Arguments @("-SummaryPath", $CompleteSummary, "-SelfTest", "-MaxAgeMinutes", "30") -ResultJsonPath $ResultJsonPath
 Assert-BrowserEvidencePlanManifest $CompleteWithResult.plan "complete result-json dry-run plan"
 Assert-BrowserEvidencePlanManifest $CompleteWithResult.result.plan "complete result-json embedded plan"
 Assert-Equal $CompleteWithResult.plan.requiredEvidence.desktop $true "result-json dry-run desktop required"
+Assert-Equal $CompleteWithResult.plan.options.maxAgeMinutes 30 "result-json dry-run max age"
 Assert-Equal $CompleteWithResult.result.mode "dry-run" "result-json mode"
 Assert-Equal $CompleteWithResult.result.success $true "result-json success"
 Assert-Equal $CompleteWithResult.result.plan.requiredEvidence.phone $true "result-json phone required"
+Assert-Equal $CompleteWithResult.result.plan.options.maxAgeMinutes 30 "result-json embedded max age"
 Assert-Equal $CompleteWithResult.result.plan.selfTest.report $true "result-json report self-test"
 Assert-PortableEvidencePath $CompleteWithResult.result.plan.summaryPath "result-json plan summary path"
 Assert-PortableEvidencePath $CompleteWithResult.result.plan.resultJsonPath "result-json plan result path"
 Assert-BrowserEvidenceChecksManifest $CompleteWithResult.result $CompleteWithResult.plan "complete result-json"
+
+$StaleResultJsonPath = Join-Path $OutputDir "stale-result.json"
+Read-FailingCheck `
+  @("-RequireDesktop", "-RequireChrome", "-ResultJsonPath", $StaleResultJsonPath, "-MaxAgeMinutes", "0.001") `
+  @("browser:evidence-result:check", "--max-age-minutes 0.001", "generatedAt is older than --max-age-minutes")
 
 $DesktopOnlyPlan = Read-Plan @("-SummaryPath", $DesktopOnlySummary)
 Assert-BrowserEvidencePlanManifest $DesktopOnlyPlan "desktop-only plan"
@@ -406,5 +460,6 @@ Assert-PathEndsWith $JsonOnlyPlan.paths.windowsChromeScreenshotDir "assets/tmp/b
 Read-FailingPlan @("-SummaryPath", $DesktopOnlySummary, "-RequirePhone") "Phone evidence was required"
 Read-FailingPlan @("-SummaryPath", $DesktopOnlySummary, "-RequireChrome") "Windows Chrome evidence was required"
 Read-FailingPlan @("-SummaryPath", $ChromeOnlySummary, "-RequireDesktop") "Desktop evidence was required"
+Read-FailingPlan @("-SummaryPath", $CompleteSummary, "-MaxAgeMinutes", "0") "-MaxAgeMinutes must be a positive number"
 
 Write-Host "Browser evidence plan self-test passed."

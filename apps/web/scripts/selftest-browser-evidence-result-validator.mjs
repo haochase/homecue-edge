@@ -177,6 +177,20 @@ const cases = [
     },
   },
   {
+    name: 'plan-options-unexpected-field',
+    expectedError: 'plan.options must not include unexpected field: debug.',
+    mutate: (result) => {
+      result.plan.options.debug = true
+    },
+  },
+  {
+    name: 'plan-options-max-age-invalid',
+    expectedError: 'plan.options.maxAgeMinutes must be null or a positive number.',
+    mutate: (result) => {
+      result.plan.options.maxAgeMinutes = 0
+    },
+  },
+  {
     name: 'plan-selftest-unexpected-field',
     expectedError: 'plan.selfTest must not include unexpected field: traces.',
     mutate: (result) => {
@@ -1264,6 +1278,9 @@ function createResult({ mode = 'validate' } = {}) {
       desktop: true,
       phone: false,
       windowsChrome: true,
+    },
+    options: {
+      maxAgeMinutes: null,
     },
     selfTest: {
       requested: false,
