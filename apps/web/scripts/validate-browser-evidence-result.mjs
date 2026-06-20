@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { assertAsciiSafeJsonText } from './json-file.mjs'
 import { parseResultValidatorCliOptions, validateResultFreshness } from './result-validator-cli.mjs'
 import { parityErrorsSignature, recomputeBrowserParity, validateBrowserParityInputs } from './summary-parity.mjs'
 import {
@@ -65,8 +66,11 @@ const PROOF_SUMMARY_EVIDENCE_KEYS = [
   'desktopScreenshotDir',
   'windowsChromeScreenshotDir',
 ]
-const result = JSON.parse(await readFile(resultFile, 'utf8'))
-const errors = await validateBrowserEvidenceResult(result, resultFile, cliOptions)
+const errors = []
+const result = await readResultJson(errors, resultFile)
+if (result) {
+  errors.push(...(await validateBrowserEvidenceResult(result, resultFile, cliOptions)))
+}
 
 if (errors.length) {
   console.error(`Browser evidence result validation failed: ${resultFile}`)
@@ -80,6 +84,17 @@ console.log(`Browser evidence result validation passed: ${resultFile}`)
 if (result.mode === 'validate') {
   const summary = await readValidatedSummary(result)
   console.log(formatBrowserEvidenceProofSummary(result, summary))
+}
+
+async function readResultJson(errors, file) {
+  try {
+    const text = await readFile(file, 'utf8')
+    assertAsciiSafeJsonText(text, 'browser evidence result')
+    return JSON.parse(text)
+  } catch (error) {
+    errors.push(`browser evidence result JSON cannot be read: ${error?.code ?? error.message ?? error}`)
+    return null
+  }
 }
 
 async function validateBrowserEvidenceResult(value, validatedResultFile, options = {}) {

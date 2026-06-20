@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { assertAsciiSafeJsonText } from './json-file.mjs'
 import { parseResultValidatorCliOptions, validateResultFreshness } from './result-validator-cli.mjs'
 import { parityErrorsSignature, recomputeBrowserParity, validateBrowserParityInputs } from './summary-parity.mjs'
 import {
@@ -88,8 +89,11 @@ const BROWSER_PROOF_SUMMARY_EVIDENCE_KEYS = [
 ]
 const PROOF_SUMMARY_LOOP_GROUP_KEYS = ['desktop', 'phone', 'windowsChrome']
 const PROOF_SUMMARY_BOOLEAN_GROUP_KEYS = ['desktop', 'phone', 'windowsChrome']
-const result = JSON.parse(await readFile(resultFile, 'utf8'))
-const errors = await validateComputerLoopResult(result, resultFile, cliOptions)
+const errors = []
+const result = await readResultJson(errors, resultFile)
+if (result) {
+  errors.push(...(await validateComputerLoopResult(result, resultFile, cliOptions)))
+}
 
 if (errors.length) {
   console.error(`Computer loop result validation failed: ${resultFile}`)
@@ -102,6 +106,17 @@ if (errors.length) {
 console.log(`Computer loop result validation passed: ${resultFile}`)
 if (result.mode === 'validate') {
   console.log(formatProofSummary(result.proofSummary, result.sourceState))
+}
+
+async function readResultJson(errors, file) {
+  try {
+    const text = await readFile(file, 'utf8')
+    assertAsciiSafeJsonText(text, 'computer loop result')
+    return JSON.parse(text)
+  } catch (error) {
+    errors.push(`computer loop result JSON cannot be read: ${error?.code ?? error.message ?? error}`)
+    return null
+  }
 }
 
 async function validateComputerLoopResult(value, validatedResultFile, options = {}) {

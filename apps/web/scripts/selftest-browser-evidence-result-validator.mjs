@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeJsonFile } from './json-file.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
@@ -111,6 +112,8 @@ if (dryRunResult.output.includes('Browser evidence proof summary:')) {
   throw new Error('Expected dry-run browser evidence result to skip compact proof summary.')
 }
 console.log('PASS dry-run browser evidence result')
+
+await assertAsciiSafeJsonIsRequired()
 
 const cases = [
   {
@@ -1448,8 +1451,23 @@ async function runValidator(file, args = []) {
 }
 
 async function writeJson(file, value) {
-  await mkdir(path.dirname(file), { recursive: true })
-  await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+  await writeJsonFile(file, value)
+}
+
+async function assertAsciiSafeJsonIsRequired() {
+  const file = path.join(outputDir, 'browser-result-ascii-safe-json-required.json')
+  await writeFile(file, `${JSON.stringify(positive, null, 2)}\n`, 'utf8')
+
+  const result = await runValidator(file)
+  if (result.code === 0) {
+    throw new Error('Expected browser-result-ascii-safe-json-required to fail validation.')
+  }
+  if (!result.output.includes('browser evidence result must be ASCII-safe JSON')) {
+    console.error(result.output)
+    throw new Error('Expected browser-result-ascii-safe-json-required failure to include ASCII-safe JSON error.')
+  }
+
+  console.log('PASS negative case: browser-result-ascii-safe-json-required')
 }
 
 async function writeText(file, value) {
