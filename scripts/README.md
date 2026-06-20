@@ -63,6 +63,7 @@ Starts the FastAPI edge gateway on `http://127.0.0.1:8723` and the Vite web cons
 .\scripts\check-full-loop.ps1 -IncludeChrome -IncludePhone -StepTimeoutSeconds 180
 .\scripts\check-full-loop.ps1 -DryRun
 .\scripts\check-computer-loop.ps1
+.\scripts\check-computer-loop.ps1 -ResultJsonPath .\assets\tmp\computer-loop-check-latest.json
 .\scripts\check-computer-loop.ps1 -SelfTest
 .\scripts\check-computer-loop.ps1 -DryRun
 .\scripts\check-desktop-loop.ps1 -DryRun
