@@ -161,35 +161,47 @@ async function validateComputerLoopResult(value, validatedResultFile) {
   return errors
 }
 
-function validateSourceState(errors, sourceState) {
+function validateSourceState(errors, sourceState, label = 'sourceState') {
   if (!sourceState || typeof sourceState !== 'object') {
-    errors.push('sourceState is missing.')
+    errors.push(`${label} is missing.`)
     return
   }
 
-  validateAllowedKeys(errors, sourceState, ['branch', 'commit', 'dirty', 'statusCount', 'statusSha256'], 'sourceState')
-  assertString(errors, sourceState.branch, 'sourceState.branch')
-  assertString(errors, sourceState.commit, 'sourceState.commit')
+  validateAllowedKeys(errors, sourceState, ['branch', 'commit', 'dirty', 'statusCount', 'statusSha256'], label)
+  assertString(errors, sourceState.branch, `${label}.branch`)
+  assertString(errors, sourceState.commit, `${label}.commit`)
   if (typeof sourceState.commit === 'string' && !/^[0-9a-f]{40}$/i.test(sourceState.commit)) {
-    errors.push('sourceState.commit must be a 40-character git commit hash.')
+    errors.push(`${label}.commit must be a 40-character git commit hash.`)
   }
-  if (typeof sourceState.dirty !== 'boolean') errors.push('sourceState.dirty must be boolean.')
+  if (typeof sourceState.dirty !== 'boolean') errors.push(`${label}.dirty must be boolean.`)
   if (!Number.isInteger(sourceState.statusCount) || sourceState.statusCount < 0) {
-    errors.push('sourceState.statusCount must be a non-negative integer.')
+    errors.push(`${label}.statusCount must be a non-negative integer.`)
   }
-  assertString(errors, sourceState.statusSha256, 'sourceState.statusSha256')
+  assertString(errors, sourceState.statusSha256, `${label}.statusSha256`)
   if (typeof sourceState.statusSha256 === 'string' && !/^[0-9a-f]{12}$/i.test(sourceState.statusSha256)) {
-    errors.push('sourceState.statusSha256 must be a 12-character SHA-256 prefix.')
+    errors.push(`${label}.statusSha256 must be a 12-character SHA-256 prefix.`)
   }
 
   const actual = readCurrentSourceState(errors)
   if (!actual) return
 
-  for (const key of ['branch', 'commit']) {
+  for (const key of ['branch', 'commit', 'dirty', 'statusCount', 'statusSha256']) {
     if (sourceState[key] !== actual[key]) {
-      errors.push(`sourceState.${key} must match current git ${key}.`)
+      errors.push(formatSourceStateMismatch(label, key, sourceState[key], actual[key], `current git ${key}`))
     }
   }
+}
+
+function formatSourceStateMismatch(label, key, saved, current, expectedLabel) {
+  return `${label}.${key} must match ${expectedLabel}. saved=${formatDiagnosticValue(saved)} current=${formatDiagnosticValue(current)}`
+}
+
+function formatDiagnosticValue(value) {
+  if (typeof value === 'string') return value
+  if (typeof value === 'boolean' || typeof value === 'number') return String(value)
+  if (value === null) return 'null'
+  if (value === undefined) return 'undefined'
+  return JSON.stringify(value)
 }
 
 function readCurrentSourceState(errors) {
@@ -718,6 +730,13 @@ async function validateValidateMode(errors, value) {
   if (stableJson(browserEvidence.plan?.requiredEvidence) !== stableJson(browserEvidence.plan?.inferredFromSummary)) {
     errors.push('browserEvidence.plan.requiredEvidence must match inferredFromSummary for computer-only result.')
   }
+  if (stableJson(browserEvidence.sourceState ?? {}) !== stableJson(value.sourceState ?? {})) {
+    errors.push(
+      `browserEvidence.sourceState must match top-level sourceState. browserEvidence=${formatSourceState(
+        browserEvidence.sourceState,
+      )} topLevel=${formatSourceState(value.sourceState)}`,
+    )
+  }
   validateBrowserEvidenceSelfTest(errors, browserEvidence.plan?.selfTest, value.plan?.options?.selfTest === true)
 
   compareRepoPaths(
@@ -818,7 +837,7 @@ function validateNestedBrowserEvidenceManifest(errors, browserEvidence) {
   validateAllowedKeys(
     errors,
     browserEvidence,
-    ['generatedAt', 'success', 'mode', 'plan', 'checks', 'proofSummary'],
+    ['generatedAt', 'success', 'mode', 'sourceState', 'plan', 'checks', 'proofSummary'],
     'browserEvidence',
   )
   const plan = browserEvidence?.plan
@@ -858,6 +877,7 @@ function validateNestedBrowserEvidenceManifest(errors, browserEvidence) {
     ],
     'browserEvidence.plan.paths',
   )
+  validateSourceState(errors, browserEvidence?.sourceState, 'browserEvidence.sourceState')
 }
 
 function validateExpectedBrowserEvidenceCheckCount(errors, checks, plan) {
@@ -1297,7 +1317,9 @@ function formatSourceState(sourceState) {
   if (!sourceState || typeof sourceState !== 'object') return 'unknown'
   const commit = typeof sourceState.commit === 'string' ? sourceState.commit.slice(0, 7) : 'unknown'
   const dirty = sourceState.dirty === true ? 'dirty' : sourceState.dirty === false ? 'clean' : 'unknown'
-  return `${sourceState.branch ?? 'unknown'}@${commit}/${dirty}`
+  const statusCount = Number.isInteger(sourceState.statusCount) ? sourceState.statusCount : 'unknown'
+  const statusSha = typeof sourceState.statusSha256 === 'string' ? sourceState.statusSha256 : 'unknown'
+  return `${sourceState.branch ?? 'unknown'}@${commit}/${dirty}#${statusCount}:${statusSha}`
 }
 
 function formatLoopRun(loop) {

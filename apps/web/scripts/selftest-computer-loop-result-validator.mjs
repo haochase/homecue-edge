@@ -139,6 +139,20 @@ const cases = [
     },
   },
   {
+    name: 'source-state-dirty-mismatch',
+    expectedError: 'sourceState.dirty must match current git dirty.',
+    mutate: (result) => {
+      result.sourceState.dirty = !result.sourceState.dirty
+    },
+  },
+  {
+    name: 'source-state-status-sha-mismatch',
+    expectedError: 'sourceState.statusSha256 must match current git statusSha256.',
+    mutate: (result) => {
+      result.sourceState.statusSha256 = '0'.repeat(12)
+    },
+  },
+  {
     name: 'plan-options-unexpected-field',
     expectedError: 'plan.options must not include unexpected field: debug.',
     mutate: (result) => {
@@ -409,6 +423,41 @@ const cases = [
     expectedError: 'browserEvidence must not include unexpected field: failure.',
     mutate: (result) => {
       result.browserEvidence.failure = null
+    },
+  },
+  {
+    name: 'browser-evidence-source-state-missing',
+    expectedError: 'browserEvidence.sourceState is missing.',
+    mutate: (result) => {
+      delete result.browserEvidence.sourceState
+    },
+  },
+  {
+    name: 'browser-evidence-source-state-commit-mismatch',
+    expectedError: 'browserEvidence.sourceState.commit must match current git commit.',
+    mutate: (result) => {
+      result.browserEvidence.sourceState.commit = '0'.repeat(40)
+    },
+  },
+  {
+    name: 'browser-evidence-source-state-dirty-mismatch',
+    expectedError: 'browserEvidence.sourceState.dirty must match current git dirty.',
+    mutate: (result) => {
+      result.browserEvidence.sourceState.dirty = !result.browserEvidence.sourceState.dirty
+    },
+  },
+  {
+    name: 'browser-evidence-source-state-status-sha-mismatch',
+    expectedError: 'browserEvidence.sourceState.statusSha256 must match current git statusSha256.',
+    mutate: (result) => {
+      result.browserEvidence.sourceState.statusSha256 = '0'.repeat(12)
+    },
+  },
+  {
+    name: 'browser-evidence-source-state-top-level-mismatch',
+    expectedError: 'browserEvidence.sourceState must match top-level sourceState.',
+    mutate: (result) => {
+      result.browserEvidence.sourceState.statusCount += 1
     },
   },
   {
@@ -1733,6 +1782,7 @@ function createResult({ mode = 'validate', browserEvidence = undefined, selfTest
             generatedAt: '2026-06-19T00:00:01.000Z',
             success: true,
             mode: 'validate',
+            sourceState: currentSourceState(),
             plan: {
               summaryPath,
               resultJsonPath: browserEvidencePath,
@@ -1834,7 +1884,9 @@ function currentSourceState() {
 function formatSourceState(sourceState) {
   const commit = typeof sourceState.commit === 'string' ? sourceState.commit.slice(0, 7) : 'unknown'
   const dirty = sourceState.dirty === true ? 'dirty' : sourceState.dirty === false ? 'clean' : 'unknown'
-  return `${sourceState.branch ?? 'unknown'}@${commit}/${dirty}`
+  const statusCount = Number.isInteger(sourceState.statusCount) ? sourceState.statusCount : 'unknown'
+  const statusSha = typeof sourceState.statusSha256 === 'string' ? sourceState.statusSha256 : 'unknown'
+  return `${sourceState.branch ?? 'unknown'}@${commit}/${dirty}#${statusCount}:${statusSha}`
 }
 
 function gitOutput(args) {
