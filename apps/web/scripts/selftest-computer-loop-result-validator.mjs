@@ -8,6 +8,8 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
 const validatorScript = path.join(scriptDir, 'validate-computer-loop-result.mjs')
 const outputDir = path.join(repoRoot, 'assets', 'tmp', 'computer-loop-result-validator-selftest')
+const desktopEvidenceCommand = 'npm run desktop:evidence:check'
+const windowsChromeEvidenceCommand = 'npm run desktop:evidence:check -- --require-installed-chrome'
 
 await mkdir(outputDir, { recursive: true })
 await writeScreenshotFiles({
@@ -123,6 +125,26 @@ const cases = [
     },
   },
   {
+    name: 'full-loop-script-path-mismatch',
+    expectedError: 'plan.commands.fullLoop -File must match scripts/check-full-loop.ps1.',
+    mutate: (result) => {
+      const fileIndex = result.plan.commands.fullLoop.args.indexOf('-File') + 1
+      result.plan.commands.fullLoop.args[fileIndex] = 'scripts/check-browser-evidence.ps1'
+      result.plan.commands.fullLoop.display = displayCommand('powershell', result.plan.commands.fullLoop.args)
+      result.checks[0].command = result.plan.commands.fullLoop.display
+    },
+  },
+  {
+    name: 'browser-evidence-script-path-mismatch',
+    expectedError: 'plan.commands.browserEvidence -File must match scripts/check-browser-evidence.ps1.',
+    mutate: (result) => {
+      const fileIndex = result.plan.commands.browserEvidence.args.indexOf('-File') + 1
+      result.plan.commands.browserEvidence.args[fileIndex] = 'scripts/check-full-loop.ps1'
+      result.plan.commands.browserEvidence.display = displayCommand('powershell', result.plan.commands.browserEvidence.args)
+      result.checks[1].command = result.plan.commands.browserEvidence.display
+    },
+  },
+  {
     name: 'absolute-browser-evidence-proof-summary-path',
     expectedError: 'browserEvidence.proofSummary.evidence.desktopEvidencePath must be repo-relative.',
     mutate: (result) => {
@@ -173,6 +195,24 @@ const cases = [
         command: result.plan.commands.fullLoop.display,
         exitCode: 1,
         message: 'simulated failure',
+      }
+    },
+  },
+  {
+    name: 'failed-unexpected-field',
+    expectedError: 'failure must not include unexpected field: proofSummary.',
+    mutate: (result) => {
+      result.mode = 'failed'
+      result.success = false
+      result.proofSummary = null
+      result.browserEvidence = null
+      result.failure = {
+        stage: 'computer full loop',
+        checkName: 'computer full loop',
+        command: result.plan.commands.fullLoop.display,
+        exitCode: 1,
+        message: 'simulated failure',
+        proofSummary: {},
       }
     },
   },
@@ -245,6 +285,41 @@ const cases = [
     },
   },
   {
+    name: 'top-level-check-order-mismatch',
+    expectedError: 'checks order must be computer full loop then saved browser evidence recheck.',
+    mutate: (result) => {
+      result.checks = [result.checks[1], result.checks[0]]
+    },
+  },
+  {
+    name: 'top-level-check-duplicate-name',
+    expectedError: 'checks entry name must be unique: computer full loop.',
+    mutate: (result) => {
+      result.checks[1].name = 'computer full loop'
+    },
+  },
+  {
+    name: 'top-level-check-unexpected-name',
+    expectedError: 'checks contains unexpected entry: other check.',
+    mutate: (result) => {
+      result.checks[1].name = 'other check'
+    },
+  },
+  {
+    name: 'top-level-full-loop-unexpected-field',
+    expectedError: 'computer full loop check must not include unexpected field: resultJsonPath.',
+    mutate: (result) => {
+      result.checks[0].resultJsonPath = result.plan.outputs.browserEvidenceResultJsonPath
+    },
+  },
+  {
+    name: 'top-level-browser-evidence-unexpected-field',
+    expectedError: 'saved browser evidence recheck must not include unexpected field: reportPath.',
+    mutate: (result) => {
+      result.checks[1].reportPath = result.plan.outputs.reportPath
+    },
+  },
+  {
     name: 'phone-loop-requested',
     expectedError: 'plan.requestedLoops.phone must be false.',
     mutate: (result) => {
@@ -300,8 +375,7 @@ const cases = [
     expectedError: 'browserEvidence.plan.paths.desktopEvidence must be a real evidence path when desktop evidence is required.',
     mutate: (result) => {
       result.browserEvidence.plan.paths.desktopEvidence = '__desktop_not_run__.json'
-      result.browserEvidence.checks.find((check) => check.command === 'npm run desktop:evidence:check').path =
-        result.browserEvidence.plan.paths.desktopEvidence
+      findBrowserEvidenceCheck(result, desktopEvidenceCommand).path = result.browserEvidence.plan.paths.desktopEvidence
       result.browserEvidence.proofSummary.evidence.desktopEvidencePath = result.browserEvidence.plan.paths.desktopEvidence
       result.proofSummary.evidence.desktopEvidencePath = result.browserEvidence.plan.paths.desktopEvidence
     },
@@ -312,9 +386,8 @@ const cases = [
       'browserEvidence.plan.paths.windowsChromeScreenshotDir must be a real evidence path when windowsChrome evidence is required.',
     mutate: (result) => {
       result.browserEvidence.plan.paths.windowsChromeScreenshotDir = '__chrome_screens_not_run__'
-      result.browserEvidence.checks.find(
-        (check) => check.command === 'npm run desktop:evidence:check -- --require-installed-chrome',
-      ).screenshotDir = result.browserEvidence.plan.paths.windowsChromeScreenshotDir
+      findBrowserEvidenceCheck(result, windowsChromeEvidenceCommand).screenshotDir =
+        result.browserEvidence.plan.paths.windowsChromeScreenshotDir
       result.browserEvidence.proofSummary.evidence.windowsChromeScreenshotDir =
         result.browserEvidence.plan.paths.windowsChromeScreenshotDir
       result.proofSummary.evidence.windowsChromeScreenshotDir = result.browserEvidence.plan.paths.windowsChromeScreenshotDir
@@ -375,10 +448,64 @@ const cases = [
     },
   },
   {
+    name: 'browser-evidence-selftest-check-count-missing',
+    expectedError: 'browserEvidence.checks must contain exactly 5 entries for this computer-only result.',
+    mutate: (result) => {
+      applySelfTestMode(result)
+      result.browserEvidence.checks = result.browserEvidence.checks.filter(
+        (check) => !check.command.startsWith('npm run summary:selftest'),
+      )
+    },
+  },
+  {
     name: 'browser-evidence-desktop-check-not-required',
     expectedError: 'browserEvidence.checks npm run desktop:evidence:check must be required.',
     mutate: (result) => {
-      result.browserEvidence.checks.find((check) => check.command === 'npm run desktop:evidence:check').required = false
+      findBrowserEvidenceCheck(result, desktopEvidenceCommand).required = false
+    },
+  },
+  {
+    name: 'browser-evidence-desktop-check-name-mismatch',
+    expectedError: 'browserEvidence.checks npm run desktop:evidence:check name must be desktop raw evidence.',
+    mutate: (result) => {
+      findBrowserEvidenceCheck(result, desktopEvidenceCommand).name = 'desktop loop check'
+    },
+  },
+  {
+    name: 'browser-evidence-desktop-check-unexpected-field',
+    expectedError: 'browserEvidence.checks npm run desktop:evidence:check must not include unexpected field: resultJsonPath.',
+    mutate: (result) => {
+      findBrowserEvidenceCheck(result, desktopEvidenceCommand).resultJsonPath = result.browserEvidence.plan.resultJsonPath
+    },
+  },
+  {
+    name: 'browser-evidence-duplicate-desktop-check',
+    expectedError: 'browserEvidence.checks command must be unique: npm run desktop:evidence:check.',
+    mutate: (result) => {
+      const check = findBrowserEvidenceCheck(result, desktopEvidenceCommand)
+      result.browserEvidence.checks.push({ ...check })
+    },
+  },
+  {
+    name: 'browser-evidence-unknown-command',
+    expectedError: 'browserEvidence.checks command is not allowed for computer-only result: npm run other:evidence:check.',
+    mutate: (result) => {
+      result.browserEvidence.checks.push({ command: 'npm run other:evidence:check', required: true })
+    },
+  },
+  {
+    name: 'browser-evidence-extra-check-count',
+    expectedError: 'browserEvidence.checks must contain exactly 3 entries for this computer-only result.',
+    mutate: (result) => {
+      result.browserEvidence.checks.push({ command: 'npm run desktop:evidence:selftest', required: true })
+    },
+  },
+  {
+    name: 'browser-evidence-check-order-mismatch',
+    expectedError: 'browserEvidence.checks command order must match the computer-only evidence plan.',
+    mutate: (result) => {
+      const [desktopCheck, chromeCheck, ...rest] = result.browserEvidence.checks
+      result.browserEvidence.checks = [chromeCheck, desktopCheck, ...rest]
     },
   },
   {
@@ -386,7 +513,7 @@ const cases = [
     expectedError:
       'browserEvidence.checks npm run desktop:evidence:check path must match browserEvidence.plan npm run desktop:evidence:check path.',
     mutate: (result) => {
-      result.browserEvidence.checks.find((check) => check.command === 'npm run desktop:evidence:check').path =
+      findBrowserEvidenceCheck(result, desktopEvidenceCommand).path =
         'assets/tmp/computer-loop-result-validator-selftest/other-desktop-loop.json'
     },
   },
@@ -395,9 +522,8 @@ const cases = [
     expectedError:
       'browserEvidence.checks npm run desktop:evidence:check -- --require-installed-chrome screenshotDir must match browserEvidence.plan npm run desktop:evidence:check -- --require-installed-chrome screenshotDir.',
     mutate: (result) => {
-      result.browserEvidence.checks.find(
-        (check) => check.command === 'npm run desktop:evidence:check -- --require-installed-chrome',
-      ).screenshotDir = 'assets/tmp/computer-loop-result-validator-selftest/other-windows-chrome-screens'
+      findBrowserEvidenceCheck(result, windowsChromeEvidenceCommand).screenshotDir =
+        'assets/tmp/computer-loop-result-validator-selftest/other-windows-chrome-screens'
     },
   },
   {
@@ -405,7 +531,7 @@ const cases = [
     expectedError:
       'browserEvidence.checks npm run summary:check path must match browserEvidence.plan npm run summary:check path.',
     mutate: (result) => {
-      result.browserEvidence.checks.find((check) => check.command === 'npm run summary:check').path =
+      findBrowserEvidenceCheck(result, 'npm run summary:check').path =
         'assets/tmp/computer-loop-result-validator-selftest/other-summary.json'
     },
   },
@@ -414,7 +540,41 @@ const cases = [
     expectedError: 'browserEvidence.checks self-test command must be required: npm run summary:selftest',
     mutate: (result) => {
       applySelfTestMode(result)
-      result.browserEvidence.checks.find((check) => check.command.startsWith('npm run summary:selftest')).required = false
+      findBrowserEvidenceCheck(result, 'npm run summary:selftest', { prefix: true }).required = false
+    },
+  },
+  {
+    name: 'browser-evidence-selftest-name-mismatch',
+    expectedError: 'browserEvidence.checks self-test command name must be summary validator self-test: npm run summary:selftest',
+    mutate: (result) => {
+      applySelfTestMode(result)
+      findBrowserEvidenceCheck(result, 'npm run summary:selftest', { prefix: true }).name = 'summary check'
+    },
+  },
+  {
+    name: 'browser-evidence-selftest-unexpected-field',
+    expectedError: 'must not include unexpected field: path.',
+    mutate: (result) => {
+      applySelfTestMode(result)
+      findBrowserEvidenceCheck(result, 'npm run summary:selftest', { prefix: true }).path =
+        result.browserEvidence.plan.summaryPath
+    },
+  },
+  {
+    name: 'browser-evidence-duplicate-selftest-command',
+    expectedError: 'browserEvidence.checks command must be unique: npm run summary:selftest',
+    mutate: (result) => {
+      applySelfTestMode(result)
+      const check = findBrowserEvidenceCheck(result, 'npm run summary:selftest', { prefix: true })
+      result.browserEvidence.checks.push({ ...check })
+    },
+  },
+  {
+    name: 'browser-evidence-unknown-selftest-command',
+    expectedError: 'browserEvidence.checks command is not allowed for computer-only result: npm run unknown:selftest.',
+    mutate: (result) => {
+      applySelfTestMode(result)
+      result.browserEvidence.checks.push({ command: 'npm run unknown:selftest', required: true })
     },
   },
   {
@@ -1362,26 +1522,37 @@ function createResult({ mode = 'validate', browserEvidence = undefined, selfTest
             },
             checks: [
               {
+                name: 'desktop raw evidence',
                 command: 'npm run desktop:evidence:check',
                 required: true,
                 path: 'assets/tmp/computer-loop-result-validator-selftest/desktop-loop.json',
                 screenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/playwright-chromium-screens',
               },
               {
+                name: 'Windows Chrome raw evidence',
                 command: 'npm run desktop:evidence:check -- --require-installed-chrome',
                 required: true,
                 path: 'assets/tmp/computer-loop-result-validator-selftest/chrome-loop.json',
                 screenshotDir: 'assets/tmp/computer-loop-result-validator-selftest/windows-chrome-screens',
               },
               {
+                name: 'full-loop summary evidence',
                 command: 'npm run summary:check',
                 required: true,
                 path: summaryPath,
               },
               ...(selfTest
                 ? [
-                    { command: 'npm run desktop:evidence:selftest', required: true },
-                    { command: `npm run summary:selftest -- ${summaryPath}`, required: true },
+                    {
+                      name: 'desktop evidence validator self-test',
+                      command: 'npm run desktop:evidence:selftest',
+                      required: true,
+                    },
+                    {
+                      name: 'summary validator self-test',
+                      command: `npm run summary:selftest -- ${summaryPath}`,
+                      required: true,
+                    },
                   ]
                 : []),
             ],
@@ -1511,8 +1682,22 @@ function applySelfTestMode(result) {
   result.browserEvidence.plan.selfTest.desktopEvidence = true
   result.browserEvidence.plan.selfTest.summary = true
   result.browserEvidence.checks.push(
-    { command: 'npm run desktop:evidence:selftest', required: true },
-    { command: `npm run summary:selftest -- ${result.browserEvidence.plan.summaryPath}`, required: true },
+    {
+      name: 'desktop evidence validator self-test',
+      command: 'npm run desktop:evidence:selftest',
+      required: true,
+    },
+    {
+      name: 'summary validator self-test',
+      command: `npm run summary:selftest -- ${result.browserEvidence.plan.summaryPath}`,
+      required: true,
+    },
+  )
+}
+
+function findBrowserEvidenceCheck(result, command, { prefix = false } = {}) {
+  return result.browserEvidence.checks.find((check) =>
+    prefix ? check.command.startsWith(command) : check.command === command,
   )
 }
 
