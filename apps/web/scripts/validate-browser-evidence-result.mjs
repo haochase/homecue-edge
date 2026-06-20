@@ -200,7 +200,7 @@ function validatePlan(errors, plan, validatedResultFile) {
   validateAllowedKeys(
     errors,
     plan,
-    ['summaryPath', 'resultJsonPath', 'inferredFromSummary', 'requiredEvidence', 'selfTest', 'paths'],
+    ['summaryPath', 'resultJsonPath', 'inferredFromSummary', 'requiredEvidence', 'options', 'selfTest', 'paths'],
     'plan',
   )
   assertString(errors, plan.summaryPath, 'plan.summaryPath')
@@ -213,11 +213,26 @@ function validatePlan(errors, plan, validatedResultFile) {
 
   validateBooleanGroup(errors, plan.inferredFromSummary, 'plan.inferredFromSummary')
   validateBooleanGroup(errors, plan.requiredEvidence, 'plan.requiredEvidence')
+  validatePlanOptions(errors, plan.options)
   validateSelfTestPlan(errors, plan.selfTest)
   validateRequiredEvidenceConsistency(errors, plan)
   validatePaths(errors, plan.paths)
   validateRequiredEvidencePaths(errors, plan)
   validateSkippedEvidencePaths(errors, plan)
+}
+
+function validatePlanOptions(errors, value) {
+  if (!value || typeof value !== 'object') {
+    errors.push('plan.options is missing.')
+    return
+  }
+
+  validateAllowedKeys(errors, value, ['maxAgeMinutes'], 'plan.options')
+  if (value.maxAgeMinutes !== null && value.maxAgeMinutes !== undefined) {
+    if (typeof value.maxAgeMinutes !== 'number' || !Number.isFinite(value.maxAgeMinutes) || value.maxAgeMinutes <= 0) {
+      errors.push('plan.options.maxAgeMinutes must be null or a positive number.')
+    }
+  }
 }
 
 function validateBooleanGroup(errors, value, label) {

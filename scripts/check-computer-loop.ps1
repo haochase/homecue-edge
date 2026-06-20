@@ -223,6 +223,9 @@ function New-ComputerLoopPlan {
   if ($SelfTest) {
     $BrowserEvidenceArgs += "-SelfTest"
   }
+  if ($MaxAgeMinutesProvided) {
+    $BrowserEvidenceArgs += @("-MaxAgeMinutes", ([string]$MaxAgeMinutes))
+  }
 
   return [pscustomobject]@{
     runId = $ComputerLoopRunId

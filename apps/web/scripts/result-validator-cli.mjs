@@ -24,7 +24,7 @@ export function parseResultValidatorCliOptions(args) {
   return options
 }
 
-export function validateResultFreshness(errors, generatedAt, maxAgeMinutes) {
+export function validateResultFreshness(errors, generatedAt, maxAgeMinutes, label = 'generatedAt') {
   if (!maxAgeMinutes) return
 
   const generatedAtMs = Date.parse(generatedAt)
@@ -32,11 +32,11 @@ export function validateResultFreshness(errors, generatedAt, maxAgeMinutes) {
 
   const ageMs = Date.now() - generatedAtMs
   if (ageMs < 0) {
-    errors.push('generatedAt must not be in the future when --max-age-minutes is set.')
+    errors.push(`${label} must not be in the future when --max-age-minutes is set.`)
     return
   }
   if (ageMs > maxAgeMinutes * 60 * 1000) {
-    errors.push(`generatedAt is older than --max-age-minutes=${maxAgeMinutes}.`)
+    errors.push(`${label} is older than --max-age-minutes=${maxAgeMinutes}.`)
   }
 }
 

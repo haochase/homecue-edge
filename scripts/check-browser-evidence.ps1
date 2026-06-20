@@ -11,7 +11,8 @@ param(
   [switch]$RequireChrome,
   [switch]$AllowSkipDesktop,
   [switch]$SelfTest,
-  [switch]$DryRun
+  [switch]$DryRun,
+  [double]$MaxAgeMinutes = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,6 +20,12 @@ $ErrorActionPreference = "Stop"
 $Root = Resolve-Path "$PSScriptRoot\.."
 $WebDir = Join-Path $Root "apps\web"
 $SummaryPathProvided = -not [string]::IsNullOrWhiteSpace($SummaryPath)
+$MaxAgeMinutesProvided = $PSBoundParameters.ContainsKey("MaxAgeMinutes")
+
+if ($MaxAgeMinutesProvided -and $MaxAgeMinutes -le 0) {
+  throw "-MaxAgeMinutes must be a positive number when provided."
+}
+
 if (-not $SummaryPathProvided) {
   $SummaryPath = Join-Path $Root "assets\demo\full-loop-report.json"
 }
@@ -399,6 +406,9 @@ function New-EvidenceCheckPlan {
       phone = [bool]$RequirePhone
       windowsChrome = [bool]$RequireChrome
     }
+    options = [pscustomobject]@{
+      maxAgeMinutes = if ($MaxAgeMinutesProvided) { [double]$MaxAgeMinutes } else { $null }
+    }
     selfTest = [pscustomobject]@{
       requested = [bool]$SelfTest
       phoneEvidence = [bool]($SelfTest -and $RequirePhone)
@@ -677,7 +687,11 @@ if ($ResultJsonPath) {
   Write-JsonFile -Path $ResultJsonPath -Value (New-EvidenceCheckResult -Plan $Plan -Mode "validate" -Success $true -Summary $Summary)
   Push-Location $WebDir
   try {
-    Invoke-NpmChecked @("run", "browser:evidence-result:check", "--", $ResultJsonPath)
+    $ValidationArgs = @("run", "browser:evidence-result:check", "--", $ResultJsonPath)
+    if ($MaxAgeMinutesProvided) {
+      $ValidationArgs += @("--max-age-minutes", ([string]$MaxAgeMinutes))
+    }
+    Invoke-NpmChecked $ValidationArgs
   }
   finally {
     Pop-Location

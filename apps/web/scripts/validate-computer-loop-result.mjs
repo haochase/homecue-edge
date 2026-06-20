@@ -149,7 +149,7 @@ async function validateComputerLoopResult(value, validatedResultFile, options = 
   validateChecks(errors, value.checks, value.plan)
 
   if (value.mode === 'validate') {
-    await validateValidateMode(errors, value)
+    await validateValidateMode(errors, value, options)
   } else if (value.mode === 'failed') {
     validateFailedMode(errors, value)
   } else {
@@ -566,6 +566,14 @@ function validatePlanConsistency(errors, plan, validatedResultFile) {
     'plan.commands.browserEvidence -ResultJsonPath',
     'plan.outputs.browserEvidenceResultJsonPath',
   )
+  validateOptionalPositiveNumberCommandArg(
+    errors,
+    commands.browserEvidence?.args,
+    '-MaxAgeMinutes',
+    plan.options?.maxAgeMinutes,
+    'plan.commands.browserEvidence -MaxAgeMinutes',
+    'plan.options.maxAgeMinutes',
+  )
 }
 
 function validateCommand(errors, command, label, requiredTokens) {
@@ -699,7 +707,7 @@ function validateTopLevelCheckManifest(errors, checks) {
   }
 }
 
-async function validateValidateMode(errors, value) {
+async function validateValidateMode(errors, value, options = {}) {
   const outputs = value.plan?.outputs ?? {}
 
   await assertExistingFile(errors, outputs.reportPath, 'plan.outputs.reportPath')
@@ -719,6 +727,7 @@ async function validateValidateMode(errors, value) {
   if (!Number.isFinite(timestampMs(browserEvidence.generatedAt))) {
     errors.push('browserEvidence.generatedAt must be a valid timestamp.')
   }
+  validateResultFreshness(errors, browserEvidence.generatedAt, options.maxAgeMinutes, 'browserEvidence.generatedAt')
   if (browserEvidenceFile && stableJson(browserEvidenceFile) !== stableJson(browserEvidence)) {
     errors.push('browserEvidence must exactly match plan.outputs.browserEvidenceResultJsonPath content.')
   }
@@ -744,6 +753,9 @@ async function validateValidateMode(errors, value) {
   }
   if (stableJson(browserEvidence.plan?.requiredEvidence) !== stableJson(browserEvidence.plan?.inferredFromSummary)) {
     errors.push('browserEvidence.plan.requiredEvidence must match inferredFromSummary for computer-only result.')
+  }
+  if ((browserEvidence.plan?.options?.maxAgeMinutes ?? null) !== (value.plan?.options?.maxAgeMinutes ?? null)) {
+    errors.push('browserEvidence.plan.options.maxAgeMinutes must match plan.options.maxAgeMinutes.')
   }
   if (stableJson(browserEvidence.sourceState ?? {}) !== stableJson(value.sourceState ?? {})) {
     errors.push(
@@ -859,9 +871,10 @@ function validateNestedBrowserEvidenceManifest(errors, browserEvidence) {
   validateAllowedKeys(
     errors,
     plan,
-    ['summaryPath', 'resultJsonPath', 'inferredFromSummary', 'requiredEvidence', 'selfTest', 'paths'],
+    ['summaryPath', 'resultJsonPath', 'inferredFromSummary', 'requiredEvidence', 'options', 'selfTest', 'paths'],
     'browserEvidence.plan',
   )
+  validateAllowedKeys(errors, plan?.options, ['maxAgeMinutes'], 'browserEvidence.plan.options')
   validateAllowedKeys(
     errors,
     plan?.inferredFromSummary,
@@ -893,6 +906,20 @@ function validateNestedBrowserEvidenceManifest(errors, browserEvidence) {
     'browserEvidence.plan.paths',
   )
   validateSourceState(errors, browserEvidence?.sourceState, 'browserEvidence.sourceState')
+  validateNestedBrowserEvidenceOptions(errors, plan?.options)
+}
+
+function validateNestedBrowserEvidenceOptions(errors, options) {
+  if (!options || typeof options !== 'object') {
+    errors.push('browserEvidence.plan.options is missing.')
+    return
+  }
+
+  if (options.maxAgeMinutes !== null && options.maxAgeMinutes !== undefined) {
+    if (typeof options.maxAgeMinutes !== 'number' || !Number.isFinite(options.maxAgeMinutes) || options.maxAgeMinutes <= 0) {
+      errors.push('browserEvidence.plan.options.maxAgeMinutes must be null or a positive number.')
+    }
+  }
 }
 
 function validateExpectedBrowserEvidenceCheckCount(errors, checks, plan) {
@@ -2096,6 +2123,31 @@ function validateCommandArgValue(errors, args, flag, expected, argLabel, expecte
   if (actual === null || expected === undefined || expected === null) return
 
   if (String(actual) !== String(expected)) {
+    errors.push(`${argLabel} must match ${expectedLabel}.`)
+  }
+}
+
+function validateOptionalPositiveNumberCommandArg(errors, args, flag, expected, argLabel, expectedLabel) {
+  if (!Array.isArray(args)) return
+
+  const count = args.filter((item) => item === flag).length
+  if (expected === null || expected === undefined) {
+    if (count !== 0) {
+      errors.push(`${argLabel} must be omitted when ${expectedLabel} is null.`)
+    }
+    return
+  }
+
+  if (count !== 1) {
+    errors.push(`${argLabel} must appear exactly once when ${expectedLabel} is set.`)
+    return
+  }
+
+  const actual = getCommandArgValue(errors, args, flag, argLabel)
+  if (actual === null) return
+
+  const parsed = Number(actual)
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed !== expected) {
     errors.push(`${argLabel} must match ${expectedLabel}.`)
   }
 }
