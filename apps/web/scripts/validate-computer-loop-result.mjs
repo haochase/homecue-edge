@@ -1520,6 +1520,7 @@ function validateReportEvidence(errors, report, summary) {
       errors.push(`report must include "${line}".`)
     }
   }
+  validateReportManifest(errors, report, summary.evidence?.files)
 }
 
 function formatDevEnvPreflight(value) {
@@ -1535,6 +1536,25 @@ function formatBrowserParity(value) {
   if (!value?.checked) return 'not checked'
   if (value.success) return 'pass'
   return `fail (${Array.isArray(value.errors) ? value.errors.join('; ') : 'unknown'})`
+}
+
+function validateReportManifest(errors, report, files) {
+  if (!Array.isArray(files)) return
+
+  for (const entry of files) {
+    const line = formatReportManifestLine(entry)
+    if (!line) continue
+    if (!report.includes(line)) {
+      errors.push(`report must include "${line}".`)
+    }
+  }
+}
+
+function formatReportManifestLine(entry) {
+  if (!entry || typeof entry.label !== 'string' || entry.label.length === 0) return null
+  if (!entry.present) return `- ${entry.label}: not run`
+  if (typeof entry.file !== 'string' || entry.file.length === 0) return null
+  return `- ${entry.label}: ${entry.file} (${entry.bytes ?? 'unknown'} bytes, sha256:${entry.sha256 ?? 'unknown'})`
 }
 
 async function validateSummaryEvidence(errors, summary, browserEvidencePlan, resultPlan) {

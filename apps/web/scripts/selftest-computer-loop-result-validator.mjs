@@ -20,11 +20,11 @@ await writeScreenshotFiles({
 })
 
 const positive = createResult()
+await writeRawLoopEvidence(positive.browserEvidence.plan.paths)
 const positiveSummary = await createSummary(positive.browserEvidence.plan.paths)
 await writeReport(path.join(outputDir, 'computer-loop-report.md'), positiveSummary)
 await writeJson(path.join(outputDir, 'computer-loop-report.json'), positiveSummary)
 await writeJson(path.join(outputDir, 'browser-evidence-check.json'), positive.browserEvidence)
-await writeRawLoopEvidence(positive.browserEvidence.plan.paths)
 
 const positiveFile = path.join(outputDir, 'positive.json')
 setResultJsonPath(positive, positiveFile)
@@ -156,11 +156,11 @@ assertOutputExcludes(failedResult.output, 'Computer loop proof summary:', 'faile
 console.log('PASS failed computer loop result')
 
 const selfTestPositive = createResult({ selfTest: true })
+await writeRawLoopEvidence(selfTestPositive.browserEvidence.plan.paths)
 const selfTestPositiveSummary = await createSummary(selfTestPositive.browserEvidence.plan.paths)
 await writeReport(path.join(outputDir, 'selftest-computer-loop-report.md'), selfTestPositiveSummary)
 await writeJson(path.join(outputDir, 'selftest-computer-loop-report.json'), selfTestPositiveSummary)
 await writeJson(path.join(outputDir, 'selftest-browser-evidence-check.json'), selfTestPositive.browserEvidence)
-await writeRawLoopEvidence(selfTestPositive.browserEvidence.plan.paths)
 
 const selfTestPositiveFile = path.join(outputDir, 'selftest-positive.json')
 setResultJsonPath(selfTestPositive, selfTestPositiveFile)
@@ -1282,6 +1282,35 @@ const cases = [
     },
   },
   {
+    name: 'report-evidence-desktop-json-mismatch',
+    expectedError:
+      'report must include "- Desktop JSON: assets/tmp/computer-loop-result-validator-selftest/desktop-loop.json',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, async (summary) => {
+        const reportSummary = structuredClone(summary)
+        reportSummary.evidence.files.find((entry) => entry.label === 'Desktop JSON').file =
+          'assets/demo/desktop-loop.json'
+        await writeReport(resolveRepoPath(result.plan.outputs.reportPath), reportSummary)
+      })
+    },
+  },
+  {
+    name: 'report-evidence-phone-not-run-mismatch',
+    expectedError: 'report must include "- Phone JSON: not run".',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, async (summary) => {
+        const reportSummary = structuredClone(summary)
+        Object.assign(reportSummary.evidence.files.find((entry) => entry.label === 'Phone JSON'), {
+          present: true,
+          file: 'assets/demo/phone-loop.json',
+          bytes: 1,
+          sha256: '000000000000',
+        })
+        await writeReport(resolveRepoPath(result.plan.outputs.reportPath), reportSummary)
+      })
+    },
+  },
+  {
     name: 'raw-desktop-run-id-mismatch',
     expectedError: 'desktop raw evidence.runId must match summary.runId.',
     prepare: async (result, name) => {
@@ -1519,10 +1548,10 @@ async function attachRunLocalEvidence(result, name, { desktop = {}, chrome = {} 
     result.browserEvidence.proofSummary.evidence.windowsChromeScreenshotDir
 
   await writeScreenshotFiles(result.browserEvidence.plan.paths)
+  await writeRawLoopEvidence(result.browserEvidence.plan.paths, { desktop, chrome })
   const summary = await createSummary(result.browserEvidence.plan.paths)
   await writeReport(resolveRepoPath(result.plan.outputs.reportPath), summary)
   await writeJson(resolveRepoPath(result.plan.outputs.summaryPath), summary)
-  await writeRawLoopEvidence(result.browserEvidence.plan.paths, { desktop, chrome })
 }
 
 function setResultJsonPath(result, file) {
@@ -1591,8 +1620,18 @@ async function createSummary(paths) {
     },
     evidence: {
       files: [
-        { label: 'Desktop JSON', file: paths.desktopEvidence, present: true },
-        { label: 'Windows Chrome JSON', file: paths.windowsChromeEvidence, present: true },
+        {
+          label: 'Desktop JSON',
+          file: paths.desktopEvidence,
+          present: true,
+          ...(await fileDigest(resolveRepoPath(paths.desktopEvidence))),
+        },
+        {
+          label: 'Windows Chrome JSON',
+          file: paths.windowsChromeEvidence,
+          present: true,
+          ...(await fileDigest(resolveRepoPath(paths.windowsChromeEvidence))),
+        },
         { label: 'Phone JSON', file: null, present: false },
         {
           label: 'Dev Environment JSON',
@@ -2326,6 +2365,10 @@ async function writeReport(file, summary) {
       `- App URL: ${summary.appUrl}`,
       `- API base: ${summary.apiBase}`,
       '',
+      '## Evidence Files',
+      '',
+      ...formatManifest(summary.evidence?.files),
+      '',
     ].join('\n'),
   )
 }
@@ -2351,6 +2394,14 @@ function formatBrowserParity(value) {
   if (!value?.checked) return 'not checked'
   if (value.success) return 'pass'
   return `fail (${Array.isArray(value.errors) ? value.errors.join('; ') : 'unknown'})`
+}
+
+function formatManifest(entries) {
+  if (!Array.isArray(entries)) return []
+  return entries.map((entry) => {
+    if (!entry.present) return `- ${entry.label}: not run`
+    return `- ${entry.label}: ${entry.file} (${entry.bytes} bytes, sha256:${entry.sha256})`
+  })
 }
 
 function formatBoolean(value) {
