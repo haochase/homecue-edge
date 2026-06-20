@@ -11,7 +11,8 @@ param(
   [switch]$DryRun,
   [int]$StartupTimeoutSeconds = 60,
   [int]$StepTimeoutSeconds = 180,
-  [int]$BrowserWrapperSharedStateLockTimeoutSeconds = 1200
+  [int]$BrowserWrapperSharedStateLockTimeoutSeconds = 1200,
+  [double]$MaxAgeMinutes = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,6 +21,11 @@ $Root = Resolve-Path "$PSScriptRoot\.."
 $WebDir = Join-Path $Root "apps\web"
 $ComputerLoopRunId = "computer-loop-{0:yyyyMMdd-HHmmss}-{1}" -f (Get-Date), ([guid]::NewGuid().ToString("N").Substring(0, 8))
 $ResultJsonPathProvided = -not [string]::IsNullOrWhiteSpace($ResultJsonPath)
+$MaxAgeMinutesProvided = $PSBoundParameters.ContainsKey("MaxAgeMinutes")
+
+if ($MaxAgeMinutesProvided -and $MaxAgeMinutes -le 0) {
+  throw "-MaxAgeMinutes must be a positive number when provided."
+}
 
 function Resolve-RootedPath {
   param([string]$Path)
@@ -231,6 +237,7 @@ function New-ComputerLoopPlan {
       startupTimeoutSeconds = $StartupTimeoutSeconds
       stepTimeoutSeconds = $StepTimeoutSeconds
       browserWrapperSharedStateLockTimeoutSeconds = $BrowserWrapperSharedStateLockTimeoutSeconds
+      maxAgeMinutes = if ($MaxAgeMinutesProvided) { [double]$MaxAgeMinutes } else { $null }
     }
     outputs = [pscustomobject]@{
       outputDir = Convert-ToPlanPath $OutputDir
@@ -457,11 +464,20 @@ function Invoke-PostProcessWithResult {
 
     Write-JsonFile -Path $ResultJsonPath -Value (New-ComputerLoopResult -Plan $Plan -Mode "validate" -Success $true -BrowserEvidenceResult $BrowserEvidenceResult -ProofSummary $ProofSummary)
     try {
-      Invoke-NpmChecked @("run", "computer:result:check", "--", $ResultJsonPath)
+      $ValidationArgs = @("run", "computer:result:check", "--", $ResultJsonPath)
+      if ($MaxAgeMinutesProvided) {
+        $ValidationArgs += @("--max-age-minutes", ([string]$MaxAgeMinutes))
+      }
+      Invoke-NpmChecked $ValidationArgs
     }
     catch {
+      $ValidationDisplay = if ($MaxAgeMinutesProvided) {
+        "npm run computer:result:check -- $ResultJsonPath --max-age-minutes $MaxAgeMinutes"
+      } else {
+        "npm run computer:result:check -- $ResultJsonPath"
+      }
       $Failure = New-ComputerLoopFailure -Stage "result validation" -Command ([pscustomobject]@{
-          display = "npm run computer:result:check -- $ResultJsonPath"
+          display = $ValidationDisplay
         }) -ErrorRecord $_ -ExitCode $LASTEXITCODE
       Write-JsonFile -Path $ResultJsonPath -Value (New-ComputerLoopResult -Plan $Plan -Mode "failed" -Success $false -Failure $Failure)
       $script:ComputerLoopResultValidationFailureWritten = $true

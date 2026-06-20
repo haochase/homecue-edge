@@ -197,7 +197,7 @@ function Assert-ComputerLoopPlanManifest {
 
   Assert-ObjectKeys $Plan @("runId", "requestedLoops", "options", "outputs", "expectedEvidence", "gates", "commands") "$Message plan fields"
   Assert-ObjectKeys $Plan.requestedLoops @("desktop", "phone", "windowsChrome") "$Message requestedLoops fields"
-  Assert-ObjectKeys $Plan.options @("skipPreflight", "selfTest", "startupTimeoutSeconds", "stepTimeoutSeconds", "browserWrapperSharedStateLockTimeoutSeconds") "$Message options fields"
+  Assert-ObjectKeys $Plan.options @("skipPreflight", "selfTest", "startupTimeoutSeconds", "stepTimeoutSeconds", "browserWrapperSharedStateLockTimeoutSeconds", "maxAgeMinutes") "$Message options fields"
   Assert-ObjectKeys $Plan.outputs @("outputDir", "reportPath", "summaryPath", "resultJsonPath", "browserEvidenceResultJsonPath") "$Message outputs fields"
   Assert-ObjectKeys $Plan.expectedEvidence @("phoneEvidence") "$Message expectedEvidence fields"
   Assert-ObjectKeys $Plan.gates @("fullLoopIncludeChrome", "fullLoopIncludePhone", "browserEvidenceRequireDesktop", "browserEvidenceRequireChrome", "browserEvidenceRequirePhone", "browserEvidenceSelfTest", "browserWrapperSharedStateLock", "fullLoopWebReadiness") "$Message gates fields"
@@ -314,6 +314,7 @@ try {
   Assert-Contains $LatestWrapperSource "-DryRun" "Latest wrapper should guard against dry-run overwriting latest evidence."
   Assert-Contains $LatestWrapperSource "@Arguments" "Latest wrapper should delegate with named splatting so switch parameters are preserved."
   Assert-Contains $LatestWrapperSource '$Arguments.SelfTest = $true' "Latest wrapper should forward SelfTest as a switch parameter."
+  Assert-Contains $LatestWrapperSource '$Arguments.MaxAgeMinutes = $MaxAgeMinutes' "Latest wrapper should forward MaxAgeMinutes when requested."
   Assert-Contains $LatestWrapperSource "ResultJsonPath = `$LatestResultJsonPath" "Latest wrapper should force the stable latest result path by name."
 
   $LatestDryRunFailure = Invoke-ComputerLoopExpectFailure -ScriptName "check-computer-loop-latest.ps1" -Arguments @("-DryRun")
@@ -348,6 +349,7 @@ try {
   Assert-Equal $Default.expectedEvidence.phoneEvidence "__phone_not_run__.json" "Computer-only dry-run should expose the skipped phone evidence sentinel."
   Assert-True $Default.gates.fullLoopWebReadiness.httpProbeBeforePortReuse "Computer loop should require full-loop HTTP web readiness probing."
   Assert-True $Default.gates.fullLoopWebReadiness.stalePortBlocksDuplicateStart "Computer loop should require stale web ports to block duplicate starts."
+  Assert-Equal $Default.options.maxAgeMinutes $null "Default plan should not require fresh saved-result validation."
   Assert-Contains $Default.commands.fullLoop.display "check-full-loop.ps1" "Full-loop display command"
   Assert-Contains $Default.commands.fullLoop.display "-IncludeChrome" "Full-loop display command"
   $DefaultFullLoopScriptArg = Get-ArgumentValue $Default.commands.fullLoop.args "-File"
@@ -397,6 +399,8 @@ try {
     $CustomResultPath,
     "-SkipPreflight",
     "-SelfTest",
+    "-MaxAgeMinutes",
+    "30",
     "-StepTimeoutSeconds",
     "42"
   )
@@ -411,6 +415,7 @@ try {
   Assert-Equal $Custom.outputs.browserEvidenceResultJsonPath "assets/tmp/computer-loop-plan-selftest/custom-out/custom-browser-evidence.json" "Custom browser evidence result path should be honored."
   Assert-True $Custom.options.skipPreflight "Custom plan should preserve SkipPreflight."
   Assert-True $Custom.options.selfTest "Custom plan should preserve SelfTest."
+  Assert-Equal $Custom.options.maxAgeMinutes 30 "Custom plan should preserve MaxAgeMinutes."
   Assert-Equal $Custom.options.stepTimeoutSeconds 42 "Custom plan should preserve StepTimeoutSeconds."
   Assert-Contains $Custom.commands.fullLoop.display "-SkipPreflight" "Custom full-loop display command"
   Assert-Contains $Custom.commands.browserEvidence.display "-SelfTest" "Custom browser evidence display command"

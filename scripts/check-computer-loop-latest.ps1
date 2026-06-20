@@ -11,7 +11,8 @@ param(
   [switch]$DryRun,
   [int]$StartupTimeoutSeconds = 60,
   [int]$StepTimeoutSeconds = 180,
-  [int]$BrowserWrapperSharedStateLockTimeoutSeconds = 1200
+  [int]$BrowserWrapperSharedStateLockTimeoutSeconds = 1200,
+  [double]$MaxAgeMinutes = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,6 +26,10 @@ if ($PSBoundParameters.ContainsKey("ResultJsonPath")) {
 
 if ($DryRun) {
   throw "Use check-computer-loop.ps1 -DryRun to inspect the plan without overwriting latest result evidence."
+}
+
+if ($PSBoundParameters.ContainsKey("MaxAgeMinutes") -and $MaxAgeMinutes -le 0) {
+  throw "-MaxAgeMinutes must be a positive number when provided."
 }
 
 $Arguments = @{
@@ -52,6 +57,9 @@ if ($SkipPreflight) {
 }
 if ($SelfTest) {
   $Arguments.SelfTest = $true
+}
+if ($PSBoundParameters.ContainsKey("MaxAgeMinutes")) {
+  $Arguments.MaxAgeMinutes = $MaxAgeMinutes
 }
 
 & "$PSScriptRoot\check-computer-loop.ps1" @Arguments
