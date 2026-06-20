@@ -242,7 +242,7 @@ machine-readable `computer-loop-check.json` with the full-loop command, browser
 evidence command, summary/report paths, and browser-evidence result JSON path.
 That result also includes a compact `proofSummary` with the summary run id,
 desktop/Windows Chrome pass flags, browser-parity status, screenshot counts,
-web-readiness strategy, Chinese text-integrity counts
+web-readiness strategy, source branch/commit/dirty state, Chinese text-integrity counts
 (`required/missing/mojibake`), external execution source, and the
 report/summary/browser-evidence paths plus raw desktop/Chrome/phone/dev-env/
 web-readiness JSON and screenshot directories. Computer-only runs record the
@@ -258,14 +258,15 @@ stable `assets/tmp/computer-loop-check.json`; pass `-ResultJsonPath` when you
 want a dry-run result JSON for automation. `computer:result:selftest` replays
 positive and negative result JSON cases so phone-only drift, missing nested
 browser evidence, mismatched summary paths, missing computer-only
-`expectedEvidence.phoneEvidence` sentinels, or embedded browser-evidence content
-that differs from the referenced JSON file fail closed. The result checker also
-reads the referenced summary JSON directly and verifies desktop + Windows Chrome
-ran, phone did not run, browser parity passed, `proofSummary` matches the
-referenced summary and browser-evidence result, summary manifest paths match the
-browser-evidence plan, browser evidence carries the `Web Readiness JSON`
-manifest path, top-level proof paths match the nested browser evidence, and the
-skipped phone evidence sentinel matches across layers. The referenced
+`expectedEvidence.phoneEvidence` sentinels, source-state drift, or embedded
+browser-evidence content that differs from the referenced JSON file fail closed.
+The result checker also reads the referenced summary JSON directly and verifies
+desktop + Windows Chrome ran, phone did not run, browser parity passed,
+`proofSummary` matches the referenced summary and browser-evidence result,
+summary manifest paths match the browser-evidence plan, browser evidence
+carries the `Web Readiness JSON` manifest path, top-level proof paths match the
+nested browser evidence, and the skipped phone evidence sentinel matches across
+layers. The referenced
 `Dev Environment JSON` and `Web Readiness JSON` raw files must keep their narrow
 field sets and match the summary environment block. The raw desktop/Windows
 Chrome JSON files must also share the summary run id and expected browser roles.
@@ -409,14 +410,15 @@ machine-readable validation result with the inferred plan and executed check
 commands for CI, local automation, or demo handoff notes. The browser evidence
 result checker revalidates that saved JSON against the referenced summary,
 required evidence, screenshot directories, loop success flags, browser parity,
-web readiness, raw desktop/Windows Chrome run ids, browser roles, and self-test
-gates without opening browsers. It also treats the saved `checks` array as a
-manifest: required entries, names, command order, required flags, allowed
-fields, and optional self-test commands must match the inferred plan. In
-validate mode it also prints a compact
+web readiness, source branch/commit/worktree status, raw desktop/Windows Chrome
+run ids, browser roles, and self-test gates without opening browsers. It also
+treats the saved `checks` array as a manifest: required entries, names, command
+order, required flags, allowed fields, and optional self-test commands must
+match the inferred plan. In validate mode it also prints a compact
 `Browser evidence proof summary` line with loop status, browser parity,
-web-readiness strategy, screenshot counts, self-test state, external execution
-source, and the summary path.
+web-readiness strategy, source state, screenshot counts, self-test state,
+external execution source, and the summary path. The source field includes the
+branch, short commit, dirty state, status-line count, and status hash.
 
 ## Contributing & Security
 
