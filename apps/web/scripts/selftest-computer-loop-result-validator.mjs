@@ -34,7 +34,7 @@ if (positiveResult.code !== 0) {
 }
 assertOutputIncludes(
   positiveResult.output,
-  'Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial phoneEvidence=__phone_not_run__.json summary=assets/tmp/computer-loop-result-validator-selftest/computer-loop-report.json',
+  'Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial phoneEvidence=__phone_not_run__.json devEnvEvidence=assets/tmp/computer-loop-result-validator-selftest/dev-env-check.json webReadinessEvidence=assets/tmp/computer-loop-result-validator-selftest/web-readiness.json summary=assets/tmp/computer-loop-result-validator-selftest/computer-loop-report.json',
   'positive proof summary output',
 )
 console.log('PASS positive computer loop result')
@@ -89,7 +89,7 @@ if (selfTestPositiveResult.code !== 0) {
 }
 assertOutputIncludes(
   selfTestPositiveResult.output,
-  'Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial phoneEvidence=__phone_not_run__.json summary=assets/tmp/computer-loop-result-validator-selftest/selftest-computer-loop-report.json',
+  'Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial phoneEvidence=__phone_not_run__.json devEnvEvidence=assets/tmp/computer-loop-result-validator-selftest/dev-env-check.json webReadinessEvidence=assets/tmp/computer-loop-result-validator-selftest/web-readiness.json summary=assets/tmp/computer-loop-result-validator-selftest/selftest-computer-loop-report.json',
   'self-test proof summary output',
 )
 console.log('PASS self-test computer loop result')

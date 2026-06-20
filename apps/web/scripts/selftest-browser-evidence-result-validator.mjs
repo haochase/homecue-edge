@@ -33,7 +33,7 @@ if (positiveResult.code !== 0) {
 }
 if (
   !positiveResult.output.includes(
-    'Browser evidence proof summary: runId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready screenshots=6+6 text=7/0/0+7/0/0 selftests=not-requested external=esp32-serial summary=assets/tmp/browser-evidence-result-validator-selftest/full-loop-report.json',
+    'Browser evidence proof summary: runId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready screenshots=6+6 text=7/0/0+7/0/0 selftests=not-requested external=esp32-serial devEnvEvidence=assets/tmp/browser-evidence-result-validator-selftest/dev-env-check.json webReadinessEvidence=assets/tmp/browser-evidence-result-validator-selftest/web-readiness.json summary=assets/tmp/browser-evidence-result-validator-selftest/full-loop-report.json',
   )
 ) {
   console.error(positiveResult.output)

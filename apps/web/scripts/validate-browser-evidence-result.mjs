@@ -500,6 +500,8 @@ function formatBrowserEvidenceProofSummary(value, summary) {
     `text=${formatTextIntegrityPair(proofSummary ?? summary)}`,
     `selftests=${formatSelfTestState(value?.plan?.selfTest)}`,
     `external=${formatExternalSource(proofSummary ?? summary)}`,
+    `devEnvEvidence=${formatDisplayPath(proofSummary?.evidence?.devEnvEvidencePath)}`,
+    `webReadinessEvidence=${formatDisplayPath(proofSummary?.evidence?.webReadinessEvidencePath)}`,
     `summary=${formatDisplayPath(proofSummary?.evidence?.summaryPath ?? value?.plan?.summaryPath)}`,
   ].join(' ')
 }

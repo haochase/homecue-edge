@@ -1210,6 +1210,8 @@ function formatProofSummary(proofSummary) {
     `text=${formatProofText(proofSummary.loops?.desktop)}+${formatProofText(proofSummary.loops?.windowsChrome)}`,
     `external=${proofSummary.loops?.desktop?.externalExecutionSource ?? 'unknown'}`,
     `phoneEvidence=${proofSummary.evidence?.phoneEvidencePath ?? 'unknown'}`,
+    `devEnvEvidence=${proofSummary.evidence?.devEnvEvidencePath ?? 'unknown'}`,
+    `webReadinessEvidence=${proofSummary.evidence?.webReadinessEvidencePath ?? 'unknown'}`,
     `summary=${proofSummary.evidence?.summaryPath ?? 'unknown'}`,
   ].join(' ')
 }

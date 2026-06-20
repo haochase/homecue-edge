@@ -90,8 +90,8 @@ desktop/Chrome/phone/dev-env/web-readiness JSON and screenshot directories.
 Computer-only runs record the skipped phone path as `__phone_not_run__.json`.
 `npm run computer:result:check` prints that compact proof line after validation
 so a successful saved-result check is readable without manually opening the JSON;
-the line includes `phone=not-run`, `phoneEvidence=__phone_not_run__.json`, and
-the checked summary path.
+the line includes `phone=not-run`, `phoneEvidence=__phone_not_run__.json`,
+`devEnvEvidence=...`, `webReadinessEvidence=...`, and the checked summary path.
 The wrapper validates that result JSON before returning success. Use `-DryRun`
 to inspect those paths and commands without starting services or opening
 browsers. By default dry-run only prints the plan and does not overwrite the
