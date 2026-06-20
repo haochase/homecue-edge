@@ -10,6 +10,7 @@
     "browser:evidence-result:check": "node scripts/validate-browser-evidence-result.mjs",
     "browser:evidence-result:selftest": "node scripts/selftest-browser-evidence-result-validator.mjs",
     "computer:result:check": "node scripts/validate-computer-loop-result.mjs",
+    "computer:result:check:latest": "node scripts/validate-computer-loop-result.mjs ../../assets/tmp/computer-loop-check-latest.json",
     "computer:result:selftest": "node scripts/selftest-computer-loop-result-validator.mjs",
     "desktop:loop": "node scripts/desktop-loop.mjs",
     "desktop:evidence:check": "node scripts/validate-desktop-loop-evidence.mjs",

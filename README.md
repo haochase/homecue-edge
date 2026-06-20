@@ -228,6 +228,7 @@ Chromium and installed Windows Chrome without phone hardware:
 .\scripts\check-computer-loop.ps1 -DryRun
 npm --prefix apps/web run computer:result:check -- ..\..\assets\tmp\computer-loop-check.json
 npm --prefix apps/web run computer:result:check -- ..\..\assets\tmp\computer-loop-check-latest.json
+npm --prefix apps/web run computer:result:check:latest
 npm --prefix apps/web run computer:result:selftest
 ```
 
