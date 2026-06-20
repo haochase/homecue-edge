@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -86,7 +87,12 @@ async function validateBrowserEvidenceResult(value, validatedResultFile) {
     return ['Browser evidence result root must be an object.']
   }
 
-  validateAllowedKeys(errors, value, ['generatedAt', 'success', 'mode', 'plan', 'checks', 'proofSummary'], 'result root')
+  validateAllowedKeys(
+    errors,
+    value,
+    ['generatedAt', 'success', 'mode', 'sourceState', 'plan', 'checks', 'proofSummary'],
+    'result root',
+  )
   assertString(errors, value.generatedAt, 'generatedAt')
   if (!Number.isFinite(Date.parse(value.generatedAt))) {
     errors.push('generatedAt must be a valid timestamp.')
@@ -95,6 +101,7 @@ async function validateBrowserEvidenceResult(value, validatedResultFile) {
   if (!['dry-run', 'validate'].includes(value.mode)) errors.push('mode must be dry-run or validate.')
 
   validatePlan(errors, value.plan, validatedResultFile)
+  validateSourceState(errors, value.sourceState)
   validateChecks(errors, value.checks, value.plan)
 
   if (value.mode === 'validate') {
@@ -104,6 +111,81 @@ async function validateBrowserEvidenceResult(value, validatedResultFile) {
   }
 
   return errors
+}
+
+function validateSourceState(errors, sourceState) {
+  if (!sourceState || typeof sourceState !== 'object') {
+    errors.push('sourceState is missing.')
+    return
+  }
+
+  validateAllowedKeys(errors, sourceState, ['branch', 'commit', 'dirty', 'statusCount', 'statusSha256'], 'sourceState')
+  assertString(errors, sourceState.branch, 'sourceState.branch')
+  assertString(errors, sourceState.commit, 'sourceState.commit')
+  if (typeof sourceState.commit === 'string' && !/^[0-9a-f]{40}$/i.test(sourceState.commit)) {
+    errors.push('sourceState.commit must be a 40-character git commit hash.')
+  }
+  if (typeof sourceState.dirty !== 'boolean') errors.push('sourceState.dirty must be boolean.')
+  if (!Number.isInteger(sourceState.statusCount) || sourceState.statusCount < 0) {
+    errors.push('sourceState.statusCount must be a non-negative integer.')
+  }
+  assertString(errors, sourceState.statusSha256, 'sourceState.statusSha256')
+  if (typeof sourceState.statusSha256 === 'string' && !/^[0-9a-f]{12}$/i.test(sourceState.statusSha256)) {
+    errors.push('sourceState.statusSha256 must be a 12-character SHA-256 prefix.')
+  }
+
+  const actual = readCurrentSourceState(errors)
+  if (!actual) return
+
+  for (const key of ['branch', 'commit', 'dirty', 'statusCount', 'statusSha256']) {
+    if (sourceState[key] !== actual[key]) {
+      errors.push(formatSourceStateMismatch('sourceState', key, sourceState[key], actual[key], `current git ${key}`))
+    }
+  }
+}
+
+function formatSourceStateMismatch(label, key, saved, current, expectedLabel) {
+  return `${label}.${key} must match ${expectedLabel}. saved=${formatDiagnosticValue(saved)} current=${formatDiagnosticValue(current)}`
+}
+
+function formatDiagnosticValue(value) {
+  if (typeof value === 'string') return value
+  if (typeof value === 'boolean' || typeof value === 'number') return String(value)
+  if (value === null) return 'null'
+  if (value === undefined) return 'undefined'
+  return JSON.stringify(value)
+}
+
+function readCurrentSourceState(errors) {
+  try {
+    const branch = gitOutput(['rev-parse', '--abbrev-ref', 'HEAD'])
+    const commit = gitOutput(['rev-parse', 'HEAD'])
+    const statusText = execFileSync('git', ['status', '--short'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trimEnd()
+    const statusLines = statusText ? statusText.split(/\r?\n/) : []
+
+    return {
+      branch,
+      commit,
+      dirty: statusLines.length > 0,
+      statusCount: statusLines.length,
+      statusSha256: createHash('sha256').update(statusText).digest('hex').slice(0, 12),
+    }
+  } catch (error) {
+    errors.push(`sourceState cannot be checked against current git state: ${error?.message ?? error}`)
+    return null
+  }
+}
+
+function gitOutput(args) {
+  return execFileSync('git', args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim()
 }
 
 function validatePlan(errors, plan, validatedResultFile) {
@@ -496,6 +578,7 @@ function formatBrowserEvidenceProofSummary(value, summary) {
     `phone=${formatLoopStatus(proofSummary?.loops?.phone ?? summary?.loops?.phone)}`,
     `parity=${formatBrowserParity(proofSummary?.browserParity ?? summary?.browserParity)}`,
     `web=${formatWebReadiness(proofSummary?.webReadiness ?? summary?.environment?.webReadiness)}`,
+    `source=${formatSourceState(value?.sourceState)}`,
     `screenshots=${formatScreenshotPair(proofSummary ?? summary)}`,
     `text=${formatTextIntegrityPair(proofSummary ?? summary)}`,
     `selftests=${formatSelfTestState(value?.plan?.selfTest)}`,
@@ -504,6 +587,15 @@ function formatBrowserEvidenceProofSummary(value, summary) {
     `webReadinessEvidence=${formatDisplayPath(proofSummary?.evidence?.webReadinessEvidencePath)}`,
     `summary=${formatDisplayPath(proofSummary?.evidence?.summaryPath ?? value?.plan?.summaryPath)}`,
   ].join(' ')
+}
+
+function formatSourceState(sourceState) {
+  if (!sourceState || typeof sourceState !== 'object') return 'unknown'
+  const commit = typeof sourceState.commit === 'string' ? sourceState.commit.slice(0, 7) : 'unknown'
+  const dirty = sourceState.dirty === true ? 'dirty' : sourceState.dirty === false ? 'clean' : 'unknown'
+  const statusCount = Number.isInteger(sourceState.statusCount) ? sourceState.statusCount : 'unknown'
+  const statusSha = typeof sourceState.statusSha256 === 'string' ? sourceState.statusSha256 : 'unknown'
+  return `${sourceState.branch ?? 'unknown'}@${commit}/${dirty}#${statusCount}:${statusSha}`
 }
 
 function formatLoopStatus(loop) {

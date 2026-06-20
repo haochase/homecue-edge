@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -8,6 +8,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(scriptDir, '..', '..', '..')
 const validatorScript = path.join(scriptDir, 'validate-browser-evidence-result.mjs')
 const outputDir = path.join(repoRoot, 'assets', 'tmp', 'browser-evidence-result-validator-selftest')
+const sourceSummary = formatSourceState(currentSourceState())
 
 await mkdir(outputDir, { recursive: true })
 await mkdir(path.join(outputDir, 'playwright-chromium-screens'), { recursive: true })
@@ -33,7 +34,7 @@ if (positiveResult.code !== 0) {
 }
 if (
   !positiveResult.output.includes(
-    'Browser evidence proof summary: runId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready screenshots=6+6 text=7/0/0+7/0/0 selftests=not-requested external=esp32-serial devEnvEvidence=assets/tmp/browser-evidence-result-validator-selftest/dev-env-check.json webReadinessEvidence=assets/tmp/browser-evidence-result-validator-selftest/web-readiness.json summary=assets/tmp/browser-evidence-result-validator-selftest/full-loop-report.json',
+    `Browser evidence proof summary: runId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready source=${sourceSummary} screenshots=6+6 text=7/0/0+7/0/0 selftests=not-requested external=esp32-serial devEnvEvidence=assets/tmp/browser-evidence-result-validator-selftest/dev-env-check.json webReadinessEvidence=assets/tmp/browser-evidence-result-validator-selftest/web-readiness.json summary=assets/tmp/browser-evidence-result-validator-selftest/full-loop-report.json`,
   )
 ) {
   console.error(positiveResult.output)
@@ -62,6 +63,48 @@ const cases = [
     expectedError: 'result root must not include unexpected field: failure.',
     mutate: (result) => {
       result.failure = null
+    },
+  },
+  {
+    name: 'source-state-missing',
+    expectedError: 'sourceState is missing.',
+    mutate: (result) => {
+      delete result.sourceState
+    },
+  },
+  {
+    name: 'source-state-unexpected-field',
+    expectedError: 'sourceState must not include unexpected field: remote.',
+    mutate: (result) => {
+      result.sourceState.remote = 'origin'
+    },
+  },
+  {
+    name: 'source-state-commit-mismatch',
+    expectedError: 'sourceState.commit must match current git commit.',
+    mutate: (result) => {
+      result.sourceState.commit = '0'.repeat(40)
+    },
+  },
+  {
+    name: 'source-state-status-invalid',
+    expectedError: 'sourceState.statusSha256 must be a 12-character SHA-256 prefix.',
+    mutate: (result) => {
+      result.sourceState.statusSha256 = 'not-a-hash'
+    },
+  },
+  {
+    name: 'source-state-dirty-mismatch',
+    expectedError: 'sourceState.dirty must match current git dirty.',
+    mutate: (result) => {
+      result.sourceState.dirty = !result.sourceState.dirty
+    },
+  },
+  {
+    name: 'source-state-status-sha-mismatch',
+    expectedError: 'sourceState.statusSha256 must match current git statusSha256.',
+    mutate: (result) => {
+      result.sourceState.statusSha256 = '0'.repeat(12)
     },
   },
   {
@@ -1187,6 +1230,7 @@ function createResult({ mode = 'validate' } = {}) {
     generatedAt: '2026-06-19T00:00:00.000Z',
     success: true,
     mode,
+    sourceState: currentSourceState(),
     plan,
     checks: [
       {
@@ -1269,6 +1313,41 @@ function loopProofSummary() {
     externalExecutionSource: 'esp32-serial',
     acceptedActionCount: 5,
   }
+}
+
+function currentSourceState() {
+  const branch = gitOutput(['rev-parse', '--abbrev-ref', 'HEAD'])
+  const commit = gitOutput(['rev-parse', 'HEAD'])
+  const statusText = execFileSync('git', ['status', '--short'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trimEnd()
+  const statusLines = statusText ? statusText.split(/\r?\n/) : []
+
+  return {
+    branch,
+    commit,
+    dirty: statusLines.length > 0,
+    statusCount: statusLines.length,
+    statusSha256: createHash('sha256').update(statusText).digest('hex').slice(0, 12),
+  }
+}
+
+function formatSourceState(sourceState) {
+  const commit = typeof sourceState.commit === 'string' ? sourceState.commit.slice(0, 7) : 'unknown'
+  const dirty = sourceState.dirty === true ? 'dirty' : sourceState.dirty === false ? 'clean' : 'unknown'
+  const statusCount = Number.isInteger(sourceState.statusCount) ? sourceState.statusCount : 'unknown'
+  const statusSha = typeof sourceState.statusSha256 === 'string' ? sourceState.statusSha256 : 'unknown'
+  return `${sourceState.branch ?? 'unknown'}@${commit}/${dirty}#${statusCount}:${statusSha}`
+}
+
+function gitOutput(args) {
+  return execFileSync('git', args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim()
 }
 
 function setResultJsonPath(result, file) {
