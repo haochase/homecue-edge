@@ -254,10 +254,57 @@ function Get-ArgumentValue {
   throw "Argument not found: $Name"
 }
 
+function Assert-ComputerLoopSourceStateFormatting {
+  param([string]$ScriptSource)
+
+  $Tokens = $null
+  $ParseErrors = $null
+  $Ast = [System.Management.Automation.Language.Parser]::ParseInput($ScriptSource, [ref]$Tokens, [ref]$ParseErrors)
+  if ($ParseErrors.Count -gt 0) {
+    throw ("check-computer-loop.ps1 should parse cleanly before extracting Format-SourceState: {0}" -f $ParseErrors[0].Message)
+  }
+
+  $FunctionAst = $Ast.Find(
+    {
+      param($Node)
+      $Node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $Node.Name -eq "Format-SourceState"
+    },
+    $true
+  )
+  if (-not $FunctionAst) {
+    throw "check-computer-loop.ps1 should define Format-SourceState."
+  }
+
+  $FunctionScript = [scriptblock]::Create($FunctionAst.Extent.Text)
+  . $FunctionScript
+
+  Assert-Equal (Format-SourceState $null) "unknown" "Source-state formatter should handle missing source state."
+  Assert-Equal (Format-SourceState ([pscustomobject]@{
+        branch = "edge-branch"
+        commit = "abcdef1234567890"
+        dirty = $false
+        statusCount = 0
+        statusSha256 = "e3b0c44298fc"
+      })) "edge-branch@abcdef1/clean#0:e3b0c44298fc" "Source-state formatter should include clean status count and hash."
+  Assert-Equal (Format-SourceState ([pscustomobject]@{
+        branch = "edge-branch"
+        commit = "1234567890abcdef"
+        dirty = $true
+        statusCount = 4
+        statusSha256 = "5fe0d2de92f3"
+      })) "edge-branch@1234567/dirty#4:5fe0d2de92f3" "Source-state formatter should include dirty status count and hash."
+  Assert-Equal (Format-SourceState ([pscustomobject]@{
+        branch = "edge-branch"
+        commit = "123"
+        dirty = $null
+      })) "edge-branch@123/unknown#unknown:unknown" "Source-state formatter should show unknown when status metadata is missing."
+}
+
 try {
   $ComputerLoopScriptSource = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "check-computer-loop.ps1")
   Assert-Contains $ComputerLoopScriptSource "devEnvEvidence={" "Wrapper proof summary should print the dev environment evidence path label."
   Assert-Contains $ComputerLoopScriptSource "webReadinessEvidence={" "Wrapper proof summary should print the web readiness evidence path label."
+  Assert-ComputerLoopSourceStateFormatting $ComputerLoopScriptSource
   Assert-Contains $ComputerLoopScriptSource '$ProofSummary.evidence.devEnvEvidencePath' "Wrapper proof summary should use proofSummary dev environment evidence."
   Assert-Contains $ComputerLoopScriptSource '$ProofSummary.evidence.webReadinessEvidencePath' "Wrapper proof summary should use proofSummary web readiness evidence."
   $LatestWrapperSource = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "check-computer-loop-latest.ps1")

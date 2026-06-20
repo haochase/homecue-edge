@@ -541,7 +541,10 @@ function Format-SourceState {
     "unknown"
   }
 
-  return ("{0}@{1}/{2}" -f $SourceState.branch, $Commit, $Dirty)
+  $StatusCount = if ($null -ne $SourceState.statusCount) { $SourceState.statusCount } else { "unknown" }
+  $StatusSha = if ($SourceState.statusSha256) { $SourceState.statusSha256 } else { "unknown" }
+
+  return ("{0}@{1}/{2}#{3}:{4}" -f $SourceState.branch, $Commit, $Dirty, $StatusCount, $StatusSha)
 }
 
 $Plan = New-ComputerLoopPlan
