@@ -12,6 +12,12 @@ $ErrorActionPreference = "Stop"
 $Root = Resolve-Path "$PSScriptRoot\.."
 $WebDir = Join-Path $Root "apps\web"
 $SharedStateLockName = "Global\HCEdgeBrowserLoopGate"
+$DesktopLoopRunId = if ($env:FULL_LOOP_RUN_ID) {
+  $env:FULL_LOOP_RUN_ID
+}
+else {
+  "desktop-loop-{0:yyyyMMdd-HHmmss}-{1}" -f (Get-Date), ([guid]::NewGuid().ToString("N").Substring(0, 8))
+}
 
 function Resolve-RootedPath {
   param([string]$Path)
@@ -97,6 +103,7 @@ $ExpectedScreenshotDir = Convert-ToRepoRelativeDir -Path $ScreenshotDir
 
 if ($DryRun) {
   [pscustomobject]@{
+    runId = $DesktopLoopRunId
     appUrl = $AppUrl
     apiBase = $ApiBase
     browserName = "playwright-chromium"
@@ -118,7 +125,9 @@ Invoke-WithSharedStateLock {
   Invoke-RestMethod "$ApiBase/health" | Out-Null
 
   Push-Location $WebDir
+  $PreviousDesktopLoopRunId = $env:DESKTOP_LOOP_RUN_ID
   try {
+    $env:DESKTOP_LOOP_RUN_ID = $DesktopLoopRunId
     $env:DESKTOP_LOOP_SCREENSHOT_DIR = $ScreenshotDir
     npm run desktop:loop -- $OutputPath $AppUrl $ApiBase
     if ($LASTEXITCODE -ne 0) {
@@ -140,6 +149,12 @@ Invoke-WithSharedStateLock {
     }
   }
   finally {
+    if ($null -ne $PreviousDesktopLoopRunId) {
+      $env:DESKTOP_LOOP_RUN_ID = $PreviousDesktopLoopRunId
+    }
+    else {
+      Remove-Item Env:\DESKTOP_LOOP_RUN_ID -ErrorAction SilentlyContinue
+    }
     Remove-Item Env:\DESKTOP_LOOP_SCREENSHOT_DIR -ErrorAction SilentlyContinue
     Pop-Location
   }

@@ -14,6 +14,12 @@ $ErrorActionPreference = "Stop"
 $Root = Resolve-Path "$PSScriptRoot\.."
 $WebDir = Join-Path $Root "apps\web"
 $SharedStateLockName = "Global\HCEdgeBrowserLoopGate"
+$ChromeLoopRunId = if ($env:FULL_LOOP_RUN_ID) {
+  $env:FULL_LOOP_RUN_ID
+}
+else {
+  "chrome-loop-{0:yyyyMMdd-HHmmss}-{1}" -f (Get-Date), ([guid]::NewGuid().ToString("N").Substring(0, 8))
+}
 
 function Resolve-RootedPath {
   param([string]$Path)
@@ -135,6 +141,7 @@ $ExpectedScreenshotDir = Convert-ToRepoRelativeDir -Path $ScreenshotDir
 
 if ($DryRun) {
   [pscustomobject]@{
+    runId = $ChromeLoopRunId
     appUrl = $AppUrl
     apiBase = $ApiBase
     browserName = "windows-chrome"
@@ -176,7 +183,9 @@ Invoke-WithSharedStateLock {
   Invoke-RestMethod "$ApiBase/health" | Out-Null
 
   Push-Location $WebDir
+  $PreviousDesktopLoopRunId = $env:DESKTOP_LOOP_RUN_ID
   try {
+    $env:DESKTOP_LOOP_RUN_ID = $ChromeLoopRunId
     $env:DESKTOP_LOOP_BROWSER_NAME = "windows-chrome"
     $env:DESKTOP_LOOP_EXECUTABLE_PATH = $ChromePath
     $env:DESKTOP_LOOP_EXECUTABLE_FILE_NAME = $ChromeItem.Name
@@ -208,6 +217,12 @@ Invoke-WithSharedStateLock {
     }
   }
   finally {
+    if ($null -ne $PreviousDesktopLoopRunId) {
+      $env:DESKTOP_LOOP_RUN_ID = $PreviousDesktopLoopRunId
+    }
+    else {
+      Remove-Item Env:\DESKTOP_LOOP_RUN_ID -ErrorAction SilentlyContinue
+    }
     Remove-Item Env:\DESKTOP_LOOP_BROWSER_NAME -ErrorAction SilentlyContinue
     Remove-Item Env:\DESKTOP_LOOP_EXECUTABLE_PATH -ErrorAction SilentlyContinue
     Remove-Item Env:\DESKTOP_LOOP_EXECUTABLE_FILE_NAME -ErrorAction SilentlyContinue

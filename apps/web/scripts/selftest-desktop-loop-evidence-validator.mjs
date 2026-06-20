@@ -28,6 +28,15 @@ const positiveCases = [
 ]
 const negativeCases = [
   {
+    name: 'desktop-run-id-missing',
+    base: desktopEvidence,
+    argsFor: desktopArgs,
+    expectedError: 'runId must be a non-empty string',
+    mutate: (evidence) => {
+      evidence.runId = null
+    },
+  },
+  {
     name: 'desktop-root-unexpected-field',
     base: desktopEvidence,
     argsFor: desktopArgs,

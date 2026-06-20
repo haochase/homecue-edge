@@ -217,7 +217,9 @@ Relative direct-wrapper `-OutputPath` and `-ScreenshotDir` values are resolved
 from the repository root; the wrapper path self-test checks that contract
 without opening a browser. Direct desktop and Chrome wrappers also share a
 named local lock around the API-mutating loop steps, so accidental parallel
-starts queue instead of racing the same execution state.
+starts queue instead of racing the same execution state. Standalone wrapper
+runs stamp raw evidence with a generated `desktop-loop-*` or `chrome-loop-*`
+run id; full-loop invocations still inherit the shared full-loop run id.
 
 For a one-command computer-side loop that covers both bundled Playwright
 Chromium and installed Windows Chrome without phone hardware:

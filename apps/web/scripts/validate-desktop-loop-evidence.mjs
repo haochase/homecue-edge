@@ -75,6 +75,7 @@ async function validateEvidence(value, options) {
   )
   validateChecksManifest(errors, value.checks)
   if (value.success !== true) errors.push('success must be true.')
+  assertString(errors, value.runId, 'runId')
   assertString(errors, value.startedAt, 'startedAt')
   assertString(errors, value.finishedAt, 'finishedAt')
   validateTiming(errors, value)

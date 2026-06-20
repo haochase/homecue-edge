@@ -53,6 +53,18 @@ function Assert-Contains {
   }
 }
 
+function Assert-StartsWith {
+  param(
+    [string]$Actual,
+    [string]$ExpectedPrefix,
+    [string]$Message
+  )
+
+  if (-not $Actual.StartsWith($ExpectedPrefix, [System.StringComparison]::Ordinal)) {
+    throw ("{0} Expected '{1}' to start with '{2}'." -f $Message, $Actual, $ExpectedPrefix)
+  }
+}
+
 function Normalize-ProcessPathEnvironment {
   $PathEntries = @(
     [Environment]::GetEnvironmentVariables("Process").GetEnumerator() |
@@ -136,6 +148,7 @@ function Assert-LockTimeout {
 }
 
 $DesktopDefault = Invoke-Plan -ScriptName "check-desktop-loop.ps1"
+Assert-StartsWith $DesktopDefault.runId "desktop-loop-" "Desktop default run id."
 Assert-Equal $DesktopDefault.browserName "playwright-chromium" "Desktop wrapper browser name."
 Assert-Equal $DesktopDefault.outputs.outputPath "assets/demo/desktop-loop.json" "Desktop default output path."
 Assert-Equal $DesktopDefault.outputs.screenshotDir "assets/demo/playwright-chromium-screens" "Desktop default screenshot path."
@@ -151,12 +164,14 @@ $DesktopRelative = Invoke-Plan -ScriptName "check-desktop-loop.ps1" -Arguments @
   "-SharedStateLockTimeoutSeconds",
   "42"
 )
+Assert-StartsWith $DesktopRelative.runId "desktop-loop-" "Desktop relative run id."
 Assert-Equal $DesktopRelative.outputs.outputPath "assets/tmp/desktop-wrapper-selftest.json" "Desktop relative output path."
 Assert-Equal $DesktopRelative.outputs.screenshotDir "assets/tmp/desktop-wrapper-selftest-screens" "Desktop relative screenshot path."
 Assert-Equal $DesktopRelative.outputs.expectedScreenshotDir "assets/tmp/desktop-wrapper-selftest-screens/" "Desktop relative validator screenshot path."
 Assert-Equal $DesktopRelative.sharedStateLock.timeoutSeconds 42 "Desktop custom shared-state lock timeout."
 
 $ChromeDefault = Invoke-Plan -ScriptName "check-chrome-loop.ps1"
+Assert-StartsWith $ChromeDefault.runId "chrome-loop-" "Chrome default run id."
 Assert-Equal $ChromeDefault.browserName "windows-chrome" "Chrome wrapper browser name."
 Assert-Equal $ChromeDefault.outputs.outputPath "assets/demo/chrome-loop.json" "Chrome default output path."
 Assert-Equal $ChromeDefault.outputs.screenshotDir "assets/demo/windows-chrome-screens" "Chrome default screenshot path."
@@ -176,6 +191,7 @@ $ChromeRelative = Invoke-Plan -ScriptName "check-chrome-loop.ps1" -Arguments @(
   "C:\Chrome\chrome.exe",
   "-Headed"
 )
+Assert-StartsWith $ChromeRelative.runId "chrome-loop-" "Chrome relative run id."
 Assert-Equal $ChromeRelative.outputs.outputPath "assets/tmp/chrome-wrapper-selftest.json" "Chrome relative output path."
 Assert-Equal $ChromeRelative.outputs.screenshotDir "assets/tmp/chrome-wrapper-selftest-screens" "Chrome relative screenshot path."
 Assert-Equal $ChromeRelative.outputs.expectedScreenshotDir "assets/tmp/chrome-wrapper-selftest-screens/" "Chrome relative validator screenshot path."

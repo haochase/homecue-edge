@@ -326,7 +326,9 @@ with an isolated temporary profile under `assets/tmp`, then validates the raw
 loop JSON and screenshot evidence. Relative output and screenshot paths are
 resolved from the repository root, and direct desktop/Chrome wrapper runs queue
 on the shared browser-loop lock if another wrapper is already mutating API
-execution state.
+execution state. Standalone wrapper runs stamp raw evidence with a generated
+`desktop-loop-*` or `chrome-loop-*` run id; full-loop invocations still inherit
+the shared full-loop run id.
 
 ```powershell
 .\scripts\verify-qwen.ps1
