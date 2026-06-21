@@ -61,6 +61,7 @@ Starts the FastAPI edge gateway on `http://127.0.0.1:8723` and the Vite web cons
 .\scripts\check-full-loop.ps1 -IncludePhone
 .\scripts\check-full-loop.ps1 -IncludeChrome -IncludePhone
 .\scripts\check-full-loop.ps1 -IncludeChrome -IncludePhone -StepTimeoutSeconds 180
+.\scripts\check-full-loop.ps1 -IncludeChrome -IncludePhone -IncludeEsp32Serial -Esp32Port COM7 -Esp32SerialSeconds 45
 .\scripts\check-full-loop.ps1 -DryRun
 .\scripts\check-computer-loop.ps1
 .\scripts\check-computer-loop-latest.ps1
@@ -255,6 +256,19 @@ localized-text, and ESP32-sync regressions; `-IncludePhone` runs it
 automatically.
 Use `npm run summary:selftest -- <summary-json>` to target an isolated partial
 or computer-loop summary instead of the default demo summary.
+
+Add `-IncludeEsp32Serial` only when the ESP32-S3-AUDIO-Board is physically
+connected and the board's `PC_HOST` points at this PC's LAN IPv4. The wrapper
+first ensures the FastAPI gateway is reachable from the LAN; if an existing
+managed uvicorn process is only bound to `127.0.0.1`, it restarts that process
+on `0.0.0.0:8723` before running the hardware gate. It then runs
+`check-firmware-flow.ps1 -Required` and
+`check-esp32-serial-log.ps1 -AutoSerialLevel4 -RequireInteraction -Required`.
+The serial gate sends `homecue:plan N`, waits for a `/plan` proposal, sends
+`homecue:execute`, and saves the proof log plus result JSON under the full-loop
+run directory. Without `-IncludeEsp32Serial`, the dry-run plan records explicit
+`__esp32_serial_not_run__` sentinels so hardware proof cannot be implied by
+browser evidence.
 
 ```powershell
 .\scripts\check-browser-evidence.ps1

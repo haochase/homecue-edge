@@ -3,6 +3,7 @@ param(
   [string]$ApiBase = "http://127.0.0.1:8723",
   [switch]$IncludePhone,
   [switch]$IncludeChrome,
+  [switch]$IncludeEsp32Serial,
   [switch]$SkipDesktop,
   [switch]$SkipPreflight,
   [switch]$DryRun,
@@ -12,7 +13,12 @@ param(
   [string]$SummaryPath = "",
   [string]$AdbPath = "",
   [string]$PartialEvidenceDir = "",
-  [int]$BrowserWrapperSharedStateLockTimeoutSeconds = 1200
+  [int]$BrowserWrapperSharedStateLockTimeoutSeconds = 1200,
+  [string]$Esp32Port = "COM7",
+  [int]$Esp32Baud = 115200,
+  [int]$Esp32SerialSeconds = 45,
+  [int]$Esp32SerialCommandIndex = 0,
+  [switch]$Esp32SkipReset
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,6 +43,8 @@ $PreflightJsonPath = if ($IsPartialEvidenceRun) {
 }
 $PreflightEvidencePath = $PreflightJsonPath
 $WebReadinessEvidencePath = Join-Path $PartialEvidenceDir "web-readiness.json"
+$Esp32SerialLogPath = Join-Path $PartialEvidenceDir "esp32-serial-level4.log"
+$Esp32SerialResultJsonPath = Join-Path $PartialEvidenceDir "esp32-serial-level4.json"
 $ReportPathProvided = -not [string]::IsNullOrWhiteSpace($ReportPath)
 $SummaryPathProvided = -not [string]::IsNullOrWhiteSpace($SummaryPath)
 
@@ -147,6 +155,8 @@ function New-FullLoopPlan {
   $PhoneEvidencePath = if ($IncludePhone) { $PhoneEvidenceFile } else { "__phone_not_run__.json" }
   $ChromeEvidencePath = if ($IncludeChrome) { $ChromeEvidenceFile } else { "__chrome_not_run__.json" }
   $ResolvedPreflightEvidencePath = if ($SkipPreflight) { "__dev_env_not_run__.json" } else { $PreflightEvidencePath }
+  $ResolvedEsp32SerialLogPath = if ($IncludeEsp32Serial) { $Esp32SerialLogPath } else { "__esp32_serial_not_run__.log" }
+  $ResolvedEsp32SerialResultJsonPath = if ($IncludeEsp32Serial) { $Esp32SerialResultJsonPath } else { "__esp32_serial_not_run__.json" }
   $RunGlobalEvidenceSelfTests = (-not $SkipDesktop) -and $IncludePhone -and $IncludeChrome
 
   return [pscustomobject]@{
@@ -169,6 +179,8 @@ function New-FullLoopPlan {
       preflightJsonPath = Convert-ToPlanPath $PreflightJsonPath
       preflightEvidencePath = Convert-ToPlanPath $ResolvedPreflightEvidencePath
       webReadinessEvidencePath = Convert-ToPlanPath $WebReadinessEvidencePath
+      esp32SerialLogPath = Convert-ToPlanPath $ResolvedEsp32SerialLogPath
+      esp32SerialResultJsonPath = Convert-ToPlanPath $ResolvedEsp32SerialResultJsonPath
     }
     evidence = [pscustomobject]@{
       desktopJson = Convert-ToPlanPath $DesktopEvidencePath
@@ -192,6 +204,22 @@ function New-FullLoopPlan {
       webReadiness = [pscustomobject]@{
         httpProbeBeforePortReuse = $true
         stalePortBlocksDuplicateStart = $true
+      }
+      esp32Serial = [pscustomobject]@{
+        run = [bool]$IncludeEsp32Serial
+        firmwareFlowRequired = [bool]$IncludeEsp32Serial
+        requireInteraction = [bool]$IncludeEsp32Serial
+        autoSerialLevel4 = [bool]$IncludeEsp32Serial
+      }
+    }
+    hardware = [pscustomobject]@{
+      esp32Serial = [pscustomobject]@{
+        run = [bool]$IncludeEsp32Serial
+        port = $Esp32Port
+        baud = $Esp32Baud
+        seconds = $Esp32SerialSeconds
+        serialCommandIndex = $Esp32SerialCommandIndex
+        skipReset = [bool]$Esp32SkipReset
       }
     }
   }
@@ -306,6 +334,34 @@ function Test-PortListening {
   return $null -ne $Connection
 }
 
+function Get-ApiBindHost {
+  if ($IncludeEsp32Serial) {
+    return "0.0.0.0"
+  }
+
+  return "127.0.0.1"
+}
+
+function Get-LanApiHealthUrls {
+  $Addresses = @(
+    Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+      Where-Object { $_.IPAddress -notmatch "^(127\.|169\.254\.)" } |
+      Select-Object -ExpandProperty IPAddress -Unique
+  )
+
+  return @($Addresses | ForEach-Object { "http://$($_):$ApiPort/health" })
+}
+
+function Get-ReachableLanApiHealthUrl {
+  foreach ($HealthUrl in Get-LanApiHealthUrls) {
+    if (Test-HttpOk $HealthUrl) {
+      return $HealthUrl
+    }
+  }
+
+  return ""
+}
+
 function Test-ApiVisionContract {
   $Body = '{"room":"living room","camera":"phone","text_hint":"\u665a\u4e0a\u6709\u70b9\u7d2f\uff0c\u5750\u5728\u5ba2\u5385\u6c99\u53d1\u4e0a\uff0c\u5ba4\u5185\u5149\u7ebf\u504f\u6697"}'
   $Client = $null
@@ -330,6 +386,8 @@ function Test-ApiVisionContract {
 }
 
 function Stop-StaleApiIfManaged {
+  param([string]$Reason = "failed the vision contract")
+
   $Connections = @(Get-NetTCPConnection -LocalPort $ApiPort -State Listen -ErrorAction SilentlyContinue)
   if ($Connections.Count -eq 0) {
     return
@@ -340,13 +398,13 @@ function Stop-StaleApiIfManaged {
   $CommandLine = $ProcessInfo.CommandLine
 
   if ($CommandLine -match "uvicorn" -and $CommandLine -match "app\.main:app") {
-    Write-Warning "API on port $ApiPort failed the vision contract; restarting stale uvicorn process $ProcessId."
+    Write-Warning "API on port $ApiPort $Reason; restarting managed uvicorn process $ProcessId."
     Stop-Process -Id $ProcessId -Force
     Wait-PortClosed $ApiPort
     return
   }
 
-  throw "API on port $ApiPort failed the vision contract and is not a managed uvicorn app: $CommandLine"
+  throw "API on port $ApiPort $Reason and is not a managed uvicorn app: $CommandLine"
 }
 
 function Start-Api {
@@ -361,10 +419,12 @@ function Start-Api {
     }
   }
 
-  Write-Host "Starting API on port $ApiPort..."
+  $ApiBindHost = Get-ApiBindHost
+
+  Write-Host "Starting API on ${ApiBindHost}:$ApiPort..."
   Start-Process `
     -FilePath (Join-Path $ApiDir ".venv\Scripts\python.exe") `
-    -ArgumentList "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$ApiPort" `
+    -ArgumentList "-m", "uvicorn", "app.main:app", "--host", $ApiBindHost, "--port", "$ApiPort" `
     -WorkingDirectory $ApiDir `
     -WindowStyle Hidden
 
@@ -378,6 +438,13 @@ function Invoke-CheckedScript {
     [int]$TimeoutSeconds = $StepTimeoutSeconds
   )
 
+  $ChildLogDir = Join-Path $PartialEvidenceDir "child-process-logs"
+  New-Item -ItemType Directory -Force -Path $ChildLogDir | Out-Null
+  $SafeName = $Name -replace '[^A-Za-z0-9_.-]', '-'
+  $ChildLogId = [guid]::NewGuid().ToString("N").Substring(0, 8)
+  $StdoutPath = Join-Path $ChildLogDir ("{0}-{1}.out.txt" -f $SafeName, $ChildLogId)
+  $StderrPath = Join-Path $ChildLogDir ("{0}-{1}.err.txt" -f $SafeName, $ChildLogId)
+
   $Process = New-Object System.Diagnostics.Process
   $Process.StartInfo.FileName = "powershell"
   $Process.StartInfo.Arguments = Join-ProcessArguments $Arguments
@@ -387,20 +454,44 @@ function Invoke-CheckedScript {
   $Process.StartInfo.RedirectStandardError = $true
   $Process.StartInfo.CreateNoWindow = $true
 
-  [void]$Process.Start()
+  $StdoutStream = [System.IO.File]::Create($StdoutPath)
+  $StderrStream = [System.IO.File]::Create($StderrPath)
+  $StdoutCopyTask = $null
+  $StderrCopyTask = $null
 
-  if (-not $Process.WaitForExit($TimeoutSeconds * 1000)) {
-    Stop-ProcessTree -ProcessId $Process.Id
-    Write-ScriptLogText -Text $Process.StandardOutput.ReadToEnd()
-    Write-ScriptLogText -Text $Process.StandardError.ReadToEnd()
-    throw "$Name timed out after $TimeoutSeconds seconds."
+  try {
+    [void]$Process.Start()
+    $StdoutCopyTask = $Process.StandardOutput.BaseStream.CopyToAsync($StdoutStream)
+    $StderrCopyTask = $Process.StandardError.BaseStream.CopyToAsync($StderrStream)
+
+    if (-not $Process.WaitForExit($TimeoutSeconds * 1000)) {
+      Stop-ProcessTree -ProcessId $Process.Id
+      Wait-TaskOrIgnore -Task $StdoutCopyTask -TimeoutMilliseconds 3000
+      Wait-TaskOrIgnore -Task $StderrCopyTask -TimeoutMilliseconds 3000
+      Close-Stream -Stream ([ref]$StdoutStream)
+      Close-Stream -Stream ([ref]$StderrStream)
+      Write-ScriptLogFile -Path $StdoutPath
+      Write-ScriptLogFile -Path $StderrPath
+      throw "$Name timed out after $TimeoutSeconds seconds."
+    }
+
+    $Process.WaitForExit()
+    $Process.Refresh()
+    Wait-TaskOrIgnore -Task $StdoutCopyTask -TimeoutMilliseconds 5000
+    Wait-TaskOrIgnore -Task $StderrCopyTask -TimeoutMilliseconds 5000
+    Close-Stream -Stream ([ref]$StdoutStream)
+    Close-Stream -Stream ([ref]$StderrStream)
+    Write-ScriptLogFile -Path $StdoutPath
+    Write-ScriptLogFile -Path $StderrPath
+
+    if ($Process.ExitCode -ne 0) {
+      throw "$Name failed with exit code $($Process.ExitCode)."
+    }
   }
-
-  Write-ScriptLogText -Text $Process.StandardOutput.ReadToEnd()
-  Write-ScriptLogText -Text $Process.StandardError.ReadToEnd()
-
-  if ($Process.ExitCode -ne 0) {
-    throw "$Name failed with exit code $($Process.ExitCode)."
+  finally {
+    Close-Stream -Stream ([ref]$StdoutStream)
+    Close-Stream -Stream ([ref]$StderrStream)
+    $Process.Dispose()
   }
 }
 
@@ -443,6 +534,53 @@ function Write-ScriptLogText {
   }
 }
 
+function Write-ScriptLogFile {
+  param([string]$Path)
+
+  if (Test-Path -LiteralPath $Path) {
+    Write-ScriptLogText -Text (Get-Content -Raw -LiteralPath $Path)
+  }
+}
+
+function Wait-TaskOrIgnore {
+  param(
+    $Task,
+    [int]$TimeoutMilliseconds
+  )
+
+  if ($null -eq $Task) {
+    return
+  }
+
+  try {
+    [void]$Task.Wait($TimeoutMilliseconds)
+  }
+  catch {
+  }
+}
+
+function Close-Stream {
+  param([ref]$Stream)
+
+  if ($null -eq $Stream.Value) {
+    return
+  }
+
+  try {
+    $Stream.Value.Flush()
+  }
+  catch {
+  }
+
+  try {
+    $Stream.Value.Dispose()
+  }
+  catch {
+  }
+
+  $Stream.Value = $null
+}
+
 function Ensure-Api {
   if (Test-HttpOk "$ApiBase/health") {
     Write-Host "API already running: $ApiBase"
@@ -451,7 +589,7 @@ function Ensure-Api {
       return
     }
 
-    Stop-StaleApiIfManaged
+    Stop-StaleApiIfManaged -Reason "failed the vision contract"
   }
 
   Start-Api
@@ -459,6 +597,29 @@ function Ensure-Api {
     throw "API started, but /vision/scene did not pass the Chinese scene contract."
   }
   Write-Host "API vision contract ready."
+}
+
+function Ensure-ApiLanReachableForEsp32 {
+  if (-not $IncludeEsp32Serial) {
+    return
+  }
+
+  $LanHealthUrl = Get-ReachableLanApiHealthUrl
+  if ($LanHealthUrl) {
+    Write-Host "API LAN health ready for ESP32: $LanHealthUrl"
+    return
+  }
+
+  Stop-StaleApiIfManaged -Reason "is not reachable on any non-loopback IPv4 address for ESP32 serial gate"
+  Start-Api
+
+  $LanHealthUrl = Get-ReachableLanApiHealthUrl
+  if (-not $LanHealthUrl) {
+    $Candidates = (Get-LanApiHealthUrls) -join ", "
+    throw "API is not reachable on a LAN IPv4 address for ESP32 serial gate. Checked: $Candidates"
+  }
+
+  Write-Host "API LAN health ready for ESP32: $LanHealthUrl"
 }
 
 function Ensure-Web {
@@ -516,6 +677,7 @@ else {
 }
 
 Ensure-Api
+Ensure-ApiLanReachableForEsp32
 Ensure-Web
 
 $env:FULL_LOOP_RUN_ID = $FullLoopRunId
@@ -627,6 +789,39 @@ try {
 finally {
   Remove-Item Env:\FULL_LOOP_RUN_ID -ErrorAction SilentlyContinue
   Pop-Location
+}
+
+if ($IncludeEsp32Serial) {
+  Invoke-CheckedScript "ESP32 firmware flow" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$PSScriptRoot\check-firmware-flow.ps1", "-Required")
+
+  $Esp32SerialArgs = @(
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "$PSScriptRoot\check-esp32-serial-log.ps1",
+    "-Port",
+    $Esp32Port,
+    "-Baud",
+    "$Esp32Baud",
+    "-Seconds",
+    "$Esp32SerialSeconds",
+    "-AutoSerialLevel4",
+    "-SerialCommandIndex",
+    "$Esp32SerialCommandIndex",
+    "-RequireInteraction",
+    "-Required",
+    "-SaveLogPath",
+    $Esp32SerialLogPath,
+    "-ResultJsonPath",
+    $Esp32SerialResultJsonPath
+  )
+  if ($Esp32SkipReset) {
+    $Esp32SerialArgs += "-SkipReset"
+  }
+
+  $Esp32SerialTimeoutSeconds = [Math]::Max($StepTimeoutSeconds, $Esp32SerialSeconds + 30)
+  Invoke-CheckedScript "ESP32 serial level 4" $Esp32SerialArgs -TimeoutSeconds $Esp32SerialTimeoutSeconds
 }
 
 Write-Host "Full loop check complete."

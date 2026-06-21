@@ -72,7 +72,21 @@ function Assert-PartialPath {
   Assert-StartsWith $Actual ("assets/tmp/full-loop-partial/{0}/" -f $RunId) $Message
 }
 
+function Assert-PlanManifest {
+  param(
+    [object]$Plan,
+    [string]$Message
+  )
+
+  Assert-True ($null -ne $Plan.hardware) "$Message should expose hardware planning."
+  Assert-True ($null -ne $Plan.hardware.esp32Serial) "$Message should expose ESP32 serial hardware planning."
+  Assert-True ($null -ne $Plan.gates.esp32Serial) "$Message should expose ESP32 serial gates."
+  Assert-True ($null -ne $Plan.outputs.esp32SerialLogPath) "$Message should expose ESP32 serial log output."
+  Assert-True ($null -ne $Plan.outputs.esp32SerialResultJsonPath) "$Message should expose ESP32 serial result output."
+}
+
 $DefaultPartial = Invoke-Plan @()
+Assert-PlanManifest $DefaultPartial "Default run"
 Assert-True $DefaultPartial.partialEvidenceRun "Default run should be treated as partial evidence."
 Assert-True $DefaultPartial.requestedLoops.desktop "Default run should include desktop."
 Assert-True (-not $DefaultPartial.requestedLoops.phone) "Default run should not include phone."
@@ -85,12 +99,17 @@ Assert-PartialPath $DefaultPartial.outputs.reportPath $DefaultPartial.runId "Def
 Assert-PartialPath $DefaultPartial.outputs.summaryPath $DefaultPartial.runId "Default summary path should be per-run partial output."
 Assert-PartialPath $DefaultPartial.outputs.preflightJsonPath $DefaultPartial.runId "Default preflight JSON should be per-run partial output."
 Assert-PartialPath $DefaultPartial.outputs.webReadinessEvidencePath $DefaultPartial.runId "Default web readiness evidence should be per-run partial output."
+Assert-Equal $DefaultPartial.outputs.esp32SerialLogPath "__esp32_serial_not_run__.log" "Default ESP32 serial log should use sentinel."
+Assert-Equal $DefaultPartial.outputs.esp32SerialResultJsonPath "__esp32_serial_not_run__.json" "Default ESP32 serial result should use sentinel."
 Assert-PartialPath $DefaultPartial.evidence.desktopJson $DefaultPartial.runId "Default desktop evidence should be per-run partial output."
 Assert-PartialPath $DefaultPartial.evidence.desktopScreenshotDir $DefaultPartial.runId "Default desktop screenshots should be per-run partial output."
 Assert-Equal $DefaultPartial.evidence.phoneJson "__phone_not_run__.json" "Default phone evidence should use sentinel."
 Assert-Equal $DefaultPartial.evidence.windowsChromeJson "__chrome_not_run__.json" "Default Chrome evidence should use sentinel."
+Assert-True (-not $DefaultPartial.gates.esp32Serial.run) "Default run should not run ESP32 serial gate."
+Assert-True (-not $DefaultPartial.hardware.esp32Serial.run) "Default hardware plan should not run ESP32 serial gate."
 
 $Full = Invoke-Plan @("-IncludePhone", "-IncludeChrome")
+Assert-PlanManifest $Full "Complete run"
 Assert-True (-not $Full.partialEvidenceRun) "Complete desktop+phone+Chrome run should not be partial."
 Assert-Equal $Full.outputs.reportPath "assets/demo/full-loop-report.md" "Complete run should write the demo report."
 Assert-Equal $Full.outputs.summaryPath "assets/demo/full-loop-report.json" "Complete run should write the demo summary."
@@ -104,8 +123,27 @@ Assert-Equal $Full.evidence.windowsChromeScreenshotDir "assets/demo/windows-chro
 Assert-True $Full.gates.reportSelftest "Complete run should enable report selftest."
 Assert-True $Full.gates.phoneSelftest "Complete run should enable phone selftest."
 Assert-True $Full.gates.desktopAndSummarySelftests "Complete run should enable desktop and summary selftests."
+Assert-Equal $Full.outputs.esp32SerialLogPath "__esp32_serial_not_run__.log" "Complete run without ESP32 should use ESP32 log sentinel."
+Assert-Equal $Full.outputs.esp32SerialResultJsonPath "__esp32_serial_not_run__.json" "Complete run without ESP32 should use ESP32 result sentinel."
+
+$FullWithEsp32 = Invoke-Plan @("-IncludePhone", "-IncludeChrome", "-IncludeEsp32Serial", "-Esp32Port", "COM9", "-Esp32SerialSeconds", "12", "-Esp32SerialCommandIndex", "2", "-Esp32SkipReset")
+Assert-PlanManifest $FullWithEsp32 "Complete ESP32 run"
+Assert-True (-not $FullWithEsp32.partialEvidenceRun) "Complete ESP32 run should keep the browser evidence shape complete."
+Assert-True $FullWithEsp32.gates.esp32Serial.run "Complete ESP32 run should enable ESP32 serial gate."
+Assert-True $FullWithEsp32.gates.esp32Serial.firmwareFlowRequired "Complete ESP32 run should require firmware flow."
+Assert-True $FullWithEsp32.gates.esp32Serial.requireInteraction "Complete ESP32 run should require interaction markers."
+Assert-True $FullWithEsp32.gates.esp32Serial.autoSerialLevel4 "Complete ESP32 run should use the automatic Level 4 serial route."
+Assert-True $FullWithEsp32.hardware.esp32Serial.run "Complete ESP32 hardware plan should mark the serial gate as running."
+Assert-Equal $FullWithEsp32.hardware.esp32Serial.port "COM9" "Complete ESP32 run should preserve custom serial port."
+Assert-Equal $FullWithEsp32.hardware.esp32Serial.baud 115200 "Complete ESP32 run should preserve default baud."
+Assert-Equal $FullWithEsp32.hardware.esp32Serial.seconds 12 "Complete ESP32 run should preserve custom serial duration."
+Assert-Equal $FullWithEsp32.hardware.esp32Serial.serialCommandIndex 2 "Complete ESP32 run should preserve command index."
+Assert-True $FullWithEsp32.hardware.esp32Serial.skipReset "Complete ESP32 run should preserve skip-reset."
+Assert-PartialPath $FullWithEsp32.outputs.esp32SerialLogPath $FullWithEsp32.runId "Complete ESP32 serial log should be in the run temp directory."
+Assert-PartialPath $FullWithEsp32.outputs.esp32SerialResultJsonPath $FullWithEsp32.runId "Complete ESP32 serial result should be in the run temp directory."
 
 $ChromeOnly = Invoke-Plan @("-SkipPreflight", "-SkipDesktop", "-IncludeChrome")
+Assert-PlanManifest $ChromeOnly "Chrome-only run"
 Assert-True $ChromeOnly.partialEvidenceRun "Chrome-only run should be partial."
 Assert-True (-not $ChromeOnly.gates.preflightRun) "Chrome-only skip-preflight run should not run preflight."
 Assert-True $ChromeOnly.gates.summaryAllowSkipDesktop "Chrome-only run should allow skipped desktop in summary check."
@@ -118,6 +156,7 @@ Assert-PartialPath $ChromeOnly.evidence.windowsChromeScreenshotDir $ChromeOnly.r
 Assert-True (-not $ChromeOnly.gates.desktopAndSummarySelftests) "Chrome-only run should skip desktop/summary selftests when desktop is skipped."
 
 $PhoneOnly = Invoke-Plan @("-SkipDesktop", "-IncludePhone")
+Assert-PlanManifest $PhoneOnly "Phone-only run"
 Assert-True $PhoneOnly.partialEvidenceRun "Phone-only run should be partial."
 Assert-True (-not $PhoneOnly.requestedLoops.desktop) "Phone-only run should skip desktop."
 Assert-True $PhoneOnly.requestedLoops.phone "Phone-only run should include phone."
@@ -133,6 +172,7 @@ Assert-PartialPath $PhoneOnly.outputs.reportPath $PhoneOnly.runId "Phone-only re
 Assert-PartialPath $PhoneOnly.evidence.phoneJson $PhoneOnly.runId "Phone-only evidence should be per-run partial output."
 
 $PhoneChromeOnly = Invoke-Plan @("-SkipDesktop", "-IncludePhone", "-IncludeChrome")
+Assert-PlanManifest $PhoneChromeOnly "Phone+Chrome-only run"
 Assert-True $PhoneChromeOnly.partialEvidenceRun "Phone+Chrome without desktop should be partial."
 Assert-True (-not $PhoneChromeOnly.requestedLoops.desktop) "Phone+Chrome without desktop should skip desktop."
 Assert-True $PhoneChromeOnly.requestedLoops.phone "Phone+Chrome without desktop should include phone."
@@ -150,6 +190,7 @@ Assert-PartialPath $PhoneChromeOnly.evidence.phoneJson $PhoneChromeOnly.runId "P
 Assert-PartialPath $PhoneChromeOnly.evidence.windowsChromeJson $PhoneChromeOnly.runId "Phone+Chrome without desktop Chrome evidence should be per-run partial output."
 
 $DesktopChrome = Invoke-Plan @("-IncludeChrome")
+Assert-PlanManifest $DesktopChrome "Desktop+Chrome run"
 Assert-True $DesktopChrome.partialEvidenceRun "Desktop+Chrome without phone should be partial."
 Assert-True $DesktopChrome.requestedLoops.desktop "Desktop+Chrome run should include desktop."
 Assert-True $DesktopChrome.requestedLoops.windowsChrome "Desktop+Chrome run should include Windows Chrome."
@@ -165,6 +206,7 @@ Assert-PartialPath $DesktopChrome.evidence.desktopJson $DesktopChrome.runId "Des
 Assert-PartialPath $DesktopChrome.evidence.windowsChromeJson $DesktopChrome.runId "Desktop+Chrome Chrome evidence should be per-run partial output."
 
 $DesktopPhone = Invoke-Plan @("-IncludePhone")
+Assert-PlanManifest $DesktopPhone "Desktop+phone run"
 Assert-True $DesktopPhone.partialEvidenceRun "Desktop+phone without Windows Chrome should be partial."
 Assert-True $DesktopPhone.requestedLoops.desktop "Desktop+phone run should include desktop."
 Assert-True $DesktopPhone.requestedLoops.phone "Desktop+phone run should include phone."
@@ -180,26 +222,32 @@ Assert-PartialPath $DesktopPhone.evidence.desktopJson $DesktopPhone.runId "Deskt
 Assert-PartialPath $DesktopPhone.evidence.phoneJson $DesktopPhone.runId "Desktop+phone phone evidence should be per-run partial output."
 
 $CustomReport = Invoke-Plan @("-ReportPath", "assets/tmp/custom-loop/custom-report.md")
+Assert-PlanManifest $CustomReport "Custom report run"
 Assert-True $CustomReport.partialEvidenceRun "Custom report default run should still be partial."
 Assert-Equal $CustomReport.outputs.reportPath "assets/tmp/custom-loop/custom-report.md" "Custom report path should be honored."
 Assert-Equal $CustomReport.outputs.summaryPath "assets/tmp/custom-loop/custom-report.json" "Summary path should follow custom report path when not provided."
 Assert-PartialPath $CustomReport.evidence.desktopJson $CustomReport.runId "Custom report should not move default partial evidence out of the run directory."
 
 $CustomSummary = Invoke-Plan @("-ReportPath", "assets/tmp/custom-loop/report.md", "-SummaryPath", "assets/tmp/custom-loop/summary.json")
+Assert-PlanManifest $CustomSummary "Custom summary run"
 Assert-Equal $CustomSummary.outputs.reportPath "assets/tmp/custom-loop/report.md" "Explicit custom report path should be honored."
 Assert-Equal $CustomSummary.outputs.summaryPath "assets/tmp/custom-loop/summary.json" "Explicit custom summary path should be honored."
 
 $CustomPartialDir = Invoke-Plan @("-IncludeChrome", "-PartialEvidenceDir", "assets/tmp/custom-loop/evidence")
+Assert-PlanManifest $CustomPartialDir "Custom partial evidence dir run"
 Assert-True $CustomPartialDir.partialEvidenceRun "Custom partial evidence dir run should still be partial."
 Assert-Equal $CustomPartialDir.outputs.partialEvidenceDir "assets/tmp/custom-loop/evidence" "Custom partial evidence dir should be honored."
 Assert-Equal $CustomPartialDir.outputs.preflightJsonPath "assets/tmp/custom-loop/evidence/dev-env-check.json" "Custom partial evidence dir should hold preflight JSON."
 Assert-Equal $CustomPartialDir.outputs.webReadinessEvidencePath "assets/tmp/custom-loop/evidence/web-readiness.json" "Custom partial evidence dir should hold web readiness JSON."
+Assert-Equal $CustomPartialDir.outputs.esp32SerialLogPath "__esp32_serial_not_run__.log" "Custom partial evidence dir without ESP32 should use ESP32 log sentinel."
+Assert-Equal $CustomPartialDir.outputs.esp32SerialResultJsonPath "__esp32_serial_not_run__.json" "Custom partial evidence dir without ESP32 should use ESP32 result sentinel."
 Assert-Equal $CustomPartialDir.evidence.desktopJson "assets/tmp/custom-loop/evidence/desktop-loop.json" "Custom partial evidence dir should hold desktop JSON."
 Assert-Equal $CustomPartialDir.evidence.windowsChromeJson "assets/tmp/custom-loop/evidence/chrome-loop.json" "Custom partial evidence dir should hold Chrome JSON."
 Assert-Equal $CustomPartialDir.evidence.desktopScreenshotDir "assets/tmp/custom-loop/evidence/playwright-chromium-screens" "Custom partial evidence dir should hold desktop screenshots."
 Assert-Equal $CustomPartialDir.evidence.windowsChromeScreenshotDir "assets/tmp/custom-loop/evidence/windows-chrome-screens" "Custom partial evidence dir should hold Chrome screenshots."
 
 $CustomLockTimeout = Invoke-Plan @("-BrowserWrapperSharedStateLockTimeoutSeconds", "42")
+Assert-PlanManifest $CustomLockTimeout "Custom lock timeout run"
 Assert-Equal $CustomLockTimeout.gates.browserWrapperSharedStateLock.name "Global\HCEdgeBrowserLoopGate" "Custom browser wrapper shared-state lock name."
 Assert-Equal $CustomLockTimeout.gates.browserWrapperSharedStateLock.timeoutSeconds 42 "Custom browser wrapper shared-state lock timeout."
 
