@@ -52,6 +52,7 @@ Write-Host "Checking HomeCue Edge full-loop path planning..."
 Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\selftest-full-loop-path-plan.ps1" }
 Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\selftest-browser-wrapper-paths.ps1" }
 Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\selftest-computer-loop-plan.ps1" }
+Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\selftest-device-loop-plan.ps1" }
 Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\selftest-browser-evidence-plan.ps1" }
 Push-Location "$PSScriptRoot\..\apps\web"
 try {

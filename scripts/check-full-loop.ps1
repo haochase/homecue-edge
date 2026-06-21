@@ -7,6 +7,7 @@ param(
   [switch]$SkipDesktop,
   [switch]$SkipPreflight,
   [switch]$DryRun,
+  [switch]$IsolateEvidence,
   [int]$StartupTimeoutSeconds = 60,
   [int]$StepTimeoutSeconds = 180,
   [string]$ReportPath = "",
@@ -30,13 +31,14 @@ $ApiPort = [System.Uri]$ApiBase | Select-Object -ExpandProperty Port
 $WebPort = [System.Uri]$AppUrl | Select-Object -ExpandProperty Port
 $FullLoopRunId = "full-loop-{0:yyyyMMdd-HHmmss}-{1}" -f (Get-Date), ([guid]::NewGuid().ToString("N").Substring(0, 8))
 $IsPartialEvidenceRun = $SkipDesktop -or (-not $IncludePhone) -or (-not $IncludeChrome)
+$UseRunEvidenceDir = $IsPartialEvidenceRun -or $IsolateEvidence
 if (-not $PartialEvidenceDir) {
   $PartialEvidenceDir = Join-Path $Root ("assets\tmp\full-loop-partial\{0}" -f $FullLoopRunId)
 }
 elseif (-not [System.IO.Path]::IsPathRooted($PartialEvidenceDir)) {
   $PartialEvidenceDir = Join-Path $Root $PartialEvidenceDir
 }
-$PreflightJsonPath = if ($IsPartialEvidenceRun) {
+$PreflightJsonPath = if ($UseRunEvidenceDir) {
   Join-Path $PartialEvidenceDir "dev-env-check.json"
 } else {
   Join-Path $Root "assets\tmp\dev-env-check.json"
@@ -93,7 +95,7 @@ if ($IncludePhone) {
   $AdbPath = Resolve-AdbExecutable -ExplicitPath $AdbPath
 }
 
-if ($IsPartialEvidenceRun) {
+if ($UseRunEvidenceDir) {
   $DesktopEvidenceFile = Join-Path $PartialEvidenceDir "desktop-loop.json"
   $PhoneEvidenceFile = Join-Path $PartialEvidenceDir "phone-loop.json"
   $ChromeEvidenceFile = Join-Path $PartialEvidenceDir "chrome-loop.json"
@@ -111,6 +113,8 @@ else {
 if (-not $ReportPathProvided) {
   $ReportPath = if ($IsPartialEvidenceRun) {
     Join-Path $PartialEvidenceDir "full-loop-report.md"
+  } elseif ($IsolateEvidence) {
+    Join-Path $PartialEvidenceDir "full-loop-report.md"
   } else {
     Join-Path $Root "assets\demo\full-loop-report.md"
   }
@@ -123,6 +127,8 @@ if (-not $SummaryPathProvided) {
   $SummaryPath = if ($ReportPathProvided) {
     [System.IO.Path]::ChangeExtension($ReportPath, ".json")
   } elseif ($IsPartialEvidenceRun) {
+    Join-Path $PartialEvidenceDir "full-loop-report.json"
+  } elseif ($IsolateEvidence) {
     Join-Path $PartialEvidenceDir "full-loop-report.json"
   } else {
     Join-Path $Root "assets\demo\full-loop-report.json"
@@ -162,6 +168,7 @@ function New-FullLoopPlan {
   return [pscustomobject]@{
     runId = $FullLoopRunId
     partialEvidenceRun = [bool]$IsPartialEvidenceRun
+    isolatedEvidenceRun = [bool]$UseRunEvidenceDir
     requestedLoops = [pscustomobject]@{
       desktop = -not [bool]$SkipDesktop
       phone = [bool]$IncludePhone
@@ -169,6 +176,7 @@ function New-FullLoopPlan {
     }
     options = [pscustomobject]@{
       skipPreflight = [bool]$SkipPreflight
+      isolateEvidence = [bool]$IsolateEvidence
       reportPathProvided = [bool]$ReportPathProvided
       summaryPathProvided = [bool]$SummaryPathProvided
     }

@@ -88,6 +88,8 @@ function Assert-PlanManifest {
 $DefaultPartial = Invoke-Plan @()
 Assert-PlanManifest $DefaultPartial "Default run"
 Assert-True $DefaultPartial.partialEvidenceRun "Default run should be treated as partial evidence."
+Assert-True $DefaultPartial.isolatedEvidenceRun "Default run should write isolated run evidence."
+Assert-True (-not $DefaultPartial.options.isolateEvidence) "Default run should not require explicit isolated evidence."
 Assert-True $DefaultPartial.requestedLoops.desktop "Default run should include desktop."
 Assert-True (-not $DefaultPartial.requestedLoops.phone) "Default run should not include phone."
 Assert-True (-not $DefaultPartial.requestedLoops.windowsChrome) "Default run should not include Windows Chrome."
@@ -111,6 +113,8 @@ Assert-True (-not $DefaultPartial.hardware.esp32Serial.run) "Default hardware pl
 $Full = Invoke-Plan @("-IncludePhone", "-IncludeChrome")
 Assert-PlanManifest $Full "Complete run"
 Assert-True (-not $Full.partialEvidenceRun) "Complete desktop+phone+Chrome run should not be partial."
+Assert-True (-not $Full.isolatedEvidenceRun) "Complete desktop+phone+Chrome run should keep demo evidence by default."
+Assert-True (-not $Full.options.isolateEvidence) "Complete run should not isolate evidence unless requested."
 Assert-Equal $Full.outputs.reportPath "assets/demo/full-loop-report.md" "Complete run should write the demo report."
 Assert-Equal $Full.outputs.summaryPath "assets/demo/full-loop-report.json" "Complete run should write the demo summary."
 Assert-Equal $Full.outputs.preflightJsonPath "assets/tmp/dev-env-check.json" "Complete run should use the shared preflight JSON path."
@@ -129,6 +133,7 @@ Assert-Equal $Full.outputs.esp32SerialResultJsonPath "__esp32_serial_not_run__.j
 $FullWithEsp32 = Invoke-Plan @("-IncludePhone", "-IncludeChrome", "-IncludeEsp32Serial", "-Esp32Port", "COM9", "-Esp32SerialSeconds", "12", "-Esp32SerialCommandIndex", "2", "-Esp32SkipReset")
 Assert-PlanManifest $FullWithEsp32 "Complete ESP32 run"
 Assert-True (-not $FullWithEsp32.partialEvidenceRun) "Complete ESP32 run should keep the browser evidence shape complete."
+Assert-True (-not $FullWithEsp32.isolatedEvidenceRun) "Complete ESP32 run should keep demo browser evidence by default."
 Assert-True $FullWithEsp32.gates.esp32Serial.run "Complete ESP32 run should enable ESP32 serial gate."
 Assert-True $FullWithEsp32.gates.esp32Serial.firmwareFlowRequired "Complete ESP32 run should require firmware flow."
 Assert-True $FullWithEsp32.gates.esp32Serial.requireInteraction "Complete ESP32 run should require interaction markers."
@@ -141,6 +146,21 @@ Assert-Equal $FullWithEsp32.hardware.esp32Serial.serialCommandIndex 2 "Complete 
 Assert-True $FullWithEsp32.hardware.esp32Serial.skipReset "Complete ESP32 run should preserve skip-reset."
 Assert-PartialPath $FullWithEsp32.outputs.esp32SerialLogPath $FullWithEsp32.runId "Complete ESP32 serial log should be in the run temp directory."
 Assert-PartialPath $FullWithEsp32.outputs.esp32SerialResultJsonPath $FullWithEsp32.runId "Complete ESP32 serial result should be in the run temp directory."
+
+$FullWithIsolatedEvidence = Invoke-Plan @("-IncludePhone", "-IncludeChrome", "-IncludeEsp32Serial", "-IsolateEvidence", "-PartialEvidenceDir", "assets/tmp/custom-loop/device-evidence")
+Assert-PlanManifest $FullWithIsolatedEvidence "Complete isolated ESP32 run"
+Assert-True (-not $FullWithIsolatedEvidence.partialEvidenceRun) "Complete isolated ESP32 run should keep the browser evidence shape complete."
+Assert-True $FullWithIsolatedEvidence.isolatedEvidenceRun "Complete isolated ESP32 run should write isolated run evidence."
+Assert-True $FullWithIsolatedEvidence.options.isolateEvidence "Complete isolated ESP32 run should preserve the isolate option."
+Assert-Equal $FullWithIsolatedEvidence.outputs.partialEvidenceDir "assets/tmp/custom-loop/device-evidence" "Complete isolated ESP32 run should honor custom evidence dir."
+Assert-Equal $FullWithIsolatedEvidence.outputs.reportPath "assets/tmp/custom-loop/device-evidence/full-loop-report.md" "Complete isolated ESP32 report should be in the evidence dir."
+Assert-Equal $FullWithIsolatedEvidence.outputs.summaryPath "assets/tmp/custom-loop/device-evidence/full-loop-report.json" "Complete isolated ESP32 summary should be in the evidence dir."
+Assert-Equal $FullWithIsolatedEvidence.outputs.preflightJsonPath "assets/tmp/custom-loop/device-evidence/dev-env-check.json" "Complete isolated ESP32 preflight JSON should be in the evidence dir."
+Assert-Equal $FullWithIsolatedEvidence.evidence.desktopJson "assets/tmp/custom-loop/device-evidence/desktop-loop.json" "Complete isolated ESP32 desktop evidence should be in the evidence dir."
+Assert-Equal $FullWithIsolatedEvidence.evidence.phoneJson "assets/tmp/custom-loop/device-evidence/phone-loop.json" "Complete isolated ESP32 phone evidence should be in the evidence dir."
+Assert-Equal $FullWithIsolatedEvidence.evidence.windowsChromeJson "assets/tmp/custom-loop/device-evidence/chrome-loop.json" "Complete isolated ESP32 Chrome evidence should be in the evidence dir."
+Assert-Equal $FullWithIsolatedEvidence.outputs.esp32SerialLogPath "assets/tmp/custom-loop/device-evidence/esp32-serial-level4.log" "Complete isolated ESP32 serial log should be in the evidence dir."
+Assert-Equal $FullWithIsolatedEvidence.outputs.esp32SerialResultJsonPath "assets/tmp/custom-loop/device-evidence/esp32-serial-level4.json" "Complete isolated ESP32 serial result should be in the evidence dir."
 
 $ChromeOnly = Invoke-Plan @("-SkipPreflight", "-SkipDesktop", "-IncludeChrome")
 Assert-PlanManifest $ChromeOnly "Chrome-only run"

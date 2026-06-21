@@ -21,7 +21,7 @@ new files before they are staged.
 Runs the public-repo scan, patch whitespace check, API dependency install,
 Python compile, API tests, the firmware flow contract check, full-loop path
 planning self-test, browser evidence dry-run planning self-test, computer-loop
-dry-run planning self-test, then web dependency install, lint, and build. This
+and device-loop dry-run planning self-tests, then web dependency install, lint, and build. This
 is the main local gate and mirrors CI for software checks while also catching
 firmware contract drift.
 The API pytest step uses a repo-local cache and basetemp under ignored
@@ -69,10 +69,14 @@ Starts the FastAPI edge gateway on `http://127.0.0.1:8723` and the Vite web cons
 .\scripts\check-computer-loop.ps1 -ResultJsonPath .\assets\tmp\computer-loop-check-latest.json
 .\scripts\check-computer-loop.ps1 -SelfTest
 .\scripts\check-computer-loop.ps1 -DryRun
+.\scripts\check-device-loop.ps1
+.\scripts\check-device-loop-latest.ps1 -SelfTest -MaxAgeMinutes 30
+.\scripts\check-device-loop.ps1 -DryRun
 .\scripts\check-desktop-loop.ps1 -DryRun
 .\scripts\check-chrome-loop.ps1 -DryRun
 .\scripts\selftest-browser-wrapper-paths.ps1
 .\scripts\selftest-computer-loop-plan.ps1
+.\scripts\selftest-device-loop-plan.ps1
 .\scripts\selftest-full-loop-path-plan.ps1
 npm --prefix apps/web run computer:result:check -- ..\..\assets\tmp\computer-loop-check.json
 npm --prefix apps/web run computer:result:check -- ..\..\assets\tmp\computer-loop-check-latest.json
@@ -152,12 +156,33 @@ results keep the same narrow failure manifest. Keep
 custom report, summary, and browser evidence result paths inside `-OutputDir`;
 the result checker rejects split output roots.
 
+Use `check-device-loop.ps1` for the highest-automation physical-device proof
+when an Android handset and ESP32 hardware are connected. It delegates to
+`check-full-loop.ps1 -IncludePhone -IncludeChrome -IncludeEsp32Serial
+-IsolateEvidence`, writes isolated report, summary, browser JSON, ESP32 serial
+log, and ESP32 result JSON under `assets/tmp/device-loop/<run-id>/`, then
+revalidates saved desktop + phone + Windows Chrome evidence through
+`check-browser-evidence.ps1 -RequireDesktop -RequirePhone -RequireChrome` and
+revalidates the saved ESP32 serial log through
+`check-esp32-serial-log.ps1 -LogPath ... -RequireInteraction -Required`. The
+wrapper writes `assets/tmp/device-loop-check.json` by default; use
+`check-device-loop-latest.ps1` to force the stable
+`assets/tmp/device-loop-check-latest.json` path for a handoff or demo. The
+compact `proofSummary` includes desktop, phone, Chrome, browser-parity,
+front-camera, speech, text-integrity, screenshot, source-state, and ESP32
+saved-log proof paths. `selftest-device-loop-plan.ps1` covers that dry-run
+contract without starting browsers, ADB, or serial hardware.
+
 Starts the API and Vite dev server when they are not already listening, then
 runs the requested desktop, phone, and Windows Chrome loops. Complete desktop +
 phone + Windows Chrome runs write `assets/demo/full-loop-report.md` and the
-machine-readable `assets/demo/full-loop-report.json` summary. Partial runs,
-including desktop-only or Chrome-only smoke checks, default to an ignored
-per-run folder under `assets/tmp/full-loop-partial/<run-id>/`. Add
+machine-readable `assets/demo/full-loop-report.json` summary by default. Pass
+`-IsolateEvidence` when a complete physical-device run should keep its report,
+summary, desktop/phone/Chrome JSON, screenshots, preflight JSON, web-readiness
+JSON, and ESP32 serial proof under the `-PartialEvidenceDir` run folder instead
+of overwriting demo artifacts. Partial runs, including desktop-only or
+Chrome-only smoke checks, default to an ignored per-run folder under
+`assets/tmp/full-loop-partial/<run-id>/`. Add
 `-IncludeChrome` to verify an isolated Windows Chrome profile, and add
 `-IncludePhone` to run the Android Chrome phone loop after the desktop loop when
 an unlocked USB-debugging phone is connected; the phone wrapper closes old
