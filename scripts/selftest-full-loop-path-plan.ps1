@@ -15,6 +15,26 @@ function Invoke-Plan {
   return ($Output -join [Environment]::NewLine) | ConvertFrom-Json
 }
 
+function Invoke-FullLoopExpectFailure {
+  param([string[]]$Arguments)
+
+  $PreviousErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $Output = & powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\check-full-loop.ps1" @Arguments 2>&1
+    $ExitCode = $LASTEXITCODE
+  }
+  finally {
+    $ErrorActionPreference = $PreviousErrorActionPreference
+  }
+
+  if ($ExitCode -eq 0) {
+    throw "check-full-loop.ps1 should have failed: $($Arguments -join ' ')"
+  }
+
+  return (($Output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine)
+}
+
 function Assert-True {
   param(
     [bool]$Condition,
@@ -35,6 +55,18 @@ function Assert-Equal {
 
   if ($Actual -ne $Expected) {
     throw ("{0} Expected '{1}', got '{2}'." -f $Message, $Expected, $Actual)
+  }
+}
+
+function Assert-Contains {
+  param(
+    [string]$Actual,
+    [string]$Expected,
+    [string]$Message
+  )
+
+  if (-not $Actual.Contains($Expected)) {
+    throw ("{0} Expected '{1}' to contain '{2}'." -f $Message, $Actual, $Expected)
   }
 }
 
@@ -86,6 +118,9 @@ function Assert-PlanManifest {
   Assert-True ($null -ne $Plan.outputs.esp32SerialRecheckResultJsonPath) "$Message should expose ESP32 serial recheck result output."
 }
 
+$PhoneOptionConflict = Invoke-FullLoopExpectFailure @("-DryRun", "-IncludePhone", "-SkipPhone")
+Assert-Contains $PhoneOptionConflict "-IncludePhone and -SkipPhone cannot be used together." "Phone include/skip conflict should fail early."
+
 $DefaultPartial = Invoke-Plan @()
 Assert-PlanManifest $DefaultPartial "Default run"
 Assert-True $DefaultPartial.partialEvidenceRun "Default run should be treated as partial evidence."
@@ -114,6 +149,23 @@ Assert-True $DefaultPartial.gates.summaryRequirePhone "Default run should requir
 Assert-True $DefaultPartial.gates.phoneSelftest "Default run should enable phone selftest."
 Assert-True (-not $DefaultPartial.gates.esp32Serial.run) "Default run should not run ESP32 serial gate."
 Assert-True (-not $DefaultPartial.hardware.esp32Serial.run) "Default hardware plan should not run ESP32 serial gate."
+
+$DesktopOnlySkipPhone = Invoke-Plan @("-SkipPhone")
+Assert-PlanManifest $DesktopOnlySkipPhone "Desktop-only skip-phone run"
+Assert-True $DesktopOnlySkipPhone.partialEvidenceRun "Desktop-only skip-phone run should be partial."
+Assert-True $DesktopOnlySkipPhone.isolatedEvidenceRun "Desktop-only skip-phone run should write isolated run evidence."
+Assert-True $DesktopOnlySkipPhone.options.skipPhone "Desktop-only skip-phone run should preserve explicit phone skip."
+Assert-True $DesktopOnlySkipPhone.requestedLoops.desktop "Desktop-only skip-phone run should include desktop."
+Assert-True (-not $DesktopOnlySkipPhone.requestedLoops.phone) "Desktop-only skip-phone run should not include phone."
+Assert-True (-not $DesktopOnlySkipPhone.requestedLoops.windowsChrome) "Desktop-only skip-phone run should not include Windows Chrome."
+Assert-True $DesktopOnlySkipPhone.gates.preflightRun "Desktop-only skip-phone run should still run preflight."
+Assert-True (-not $DesktopOnlySkipPhone.gates.summaryRequirePhone) "Desktop-only skip-phone run should not require phone in summary check."
+Assert-True (-not $DesktopOnlySkipPhone.gates.phoneSelftest) "Desktop-only skip-phone run should not enable phone selftest."
+Assert-Equal $DesktopOnlySkipPhone.evidence.phoneJson "__phone_not_run__.json" "Desktop-only skip-phone run should use phone sentinel."
+Assert-Equal $DesktopOnlySkipPhone.evidence.windowsChromeJson "__chrome_not_run__.json" "Desktop-only skip-phone run should use Chrome sentinel."
+Assert-PartialPath $DesktopOnlySkipPhone.outputs.reportPath $DesktopOnlySkipPhone.runId "Desktop-only skip-phone report should be per-run partial output."
+Assert-PartialPath $DesktopOnlySkipPhone.outputs.summaryPath $DesktopOnlySkipPhone.runId "Desktop-only skip-phone summary should be per-run partial output."
+Assert-PartialPath $DesktopOnlySkipPhone.evidence.desktopJson $DesktopOnlySkipPhone.runId "Desktop-only skip-phone desktop evidence should be per-run partial output."
 
 $Full = Invoke-Plan @("-IncludeChrome")
 Assert-PlanManifest $Full "Complete run"

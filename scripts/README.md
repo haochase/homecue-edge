@@ -207,7 +207,7 @@ Chrome-only smoke checks, default to an ignored per-run folder under
 `assets/tmp/full-loop-partial/<run-id>/`. Add `-SkipPhone` only for
 computer-only smoke checks when no Android handset should be used. By default,
 `check-full-loop.ps1` runs the Android Chrome phone loop after the desktop loop,
-so an unlocked USB-debugging Xiaomi 11 should be connected unless you explicitly
+so an authorized USB-debugging Android test handset should be connected unless you explicitly
 skip phone proof. Add `-IncludeChrome` to verify an isolated Windows Chrome
 profile; the phone wrapper closes old
 HomeCue/local test tabs from previous runs before opening the current target
