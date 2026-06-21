@@ -531,6 +531,20 @@ const cases = [
     },
   },
   {
+    name: 'full-loop-skip-phone-missing',
+    expectedError: 'plan.commands.fullLoop.args must include -SkipPhone for computer-only checks.',
+    mutate: (result) => {
+      result.plan.commands.fullLoop.args = result.plan.commands.fullLoop.args.filter((arg) => arg !== '-SkipPhone')
+    },
+  },
+  {
+    name: 'full-loop-skip-phone-gate-missing',
+    expectedError: 'plan.gates.fullLoopSkipPhone must be true for computer-only checks.',
+    mutate: (result) => {
+      result.plan.gates.fullLoopSkipPhone = false
+    },
+  },
+  {
     name: 'browser-evidence-phone-required',
     expectedError: 'browserEvidence.plan.requiredEvidence.phone must be false.',
     mutate: (result) => {
@@ -1333,6 +1347,16 @@ const cases = [
     },
   },
   {
+    name: 'report-external-sync-boundary-missing',
+    expectedError:
+      'report Demo Talking Points section must include "- The desktop external sync proof uses an API-simulated room-terminal event; real ESP32 serial proof is captured only by the device loop gate.".',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, async (summary) => {
+        await writeReport(resolveRepoPath(result.plan.outputs.reportPath), summary, { omitExternalSyncBoundary: true })
+      })
+    },
+  },
+  {
     name: 'raw-desktop-run-id-mismatch',
     expectedError: 'desktop raw evidence.runId must match summary.runId.',
     prepare: async (result, name) => {
@@ -1954,6 +1978,7 @@ function createResult({
     'Bypass',
     '-File',
     'scripts/check-full-loop.ps1',
+    '-SkipPhone',
     '-IncludeChrome',
     '-StartupTimeoutSeconds',
     '60',
@@ -2012,6 +2037,7 @@ function createResult({
     gates: {
       fullLoopIncludeChrome: true,
       fullLoopIncludePhone: false,
+      fullLoopSkipPhone: true,
       browserEvidenceRequireDesktop: true,
       browserEvidenceRequireChrome: true,
       browserEvidenceRequirePhone: false,
@@ -2369,7 +2395,7 @@ async function assertAsciiSafeJsonIsRequired() {
   console.log('PASS negative case: computer-result-ascii-safe-json-required')
 }
 
-async function writeReport(file, summary) {
+async function writeReport(file, summary, { omitExternalSyncBoundary = false } = {}) {
   await writeText(
     file,
     [
@@ -2405,8 +2431,35 @@ async function writeReport(file, summary) {
       '',
       ...formatManifest(summary.evidence?.files),
       '',
+      '## Demo Talking Points',
+      '',
+      ...formatDemoTalkingPoints(summary, { omitExternalSyncBoundary }),
+      '',
     ].join('\n'),
   )
+}
+
+function formatDemoTalkingPoints(summary, { omitExternalSyncBoundary = false } = {}) {
+  const points = [
+    '- The loop verifies the HomeCue assistant path across desktop web, Windows Chrome, the edge API, and simulated room-terminal execution.',
+    '- Phone proof was not run in this report; run the full loop with phone enabled for Android camera and speech coverage.',
+    '- The desktop proof covers propose-only planning, web confirmation, offline fallback, and ESP32-style external confirmation sync.',
+    '- Browser parity is pass between the desktop browser targets.',
+  ]
+  if (!omitExternalSyncBoundary) {
+    points.splice(
+      3,
+      0,
+      '- The desktop external sync proof uses an API-simulated room-terminal event; real ESP32 serial proof is captured only by the device loop gate.',
+    )
+  }
+  if (summary?.environment?.preflight?.run === true) {
+    points.push('- The environment preflight records host, browser, port, ADB, and authorized-phone readiness before browser automation starts.')
+  }
+  if (summary?.environment?.webReadiness?.run === true) {
+    points.push('- The web readiness proof records whether the loop reused a ready Vite server or waited on a stale web port before browser automation.')
+  }
+  return points
 }
 
 function formatLoop(loop) {

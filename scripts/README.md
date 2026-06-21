@@ -58,10 +58,10 @@ Starts the FastAPI edge gateway on `http://127.0.0.1:8723` and the Vite web cons
 
 ```powershell
 .\scripts\check-full-loop.ps1
-.\scripts\check-full-loop.ps1 -IncludePhone
-.\scripts\check-full-loop.ps1 -IncludeChrome -IncludePhone
-.\scripts\check-full-loop.ps1 -IncludeChrome -IncludePhone -StepTimeoutSeconds 180
-.\scripts\check-full-loop.ps1 -IncludeChrome -IncludePhone -IncludeEsp32Serial -Esp32Port COM7 -Esp32SerialSeconds 45
+.\scripts\check-full-loop.ps1 -SkipPhone
+.\scripts\check-full-loop.ps1 -IncludeChrome
+.\scripts\check-full-loop.ps1 -IncludeChrome -StepTimeoutSeconds 180
+.\scripts\check-full-loop.ps1 -IncludeChrome -IncludeEsp32Serial -Esp32Port COM7 -Esp32SerialSeconds 45
 .\scripts\check-full-loop.ps1 -DryRun
 .\scripts\check-computer-loop.ps1
 .\scripts\check-computer-loop-latest.ps1
@@ -92,8 +92,9 @@ npm --prefix apps/web run device:result:selftest
 ```
 
 Use `check-computer-loop.ps1` for the highest-automation computer-side check
-when no phone hardware is needed. It runs `check-full-loop.ps1 -IncludeChrome`
-against bundled Chromium and installed Windows Chrome, writes isolated
+when no phone hardware is needed. It runs
+`check-full-loop.ps1 -SkipPhone -IncludeChrome` against bundled Chromium and
+installed Windows Chrome, writes isolated
 computer-loop evidence under `assets/tmp/computer-loop/<run-id>/`, then
 revalidates the saved desktop + Windows Chrome evidence through
 `check-browser-evidence.ps1 -RequireDesktop -RequireChrome`. It also writes a
@@ -107,7 +108,7 @@ and source mode, and the report/summary/browser-evidence paths plus raw
 desktop/Chrome/phone/dev-env/web-readiness JSON and screenshot directories.
 Computer-only runs record the skipped phone path as `__phone_not_run__.json`;
 this proof is intentionally desktop + Chrome only and does not replace a
-`-IncludePhone` capture or ESP32 serial hardware proof.
+default `check-full-loop.ps1` phone capture or ESP32 serial hardware proof.
 The desktop and Windows Chrome browser loops verify ESP32-style execution sync
 through an API-simulated room-terminal event with
 `sourceMode=api-simulated-room-terminal`; real ESP32 serial proof is only
@@ -203,14 +204,16 @@ summary, desktop/phone/Chrome JSON, screenshots, preflight JSON, web-readiness
 JSON, and ESP32 serial proof under the `-PartialEvidenceDir` run folder instead
 of overwriting demo artifacts. Partial runs, including desktop-only or
 Chrome-only smoke checks, default to an ignored per-run folder under
-`assets/tmp/full-loop-partial/<run-id>/`. Add
-`-IncludeChrome` to verify an isolated Windows Chrome profile, and add
-`-IncludePhone` to run the Android Chrome phone loop after the desktop loop when
-an unlocked USB-debugging phone is connected; the phone wrapper closes old
+`assets/tmp/full-loop-partial/<run-id>/`. Add `-SkipPhone` only for
+computer-only smoke checks when no Android handset should be used. By default,
+`check-full-loop.ps1` runs the Android Chrome phone loop after the desktop loop,
+so an unlocked USB-debugging Xiaomi 11 should be connected unless you explicitly
+skip phone proof. Add `-IncludeChrome` to verify an isolated Windows Chrome
+profile; the phone wrapper closes old
 HomeCue/local test tabs from previous runs before opening the current target
 and then validates the raw phone JSON with `npm run phone:evidence:check`.
 The full-loop wrapper runs `check-dev-env.ps1 -Required` before starting browser
-automation, and adds `-RequirePhone` when `-IncludePhone` is set. Use
+automation, and adds `-RequirePhone` unless `-SkipPhone` is set. Use
 `-SkipPreflight` only when an equivalent preflight has already verified the
 current host, browser, and phone state. The generated JSON summary includes the
 preflight result and validates the raw `assets/tmp/dev-env-check.json` manifest
@@ -237,8 +240,8 @@ runtime Chrome user-agent major version with the executable product major
 version. The report step validates the required JSON evidence before exiting
 successfully, so a missing or failed desktop, Chrome, or phone loop cannot be
 hidden by a generated Markdown summary.
-When `-SkipDesktop`
-or optional phone/Chrome checks are omitted, the wrapper passes an explicit
+When `-SkipDesktop`, `-SkipPhone`, or optional Chrome checks are used, the
+wrapper passes an explicit
 `__*_not_run__.json` sentinel so old evidence from a previous run is not reused.
 Skipped desktop or Chrome screenshot directories also use explicit
 `__*_screens_not_run__` sentinels for the same reason.
@@ -256,8 +259,9 @@ starts from racing `/execute` and `/execution/latest` state.
 Use `-DryRun` to print the planned paths, sentinels, and self-test gates as JSON
 without starting services or touching ADB/Chrome. The
 `selftest-full-loop-path-plan.ps1` script exercises that dry-run mode for
-desktop-only, complete desktop + phone + Chrome, Chrome-only skip-preflight, and
-custom report/summary paths; `selftest-browser-wrapper-paths.ps1` verifies the
+default desktop + phone, complete desktop + phone + Chrome, explicit
+`-SkipPhone` computer-only, Chrome-only skip-preflight, and custom
+report/summary paths; `selftest-browser-wrapper-paths.ps1` verifies the
 direct desktop/Chrome wrapper output and screenshot path contracts without
 hardware.
 Each full-loop run also stamps desktop, phone, and Chrome JSON evidence with a
@@ -298,7 +302,7 @@ validator against generated bad loop JSON, including root/checks field-boundary
 regressions; `-IncludeChrome` also runs it automatically. The
 `phone:evidence:selftest` command replays the phone raw
 evidence validator against generated bad phone JSON for front-camera,
-localized-text, and ESP32-sync regressions; `-IncludePhone` runs it
+localized-text, and ESP32-sync regressions; any non-skipped phone run runs it
 automatically.
 Use `npm run summary:selftest -- <summary-json>` to target an isolated partial
 or computer-loop summary instead of the default demo summary.
@@ -312,7 +316,11 @@ on `0.0.0.0:8723` before running the hardware gate. It then runs
 `check-esp32-serial-log.ps1 -AutoSerialLevel4 -RequireInteraction -Required`.
 The serial gate sends `homecue:plan N`, waits for a `/plan` proposal, sends
 `homecue:execute`, and saves the proof log plus result JSON under the full-loop
-run directory. Without `-IncludeEsp32Serial`, the dry-run plan records explicit
+run directory. It immediately revalidates that saved serial log with
+`check-esp32-serial-log.ps1 -LogPath ... -RequireInteraction -Required` and
+writes a second recheck result JSON, so the full-loop hardware proof includes
+both live capture and saved-log replay. Without `-IncludeEsp32Serial`, the
+dry-run plan records explicit
 `__esp32_serial_not_run__` sentinels so hardware proof cannot be implied by
 browser evidence.
 

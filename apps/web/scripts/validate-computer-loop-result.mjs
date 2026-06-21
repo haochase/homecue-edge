@@ -362,6 +362,7 @@ function validateGates(errors, gates) {
     [
       'fullLoopIncludeChrome',
       'fullLoopIncludePhone',
+      'fullLoopSkipPhone',
       'browserEvidenceRequireDesktop',
       'browserEvidenceRequireChrome',
       'browserEvidenceRequirePhone',
@@ -373,6 +374,7 @@ function validateGates(errors, gates) {
   )
   if (gates.fullLoopIncludeChrome !== true) errors.push('plan.gates.fullLoopIncludeChrome must be true.')
   if (gates.fullLoopIncludePhone !== false) errors.push('plan.gates.fullLoopIncludePhone must be false.')
+  if (gates.fullLoopSkipPhone !== true) errors.push('plan.gates.fullLoopSkipPhone must be true for computer-only checks.')
   if (gates.browserEvidenceRequireDesktop !== true) {
     errors.push('plan.gates.browserEvidenceRequireDesktop must be true.')
   }
@@ -394,6 +396,7 @@ function validateCommands(errors, commands) {
   validateAllowedKeys(errors, commands, ['fullLoop', 'browserEvidence'], 'plan.commands')
   validateCommand(errors, commands.fullLoop, 'plan.commands.fullLoop', [
     'check-full-loop.ps1',
+    '-SkipPhone',
     '-IncludeChrome',
     '-BrowserWrapperSharedStateLockTimeoutSeconds',
     '-PartialEvidenceDir',
@@ -409,6 +412,9 @@ function validateCommands(errors, commands) {
 
   if (arrayContains(commands.fullLoop?.args, '-IncludePhone')) {
     errors.push('plan.commands.fullLoop.args must not include -IncludePhone for computer-only checks.')
+  }
+  if (!arrayContains(commands.fullLoop?.args, '-SkipPhone')) {
+    errors.push('plan.commands.fullLoop.args must include -SkipPhone for computer-only checks.')
   }
   if (arrayContains(commands.browserEvidence?.args, '-RequirePhone')) {
     errors.push('plan.commands.browserEvidence.args must not include -RequirePhone for computer-only checks.')
@@ -460,6 +466,14 @@ function validatePlanConsistency(errors, plan, validatedResultFile) {
     gates.fullLoopIncludePhone === true,
     'plan.commands.fullLoop -IncludePhone',
     'plan.gates.fullLoopIncludePhone',
+  )
+  validateCommandFlag(
+    errors,
+    commands.fullLoop?.args,
+    '-SkipPhone',
+    gates.fullLoopSkipPhone === true,
+    'plan.commands.fullLoop -SkipPhone',
+    'plan.gates.fullLoopSkipPhone',
   )
   validateCommandFlag(
     errors,
@@ -1532,6 +1546,7 @@ function validateReportEvidence(errors, report, summary) {
   validateReportLoopSection(errors, report, 'Desktop Browser', summary.loops?.desktop)
   validateReportLoopSection(errors, report, 'Windows Chrome', summary.loops?.windowsChrome)
   validateReportManifest(errors, report, summary.evidence?.files)
+  validateReportTalkingPoints(errors, report, summary)
 }
 
 function formatDevEnvPreflight(value) {
@@ -1568,6 +1583,23 @@ function validateReportLoopSection(errors, report, heading, loop) {
     if (!section.includes(line)) {
       errors.push(`report ${heading} section must include "${line}".`)
     }
+  }
+}
+
+function validateReportTalkingPoints(errors, report, summary) {
+  const section = markdownSection(report, 'Demo Talking Points')
+  if (!section) {
+    errors.push('report must include "## Demo Talking Points".')
+    return
+  }
+
+  const hasDesktopBrowserLoop = summary?.loops?.desktop?.run === true || summary?.loops?.windowsChrome?.run === true
+  if (!hasDesktopBrowserLoop) return
+
+  const expectedLine =
+    '- The desktop external sync proof uses an API-simulated room-terminal event; real ESP32 serial proof is captured only by the device loop gate.'
+  if (!section.includes(expectedLine)) {
+    errors.push(`report Demo Talking Points section must include "${expectedLine}".`)
   }
 }
 

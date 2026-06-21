@@ -203,6 +203,7 @@ function New-ComputerLoopPlan {
     $AppUrl,
     "-ApiBase",
     $ApiBase,
+    "-SkipPhone",
     "-IncludeChrome",
     "-StartupTimeoutSeconds",
     "$StartupTimeoutSeconds",
@@ -269,6 +270,7 @@ function New-ComputerLoopPlan {
     gates = [pscustomobject]@{
       fullLoopIncludeChrome = $true
       fullLoopIncludePhone = $false
+      fullLoopSkipPhone = $true
       browserEvidenceRequireDesktop = $true
       browserEvidenceRequireChrome = $true
       browserEvidenceRequirePhone = $false

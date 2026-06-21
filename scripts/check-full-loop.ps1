@@ -2,6 +2,7 @@ param(
   [string]$AppUrl = "http://127.0.0.1:5173",
   [string]$ApiBase = "http://127.0.0.1:8723",
   [switch]$IncludePhone,
+  [switch]$SkipPhone,
   [switch]$IncludeChrome,
   [switch]$IncludeEsp32Serial,
   [switch]$SkipDesktop,
@@ -30,7 +31,11 @@ $WebDir = Join-Path $Root "apps\web"
 $ApiPort = [System.Uri]$ApiBase | Select-Object -ExpandProperty Port
 $WebPort = [System.Uri]$AppUrl | Select-Object -ExpandProperty Port
 $FullLoopRunId = "full-loop-{0:yyyyMMdd-HHmmss}-{1}" -f (Get-Date), ([guid]::NewGuid().ToString("N").Substring(0, 8))
-$IsPartialEvidenceRun = $SkipDesktop -or (-not $IncludePhone) -or (-not $IncludeChrome)
+if ($IncludePhone -and $SkipPhone) {
+  throw "-IncludePhone and -SkipPhone cannot be used together."
+}
+$RunPhone = -not [bool]$SkipPhone
+$IsPartialEvidenceRun = $SkipDesktop -or (-not $RunPhone) -or (-not $IncludeChrome)
 $UseRunEvidenceDir = $IsPartialEvidenceRun -or $IsolateEvidence
 if (-not $PartialEvidenceDir) {
   $PartialEvidenceDir = Join-Path $Root ("assets\tmp\full-loop-partial\{0}" -f $FullLoopRunId)
@@ -47,6 +52,7 @@ $PreflightEvidencePath = $PreflightJsonPath
 $WebReadinessEvidencePath = Join-Path $PartialEvidenceDir "web-readiness.json"
 $Esp32SerialLogPath = Join-Path $PartialEvidenceDir "esp32-serial-level4.log"
 $Esp32SerialResultJsonPath = Join-Path $PartialEvidenceDir "esp32-serial-level4.json"
+$Esp32SerialRecheckResultJsonPath = Join-Path $PartialEvidenceDir "esp32-serial-saved-log-check.json"
 $ReportPathProvided = -not [string]::IsNullOrWhiteSpace($ReportPath)
 $SummaryPathProvided = -not [string]::IsNullOrWhiteSpace($SummaryPath)
 
@@ -91,7 +97,7 @@ function Resolve-AdbExecutable {
   return ""
 }
 
-if ($IncludePhone) {
+if ($RunPhone) {
   $AdbPath = Resolve-AdbExecutable -ExplicitPath $AdbPath
 }
 
@@ -158,12 +164,13 @@ function Convert-ToPlanPath {
 
 function New-FullLoopPlan {
   $DesktopEvidencePath = if ($SkipDesktop) { "__desktop_not_run__.json" } else { $DesktopEvidenceFile }
-  $PhoneEvidencePath = if ($IncludePhone) { $PhoneEvidenceFile } else { "__phone_not_run__.json" }
+  $PhoneEvidencePath = if ($RunPhone) { $PhoneEvidenceFile } else { "__phone_not_run__.json" }
   $ChromeEvidencePath = if ($IncludeChrome) { $ChromeEvidenceFile } else { "__chrome_not_run__.json" }
   $ResolvedPreflightEvidencePath = if ($SkipPreflight) { "__dev_env_not_run__.json" } else { $PreflightEvidencePath }
   $ResolvedEsp32SerialLogPath = if ($IncludeEsp32Serial) { $Esp32SerialLogPath } else { "__esp32_serial_not_run__.log" }
   $ResolvedEsp32SerialResultJsonPath = if ($IncludeEsp32Serial) { $Esp32SerialResultJsonPath } else { "__esp32_serial_not_run__.json" }
-  $RunGlobalEvidenceSelfTests = (-not $SkipDesktop) -and $IncludePhone -and $IncludeChrome
+  $ResolvedEsp32SerialRecheckResultJsonPath = if ($IncludeEsp32Serial) { $Esp32SerialRecheckResultJsonPath } else { "__esp32_serial_recheck_not_run__.json" }
+  $RunGlobalEvidenceSelfTests = (-not $SkipDesktop) -and $RunPhone -and $IncludeChrome
 
   return [pscustomobject]@{
     runId = $FullLoopRunId
@@ -171,10 +178,11 @@ function New-FullLoopPlan {
     isolatedEvidenceRun = [bool]$UseRunEvidenceDir
     requestedLoops = [pscustomobject]@{
       desktop = -not [bool]$SkipDesktop
-      phone = [bool]$IncludePhone
+      phone = [bool]$RunPhone
       windowsChrome = [bool]$IncludeChrome
     }
     options = [pscustomobject]@{
+      skipPhone = [bool]$SkipPhone
       skipPreflight = [bool]$SkipPreflight
       isolateEvidence = [bool]$IsolateEvidence
       reportPathProvided = [bool]$ReportPathProvided
@@ -189,6 +197,7 @@ function New-FullLoopPlan {
       webReadinessEvidencePath = Convert-ToPlanPath $WebReadinessEvidencePath
       esp32SerialLogPath = Convert-ToPlanPath $ResolvedEsp32SerialLogPath
       esp32SerialResultJsonPath = Convert-ToPlanPath $ResolvedEsp32SerialResultJsonPath
+      esp32SerialRecheckResultJsonPath = Convert-ToPlanPath $ResolvedEsp32SerialRecheckResultJsonPath
     }
     evidence = [pscustomobject]@{
       desktopJson = Convert-ToPlanPath $DesktopEvidencePath
@@ -200,10 +209,10 @@ function New-FullLoopPlan {
     gates = [pscustomobject]@{
       preflightRun = -not [bool]$SkipPreflight
       summaryAllowSkipDesktop = [bool]$SkipDesktop
-      summaryRequirePhone = [bool]$IncludePhone
+      summaryRequirePhone = [bool]$RunPhone
       summaryRequireChrome = [bool]$IncludeChrome
       reportSelftest = [bool]$RunGlobalEvidenceSelfTests
-      phoneSelftest = [bool]($IncludePhone -and (-not $SkipDesktop))
+      phoneSelftest = [bool]($RunPhone -and (-not $SkipDesktop))
       desktopAndSummarySelftests = [bool]($IncludeChrome -and (-not $SkipDesktop))
       browserWrapperSharedStateLock = [pscustomobject]@{
         name = "Global\HCEdgeBrowserLoopGate"
@@ -218,6 +227,7 @@ function New-FullLoopPlan {
         firmwareFlowRequired = [bool]$IncludeEsp32Serial
         requireInteraction = [bool]$IncludeEsp32Serial
         autoSerialLevel4 = [bool]$IncludeEsp32Serial
+        savedLogRecheck = [bool]$IncludeEsp32Serial
       }
     }
     hardware = [pscustomobject]@{
@@ -670,7 +680,7 @@ if (-not $SkipPreflight) {
     $PreflightJsonPath
   )
 
-  if ($IncludePhone) {
+  if ($RunPhone) {
     $PreflightArgs += "-RequirePhone"
     if ($AdbPath) {
       $PreflightArgs += "-AdbPath"
@@ -695,7 +705,7 @@ if (-not $SkipDesktop) {
   Invoke-CheckedScript "desktop loop" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$PSScriptRoot\check-desktop-loop.ps1", "-AppUrl", $AppUrl, "-ApiBase", $ApiBase, "-OutputPath", $DesktopEvidenceFile, "-ScreenshotDir", $DesktopScreenshotDir, "-SharedStateLockTimeoutSeconds", "$BrowserWrapperSharedStateLockTimeoutSeconds")
 }
 
-if ($IncludePhone) {
+if ($RunPhone) {
   $PhoneLoopArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "$PSScriptRoot\check-phone-loop.ps1", "-AppUrl", $AppUrl, "-ApiBase", $ApiBase, "-OutputPath", $PhoneEvidenceFile)
   if ($AdbPath) {
     $PhoneLoopArgs += "-AdbPath"
@@ -719,7 +729,7 @@ try {
   }
 
   $ReportArgs = @($ReportPath, $DesktopEvidencePath)
-  if ($IncludePhone) {
+  if ($RunPhone) {
     $ReportArgs += $PhoneEvidenceFile
   }
   else {
@@ -745,7 +755,7 @@ try {
   if ($SkipDesktop) {
     $SummaryCheckArgs += "--allow-skip-desktop"
   }
-  if ($IncludePhone) {
+  if ($RunPhone) {
     $SummaryCheckArgs += "--require-phone"
   }
   if ($IncludeChrome) {
@@ -757,7 +767,7 @@ try {
     throw "summary:check failed."
   }
 
-  $CanRunGlobalEvidenceSelfTests = (-not $SkipDesktop) -and $IncludePhone -and $IncludeChrome
+  $CanRunGlobalEvidenceSelfTests = (-not $SkipDesktop) -and $RunPhone -and $IncludeChrome
 
   if ($CanRunGlobalEvidenceSelfTests) {
     npm run report:selftest
@@ -769,13 +779,13 @@ try {
     Write-Host "Skipping report:selftest because this is not a complete desktop+phone+Chrome evidence run."
   }
 
-  if ($IncludePhone -and (-not $SkipDesktop)) {
+  if ($RunPhone -and (-not $SkipDesktop)) {
     npm run phone:evidence:selftest
     if ($LASTEXITCODE -ne 0) {
       throw "phone:evidence:selftest failed."
     }
   }
-  elseif ($IncludePhone) {
+  elseif ($RunPhone) {
     Write-Host "Skipping phone:evidence:selftest because desktop evidence was skipped."
   }
 
@@ -830,6 +840,20 @@ if ($IncludeEsp32Serial) {
 
   $Esp32SerialTimeoutSeconds = [Math]::Max($StepTimeoutSeconds, $Esp32SerialSeconds + 30)
   Invoke-CheckedScript "ESP32 serial level 4" $Esp32SerialArgs -TimeoutSeconds $Esp32SerialTimeoutSeconds
+
+  Invoke-CheckedScript "ESP32 saved serial log recheck" @(
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "$PSScriptRoot\check-esp32-serial-log.ps1",
+    "-LogPath",
+    $Esp32SerialLogPath,
+    "-RequireInteraction",
+    "-Required",
+    "-ResultJsonPath",
+    $Esp32SerialRecheckResultJsonPath
+  )
 }
 
 Write-Host "Full loop check complete."
