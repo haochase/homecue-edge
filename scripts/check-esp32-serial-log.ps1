@@ -135,6 +135,35 @@ function Write-Check {
   }
 }
 
+function ConvertTo-AsciiSafeJsonText {
+  param(
+    [Parameter(Mandatory = $true)]$Value,
+    [int]$Depth = 4
+  )
+
+  $Json = $Value | ConvertTo-Json -Depth $Depth
+  $JsonText = [string]::Join([Environment]::NewLine, @($Json))
+  return [regex]::Replace($JsonText, '[^\x00-\x7F]', {
+      param($Match)
+      '\u{0:x4}' -f [int][char]$Match.Value[0]
+    })
+}
+
+function Write-JsonFile {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)]$Value
+  )
+
+  $ResultDir = Split-Path -Parent $Path
+  if ($ResultDir -and -not (Test-Path -LiteralPath $ResultDir)) {
+    New-Item -ItemType Directory -Path $ResultDir | Out-Null
+  }
+
+  $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($Path, ((ConvertTo-AsciiSafeJsonText -Value $Value -Depth 4) + [Environment]::NewLine), $Utf8NoBom)
+}
+
 $Failures = New-Object System.Collections.Generic.List[string]
 $Checks = New-Object System.Collections.Generic.List[object]
 
@@ -178,11 +207,6 @@ Write-Check "execute confirmation" ($LogText -match "exec .+ -> accepted") "requ
 
 Write-Host ""
 if ($ResultJsonPath) {
-  $ResultDir = Split-Path -Parent $ResultJsonPath
-  if ($ResultDir -and -not (Test-Path -LiteralPath $ResultDir)) {
-    New-Item -ItemType Directory -Path $ResultDir | Out-Null
-  }
-
   $ResultPort = $Port
   $ResultBaud = $Baud
   $ResultSource = "serial"
@@ -205,7 +229,7 @@ if ($ResultJsonPath) {
     checks = [object[]]$Checks.ToArray()
   }
 
-  $Result | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $ResultJsonPath -Encoding UTF8
+  Write-JsonFile -Path $ResultJsonPath -Value $Result
   Write-Host ("Result : {0}" -f (Resolve-Path -LiteralPath $ResultJsonPath).Path)
 }
 

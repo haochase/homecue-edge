@@ -25,6 +25,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $Root = Resolve-Path "$PSScriptRoot\.."
+$WebDir = Join-Path $Root "apps\web"
 $DeviceLoopRunId = "device-loop-{0:yyyyMMdd-HHmmss}-{1}" -f (Get-Date), ([guid]::NewGuid().ToString("N").Substring(0, 8))
 $ResultJsonPathProvided = -not [string]::IsNullOrWhiteSpace($ResultJsonPath)
 $MaxAgeMinutesProvided = $PSBoundParameters.ContainsKey("MaxAgeMinutes")
@@ -622,6 +623,8 @@ function Invoke-CheckedScriptWithResult {
 function Invoke-PostProcessWithResult {
   param([Parameter(Mandatory = $true)]$Plan)
 
+  $script:DeviceLoopResultValidationFailureWritten = $false
+
   try {
     $BrowserEvidenceResult = Read-JsonFile $BrowserEvidenceResultJsonPath
     if ($BrowserEvidenceResult.success -ne $true) {
@@ -644,9 +647,34 @@ function Invoke-PostProcessWithResult {
     $ProofSummary = New-DeviceLoopProofSummary -Plan $Plan -Summary $Summary -BrowserEvidenceResult $BrowserEvidenceResult -Esp32SerialResult $Esp32SerialResult -Esp32SerialRecheckResult $Esp32SerialRecheckResult
 
     Write-JsonFile -Path $ResultJsonPath -Value (New-DeviceLoopResult -Plan $Plan -Mode "validate" -Success $true -BrowserEvidenceResult $BrowserEvidenceResult -Esp32SerialResult $Esp32SerialResult -Esp32SerialRecheckResult $Esp32SerialRecheckResult -ProofSummary $ProofSummary)
+    try {
+      $ValidationArgs = @("run", "device:result:check", "--", $ResultJsonPath)
+      if ($MaxAgeMinutesProvided) {
+        $ValidationArgs += @("--max-age-minutes", ([string]$MaxAgeMinutes))
+      }
+      Invoke-NpmChecked $ValidationArgs
+    }
+    catch {
+      $ValidationDisplay = if ($MaxAgeMinutesProvided) {
+        "npm run device:result:check -- $ResultJsonPath --max-age-minutes $MaxAgeMinutes"
+      } else {
+        "npm run device:result:check -- $ResultJsonPath"
+      }
+      $Failure = New-DeviceLoopFailure -Stage "result validation" -Command ([pscustomobject]@{
+          display = $ValidationDisplay
+        }) -ErrorRecord $_ -ExitCode $LASTEXITCODE
+      Write-JsonFile -Path $ResultJsonPath -Value (New-DeviceLoopResult -Plan $Plan -Mode "failed" -Success $false -Failure $Failure)
+      $script:DeviceLoopResultValidationFailureWritten = $true
+      throw
+    }
+
     return $ProofSummary
   }
   catch {
+    if ($script:DeviceLoopResultValidationFailureWritten -eq $true) {
+      throw
+    }
+
     $ErrorRecord = $_
     $Failure = New-DeviceLoopFailure -Stage "result validation" -Command ([pscustomobject]@{
         display = "post-process device loop evidence"
@@ -654,6 +682,21 @@ function Invoke-PostProcessWithResult {
     Write-JsonFile -Path $ResultJsonPath -Value (New-DeviceLoopResult -Plan $Plan -Mode "failed" -Success $false -Failure $Failure)
     Write-Error "post-process device loop evidence failed: $($ErrorRecord.Exception.Message)" -ErrorAction Continue
     throw
+  }
+}
+
+function Invoke-NpmChecked {
+  param([string[]]$Arguments)
+
+  Push-Location $WebDir
+  try {
+    npm @Arguments
+    if ($LASTEXITCODE -ne 0) {
+      throw "npm command failed: npm $($Arguments -join ' ')"
+    }
+  }
+  finally {
+    Pop-Location
   }
 }
 

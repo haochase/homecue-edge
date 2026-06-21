@@ -46,6 +46,7 @@ finally {
 if (-not $SkipFirmware) {
   Write-Host "Checking HomeCue Edge firmware flow..."
   Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\check-firmware-flow.ps1" -Required }
+  Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\selftest-esp32-serial-result-json.ps1" }
 }
 
 Write-Host "Checking HomeCue Edge full-loop path planning..."
@@ -64,6 +65,7 @@ try {
   Invoke-Checked { npm run result-validator-cli:selftest }
   Invoke-Checked { npm run browser:evidence-result:selftest }
   Invoke-Checked { npm run computer:result:selftest }
+  Invoke-Checked { npm run device:result:selftest }
 }
 finally {
   Pop-Location

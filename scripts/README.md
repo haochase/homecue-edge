@@ -82,8 +82,13 @@ npm --prefix apps/web run computer:result:check -- ..\..\assets\tmp\computer-loo
 npm --prefix apps/web run computer:result:check -- ..\..\assets\tmp\computer-loop-check-latest.json
 npm --prefix apps/web run computer:result:check:latest -- --max-age-minutes 30
 npm --prefix apps/web run computer:result:check:latest
+npm --prefix apps/web run device:result:check -- ..\..\assets\tmp\device-loop-check.json
+npm --prefix apps/web run device:result:check -- ..\..\assets\tmp\device-loop-check-latest.json
+npm --prefix apps/web run device:result:check:latest -- --max-age-minutes 30
+npm --prefix apps/web run device:result:check:latest
 npm --prefix apps/web run result-validator-cli:selftest
 npm --prefix apps/web run computer:result:selftest
+npm --prefix apps/web run device:result:selftest
 ```
 
 Use `check-computer-loop.ps1` for the highest-automation computer-side check
@@ -170,8 +175,18 @@ wrapper writes `assets/tmp/device-loop-check.json` by default; use
 `assets/tmp/device-loop-check-latest.json` path for a handoff or demo. The
 compact `proofSummary` includes desktop, phone, Chrome, browser-parity,
 front-camera, speech, text-integrity, screenshot, source-state, and ESP32
-saved-log proof paths. `selftest-device-loop-plan.ps1` covers that dry-run
-contract without starting browsers, ADB, or serial hardware.
+saved-log proof paths. The wrapper validates that saved result JSON before
+returning success. `npm run device:result:check` verifies the full-loop command
+still includes phone, Windows Chrome, ESP32 serial, and isolated evidence gates,
+checks the referenced report/summary/browser-evidence files, compares embedded
+browser evidence with the referenced JSON, requires phone evidence in the nested
+browser proof, and rechecks both the live ESP32 serial result JSON and saved-log
+result JSON against the captured serial log markers. Add `--max-age-minutes N`
+to reject stale saved device-loop results during demos or handoffs.
+`selftest-device-loop-plan.ps1` covers the dry-run contract without starting
+browsers, ADB, or serial hardware, and `device:result:selftest` replays positive
+and negative saved-result cases for source-state drift, missing device gates,
+missing phone evidence, ESP32 serial failures, and missing serial log markers.
 
 Starts the API and Vite dev server when they are not already listening, then
 runs the requested desktop, phone, and Windows Chrome loops. Complete desktop +
@@ -410,6 +425,11 @@ Reads a short 115200-baud serial log from the board after upload. Close Arduino 
 .\scripts\check-esp32-serial-log.ps1 -Port COM7 -Seconds 60 -SkipReset -RequireInteraction -SendCommand "homecue:plan 0","homecue:execute" -SendAfterSeconds 25 -SaveLogPath .\assets\demo\esp32-level4.log -ResultJsonPath .\assets\demo\esp32-level4-check.json -Required
 .\scripts\check-esp32-serial-log.ps1 -Port COM7 -Seconds 90 -SkipReset -RequireInteraction -AutoSerialLevel4 -SerialCommandIndex 0 -SaveLogPath .\assets\demo\esp32-level4.log -ResultJsonPath .\assets\demo\esp32-level4-check.json -Required
 .\scripts\check-esp32-serial-log.ps1 -LogPath .\sample-esp32.log -Required
+.\scripts\selftest-esp32-serial-result-json.ps1
 ```
 
 Reads and checks ESP32 serial output for the HomeCue boot banner, button-route mode, Wi-Fi connection, and `/health` gateway probe. Add `-RequireInteraction` when capturing the Level 4 hardware loop so KEY1/BOOT, voice, or serial-test `/plan` and KEY2/serial-test `/execute` markers become required checks. Use `-AutoSerialLevel4` for unattended proof capture: it sends `homecue:plan N`, waits until `[/plan] proposed ...` appears, then sends `homecue:execute`. Use `-SendCommand` for lower-level manual command injection, `-SaveLogPath` to keep a local proof log, `-ResultJsonPath` to save structured OK/WARN check results, or `-LogPath` to verify a saved serial log without opening the port.
+Saved ESP32 result JSON is written as UTF-8 without BOM and with non-ASCII text
+escaped so downstream public proof validators can treat it as an ASCII-safe
+machine artifact. `selftest-esp32-serial-result-json.ps1` checks that contract
+without opening the serial port by validating a saved sample log.
