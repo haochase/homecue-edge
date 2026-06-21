@@ -936,6 +936,20 @@ const cases = [
     },
   },
   {
+    name: 'browser-evidence-proof-summary-app-url-mismatch',
+    expectedError: 'browserEvidence.proofSummary.appUrl must match summary.appUrl.',
+    mutate: (result) => {
+      result.browserEvidence.proofSummary.appUrl = 'http://127.0.0.1:9999'
+    },
+  },
+  {
+    name: 'browser-evidence-proof-summary-api-base-mismatch',
+    expectedError: 'browserEvidence.proofSummary.apiBase must match summary.apiBase.',
+    mutate: (result) => {
+      result.browserEvidence.proofSummary.apiBase = 'http://127.0.0.1:9998'
+    },
+  },
+  {
     name: 'browser-evidence-proof-summary-path-mismatch',
     expectedError: 'browserEvidence.proofSummary.evidence.desktopEvidencePath must match browserEvidence.plan desktopEvidencePath.',
     mutate: (result) => {
@@ -995,6 +1009,20 @@ const cases = [
     expectedError: 'proofSummary.evidence must not include unexpected field: browserEvidenceReportPath.',
     mutate: (result) => {
       result.proofSummary.evidence.browserEvidenceReportPath = result.plan.outputs.reportPath
+    },
+  },
+  {
+    name: 'proof-summary-app-url-mismatch',
+    expectedError: 'proofSummary.appUrl must match summary.appUrl.',
+    mutate: (result) => {
+      result.proofSummary.appUrl = 'http://127.0.0.1:9999'
+    },
+  },
+  {
+    name: 'proof-summary-api-base-mismatch',
+    expectedError: 'proofSummary.apiBase must match summary.apiBase.',
+    mutate: (result) => {
+      result.proofSummary.apiBase = 'http://127.0.0.1:9998'
     },
   },
   {
