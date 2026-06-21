@@ -1296,6 +1296,30 @@ const cases = [
     },
   },
   {
+    name: 'report-app-url-mismatch',
+    expectedError: 'report must include "- App URL: http://127.0.0.1:5173".',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, async (summary) => {
+        await writeReport(resolveRepoPath(result.plan.outputs.reportPath), {
+          ...summary,
+          appUrl: 'http://127.0.0.1:9999',
+        })
+      })
+    },
+  },
+  {
+    name: 'report-api-base-mismatch',
+    expectedError: 'report must include "- API base: http://127.0.0.1:8723".',
+    prepare: async (result, name) => {
+      await attachSummary(result, name, async (summary) => {
+        await writeReport(resolveRepoPath(result.plan.outputs.reportPath), {
+          ...summary,
+          apiBase: 'http://127.0.0.1:9998',
+        })
+      })
+    },
+  },
+  {
     name: 'report-evidence-desktop-json-mismatch',
     expectedError:
       'report must include "- Desktop JSON: assets/tmp/computer-loop-result-validator-selftest/desktop-loop.json',
