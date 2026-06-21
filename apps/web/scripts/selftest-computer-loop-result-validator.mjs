@@ -36,7 +36,7 @@ if (positiveResult.code !== 0) {
 }
 assertOutputIncludes(
   positiveResult.output,
-  `Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready source=${sourceSummary} screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial phoneEvidence=__phone_not_run__.json devEnvEvidence=assets/tmp/computer-loop-result-validator-selftest/dev-env-check.json webReadinessEvidence=assets/tmp/computer-loop-result-validator-selftest/web-readiness.json summary=assets/tmp/computer-loop-result-validator-selftest/computer-loop-report.json`,
+  `Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready source=${sourceSummary} screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial externalMode=api-simulated-room-terminal phoneEvidence=__phone_not_run__.json devEnvEvidence=assets/tmp/computer-loop-result-validator-selftest/dev-env-check.json webReadinessEvidence=assets/tmp/computer-loop-result-validator-selftest/web-readiness.json summary=assets/tmp/computer-loop-result-validator-selftest/computer-loop-report.json`,
   'positive proof summary output',
 )
 console.log('PASS positive computer loop result')
@@ -172,7 +172,7 @@ if (selfTestPositiveResult.code !== 0) {
 }
 assertOutputIncludes(
   selfTestPositiveResult.output,
-  `Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready source=${sourceSummary} screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial phoneEvidence=__phone_not_run__.json devEnvEvidence=assets/tmp/computer-loop-result-validator-selftest/dev-env-check.json webReadinessEvidence=assets/tmp/computer-loop-result-validator-selftest/web-readiness.json summary=assets/tmp/computer-loop-result-validator-selftest/selftest-computer-loop-report.json`,
+  `Computer loop proof summary: summaryRunId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready source=${sourceSummary} screenshots=6+6 text=7/0/0+7/0/0 external=esp32-serial externalMode=api-simulated-room-terminal phoneEvidence=__phone_not_run__.json devEnvEvidence=assets/tmp/computer-loop-result-validator-selftest/dev-env-check.json webReadinessEvidence=assets/tmp/computer-loop-result-validator-selftest/web-readiness.json summary=assets/tmp/computer-loop-result-validator-selftest/selftest-computer-loop-report.json`,
   'self-test proof summary output',
 )
 console.log('PASS self-test computer loop result')
@@ -1868,6 +1868,7 @@ function summaryOfflineFallback(overrides = {}) {
 function summaryExternalExecutionSync(overrides = {}) {
   return {
     latestSource: 'esp32-serial',
+    sourceMode: 'api-simulated-room-terminal',
     latestSequence: 12,
     acceptedActionCount: 5,
     ...overrides,
@@ -2284,6 +2285,7 @@ function loopProofSummary() {
     screenshotCount: 6,
     uniqueScreenshotDigestCount: 6,
     externalExecutionSource: 'esp32-serial',
+    externalExecutionSourceMode: 'api-simulated-room-terminal',
     acceptedActionCount: 5,
   }
 }
@@ -2414,6 +2416,7 @@ function formatLoop(loop) {
     `- Runtime health: ${formatRuntimeHealth(loop?.runtimeHealth)}`,
     `- Screenshot evidence: ${formatScreenshotEvidence(loop?.screenshotEvidence)}`,
     `- External sync source: ${loop?.externalExecutionSync?.latestSource ?? 'unknown'}`,
+    `- External sync mode: ${loop?.externalExecutionSync?.sourceMode ?? 'unknown'}`,
     `- External accepted actions: ${loop?.externalExecutionSync?.acceptedActionCount ?? 'unknown'}`,
   ]
 }

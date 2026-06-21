@@ -35,7 +35,7 @@ if (positiveResult.code !== 0) {
 }
 if (
   !positiveResult.output.includes(
-    `Browser evidence proof summary: runId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready source=${sourceSummary} screenshots=6+6 text=7/0/0+7/0/0 selftests=not-requested external=esp32-serial devEnvEvidence=assets/tmp/browser-evidence-result-validator-selftest/dev-env-check.json webReadinessEvidence=assets/tmp/browser-evidence-result-validator-selftest/web-readiness.json summary=assets/tmp/browser-evidence-result-validator-selftest/full-loop-report.json`,
+    `Browser evidence proof summary: runId=full-loop-selftest desktop=pass chrome=pass phone=not-run parity=pass web=already-ready source=${sourceSummary} screenshots=6+6 text=7/0/0+7/0/0 selftests=not-requested external=esp32-serial externalMode=api-simulated-room-terminal devEnvEvidence=assets/tmp/browser-evidence-result-validator-selftest/dev-env-check.json webReadinessEvidence=assets/tmp/browser-evidence-result-validator-selftest/web-readiness.json summary=assets/tmp/browser-evidence-result-validator-selftest/full-loop-report.json`,
   )
 ) {
   console.error(positiveResult.output)
@@ -1228,6 +1228,7 @@ function summaryOfflineFallback(overrides = {}) {
 function summaryExternalExecutionSync(overrides = {}) {
   return {
     latestSource: 'esp32-serial',
+    sourceMode: 'api-simulated-room-terminal',
     latestSequence: 12,
     acceptedActionCount: 5,
     ...overrides,
@@ -1414,6 +1415,7 @@ function loopProofSummary() {
     screenshotCount: 6,
     uniqueScreenshotDigestCount: 6,
     externalExecutionSource: 'esp32-serial',
+    externalExecutionSourceMode: 'api-simulated-room-terminal',
     acceptedActionCount: 5,
   }
 }

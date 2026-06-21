@@ -559,6 +559,7 @@ function loopProofSummary() {
     screenshotCount: 6,
     uniqueScreenshotDigestCount: 6,
     externalExecutionSource: 'esp32-serial',
+    externalExecutionSourceMode: 'api-simulated-room-terminal',
     acceptedActionCount: 5,
   }
 }
@@ -637,6 +638,7 @@ function summaryLoop(browserName) {
     },
     externalExecutionSync: {
       latestSource: 'esp32-serial',
+      sourceMode: 'api-simulated-room-terminal',
       acceptedActionCount: 5,
     },
   }

@@ -182,6 +182,7 @@ function summarizeDesktopLoop(value) {
     },
     externalExecutionSync: {
       latestSource: checks.externalExecutionSync?.latestSource ?? null,
+      sourceMode: checks.externalExecutionSync?.sourceMode ?? null,
       latestSequence: checks.externalExecutionSync?.latestSequence ?? null,
       acceptedActionCount: checks.externalExecutionSync?.acceptedActionCount ?? null,
     },
@@ -481,6 +482,7 @@ function formatDemoTalkingPoints({ desktop, phone, chrome, devEnv, webReadiness,
   if (desktop || chrome) {
     points.push(
       '- The desktop proof covers propose-only planning, web confirmation, offline fallback, and ESP32-style external confirmation sync.',
+      '- The desktop external sync proof uses an API-simulated room-terminal event; real ESP32 serial proof is captured only by the device loop gate.',
     )
   }
 
@@ -524,6 +526,7 @@ function formatDesktop(value) {
     `- Web confirmation source: ${checks.webConfirmExecute?.latestSource ?? 'unknown'}`,
     `- Offline fallback source: ${checks.offlineFallback?.latestSource ?? 'unknown'}`,
     `- External sync source: ${checks.externalExecutionSync?.latestSource ?? 'unknown'}`,
+    `- External sync mode: ${checks.externalExecutionSync?.sourceMode ?? 'unknown'}`,
     `- External accepted actions: ${checks.externalExecutionSync?.acceptedActionCount ?? 'unknown'}`,
   ]
 }

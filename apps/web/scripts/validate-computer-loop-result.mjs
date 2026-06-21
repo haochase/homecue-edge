@@ -41,6 +41,7 @@ const PROOF_SUMMARY_LOOP_KEYS = [
   'screenshotCount',
   'uniqueScreenshotDigestCount',
   'externalExecutionSource',
+  'externalExecutionSourceMode',
   'acceptedActionCount',
 ]
 const PROOF_SUMMARY_PHONE_LOOP_KEYS = ['run', 'success']
@@ -1210,6 +1211,13 @@ function validateProofSummaryLoop(errors, proof, summary, label) {
   )
   compareValue(
     errors,
+    proof.externalExecutionSourceMode,
+    summary.externalExecutionSync?.sourceMode,
+    `${label}.externalExecutionSourceMode`,
+    'summary loop external execution source mode',
+  )
+  compareValue(
+    errors,
     proof.acceptedActionCount,
     summary.externalExecutionSync?.acceptedActionCount,
     `${label}.acceptedActionCount`,
@@ -1363,6 +1371,7 @@ function formatProofSummary(proofSummary, sourceState) {
     }`,
     `text=${formatProofText(proofSummary.loops?.desktop)}+${formatProofText(proofSummary.loops?.windowsChrome)}`,
     `external=${proofSummary.loops?.desktop?.externalExecutionSource ?? 'unknown'}`,
+    `externalMode=${proofSummary.loops?.desktop?.externalExecutionSourceMode ?? 'unknown'}`,
     `phoneEvidence=${proofSummary.evidence?.phoneEvidencePath ?? 'unknown'}`,
     `devEnvEvidence=${proofSummary.evidence?.devEnvEvidencePath ?? 'unknown'}`,
     `webReadinessEvidence=${proofSummary.evidence?.webReadinessEvidencePath ?? 'unknown'}`,
@@ -1553,6 +1562,7 @@ function validateReportLoopSection(errors, report, heading, loop) {
     `- Runtime health: ${formatRuntimeHealth(loop?.runtimeHealth)}`,
     `- Screenshot evidence: ${formatScreenshotEvidence(loop?.screenshotEvidence)}`,
     `- External sync source: ${loop?.externalExecutionSync?.latestSource ?? 'unknown'}`,
+    `- External sync mode: ${loop?.externalExecutionSync?.sourceMode ?? 'unknown'}`,
     `- External accepted actions: ${loop?.externalExecutionSync?.acceptedActionCount ?? 'unknown'}`,
   ]) {
     if (!section.includes(line)) {

@@ -653,6 +653,7 @@ function validateLoopProof(errors, proof, summary, label) {
       'screenshotCount',
       'uniqueScreenshotDigestCount',
       'externalExecutionSource',
+      'externalExecutionSourceMode',
       'acceptedActionCount',
     ],
     label,
@@ -686,6 +687,13 @@ function validateLoopProof(errors, proof, summary, label) {
     summary?.externalExecutionSync?.latestSource,
     `${label}.externalExecutionSource`,
     'summary loop external source',
+  )
+  compareValue(
+    errors,
+    proof?.externalExecutionSourceMode,
+    summary?.externalExecutionSync?.sourceMode,
+    `${label}.externalExecutionSourceMode`,
+    'summary loop external source mode',
   )
   compareValue(
     errors,

@@ -315,6 +315,8 @@ async function readManifestJson(summary, label) {
 
 async function writeSelfContainedSourceSummary(summary) {
   const result = structuredClone(summary)
+  await normalizeDesktopLoopSourceMode(result, 'Desktop JSON', 'desktop-source-loop.json')
+  await normalizeDesktopLoopSourceMode(result, 'Windows Chrome JSON', 'windows-chrome-source-loop.json')
 
   if (result.environment?.preflight?.run === true) {
     await replaceManifestJson(result, 'Dev Environment JSON', {
@@ -327,6 +329,21 @@ async function writeSelfContainedSourceSummary(summary) {
   }
 
   return result
+}
+
+async function normalizeDesktopLoopSourceMode(summary, manifestLabel, fileName) {
+  const loopKey = manifestLabel === 'Windows Chrome JSON' ? 'windowsChrome' : 'desktop'
+  const loop = summary.loops?.[loopKey]
+  if (loop?.run !== true) return
+
+  loop.externalExecutionSync ??= {}
+  loop.externalExecutionSync.sourceMode = 'api-simulated-room-terminal'
+
+  const raw = await readManifestJson(summary, manifestLabel)
+  raw.checks ??= {}
+  raw.checks.externalExecutionSync ??= {}
+  raw.checks.externalExecutionSync.sourceMode = 'api-simulated-room-terminal'
+  await replaceManifestJson(summary, manifestLabel, raw, fileName)
 }
 
 async function attachWebReadiness(summary, overrides = {}) {

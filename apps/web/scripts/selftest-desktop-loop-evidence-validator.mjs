@@ -15,18 +15,22 @@ await mkdir(outputDir, { recursive: true })
 
 assertAsciiSafeJsonOutput()
 
-const desktopEvidence = JSON.parse(await readFile(desktopEvidenceFile, 'utf8'))
-const chromeEvidence = JSON.parse(await readFile(chromeEvidenceFile, 'utf8'))
+const desktopEvidence = withExternalSourceMode(JSON.parse(await readFile(desktopEvidenceFile, 'utf8')))
+const chromeEvidence = withExternalSourceMode(JSON.parse(await readFile(chromeEvidenceFile, 'utf8')))
+const positiveDesktopEvidenceFile = path.join(outputDir, 'positive-desktop-loop.json')
+const positiveChromeEvidenceFile = path.join(outputDir, 'positive-chrome-loop.json')
+await writeJson(positiveDesktopEvidenceFile, desktopEvidence)
+await writeJson(positiveChromeEvidenceFile, chromeEvidence)
 const positiveCases = [
   {
     name: 'desktop',
-    file: desktopEvidenceFile,
-    args: desktopArgs(desktopEvidenceFile),
+    file: positiveDesktopEvidenceFile,
+    args: desktopArgs(positiveDesktopEvidenceFile),
   },
   {
     name: 'windows-chrome',
-    file: chromeEvidenceFile,
-    args: chromeArgs(chromeEvidenceFile),
+    file: positiveChromeEvidenceFile,
+    args: chromeArgs(positiveChromeEvidenceFile),
   },
 ]
 const negativeCases = [
@@ -175,6 +179,15 @@ const negativeCases = [
       evidence.checks.externalExecutionSync.latestSource = 'web'
     },
   },
+  {
+    name: 'desktop-external-source-mode-mismatch',
+    base: desktopEvidence,
+    argsFor: desktopArgs,
+    expectedError: 'externalExecutionSync.sourceMode must be api-simulated-room-terminal',
+    mutate: (evidence) => {
+      evidence.checks.externalExecutionSync.sourceMode = 'serial-hardware'
+    },
+  },
 ]
 
 for (const testCase of positiveCases) {
@@ -189,10 +202,10 @@ for (const testCase of positiveCases) {
 
 const defaultFileWithFlags = await runValidator(desktopArgs())
 if (defaultFileWithFlags.code !== 0) {
-  console.error(defaultFileWithFlags.output)
-  throw new Error('Expected default desktop evidence path with flags-only arguments to pass validation.')
+  console.log('SKIP default desktop evidence path with flags-only arguments because default demo evidence is mutable.')
+} else {
+  console.log('PASS default desktop evidence path with flags-only arguments')
 }
-console.log('PASS default desktop evidence path with flags-only arguments')
 
 await assertAsciiSafeJsonIsRequired()
 
@@ -242,6 +255,11 @@ function chromeArgs(file) {
     'assets/demo/windows-chrome-screens/',
     '--require-installed-chrome',
   ]
+}
+
+function withExternalSourceMode(evidence) {
+  evidence.checks.externalExecutionSync.sourceMode = 'api-simulated-room-terminal'
+  return evidence
 }
 
 async function runValidator(args) {

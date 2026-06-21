@@ -472,6 +472,7 @@ function New-LoopProofSummary {
     screenshotCount = $Loop.screenshotEvidence.count
     uniqueScreenshotDigestCount = $Loop.screenshotEvidence.uniqueDigestCount
     externalExecutionSource = $Loop.externalExecutionSync.latestSource
+    externalExecutionSourceMode = $Loop.externalExecutionSync.sourceMode
     acceptedActionCount = $Loop.externalExecutionSync.acceptedActionCount
   }
 }

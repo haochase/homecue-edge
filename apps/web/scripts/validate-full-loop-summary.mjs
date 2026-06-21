@@ -200,6 +200,9 @@ function validateDesktopLoop(
   if (loop.externalExecutionSync?.latestSource !== 'esp32-serial') {
     errors.push(`${label}.externalExecutionSync.latestSource must be esp32-serial.`)
   }
+  if (loop.externalExecutionSync?.sourceMode !== 'api-simulated-room-terminal') {
+    errors.push(`${label}.externalExecutionSync.sourceMode must be api-simulated-room-terminal.`)
+  }
   if (!positiveNumber(loop.externalExecutionSync?.acceptedActionCount)) {
     errors.push(`${label}.externalExecutionSync.acceptedActionCount must be positive.`)
   }
@@ -789,6 +792,12 @@ async function validateRawDesktopEvidence(
     checks.externalExecutionSync?.latestSource ?? null,
     loop.externalExecutionSync?.latestSource ?? null,
     `${label}.externalExecutionSync.latestSource raw evidence`,
+  )
+  compareValue(
+    errors,
+    checks.externalExecutionSync?.sourceMode ?? null,
+    loop.externalExecutionSync?.sourceMode ?? null,
+    `${label}.externalExecutionSync.sourceMode raw evidence`,
   )
   compareValue(
     errors,

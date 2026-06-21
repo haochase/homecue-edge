@@ -102,16 +102,21 @@ evidence command, summary/report paths, and browser-evidence result JSON path.
 That result also includes a compact `proofSummary` with the summary run id,
 desktop/Windows Chrome pass flags, browser-parity status, screenshot counts,
 source branch/commit/dirty state plus status-line count and status hash, Chinese
-text-integrity counts (`required/missing/mojibake`), external execution source,
-and the report/summary/browser-evidence paths plus raw
+text-integrity counts (`required/missing/mojibake`), external execution source
+and source mode, and the report/summary/browser-evidence paths plus raw
 desktop/Chrome/phone/dev-env/web-readiness JSON and screenshot directories.
 Computer-only runs record the skipped phone path as `__phone_not_run__.json`;
 this proof is intentionally desktop + Chrome only and does not replace a
 `-IncludePhone` capture or ESP32 serial hardware proof.
+The desktop and Windows Chrome browser loops verify ESP32-style execution sync
+through an API-simulated room-terminal event with
+`sourceMode=api-simulated-room-terminal`; real ESP32 serial proof is only
+claimed by `check-device-loop.ps1` / `check-esp32-serial-log.ps1` evidence.
 `npm run computer:result:check` prints that compact proof line after validation
 so a successful saved-result check is readable without manually opening the JSON;
 the line includes `phone=not-run`, `phoneEvidence=__phone_not_run__.json`,
-`source=branch@commit/dirty#statusCount:statusHash`, `devEnvEvidence=...`,
+`source=branch@commit/dirty#statusCount:statusHash`,
+`externalMode=api-simulated-room-terminal`, `devEnvEvidence=...`,
 `webReadinessEvidence=...`, and the checked summary path.
 The wrapper validates that result JSON before returning success. Use `-DryRun`
 to inspect those paths and commands without starting services or opening
@@ -137,6 +142,7 @@ browser-evidence content that differs from the referenced JSON file fail closed.
 The result checker also reads the referenced summary JSON directly and verifies
 desktop + Windows Chrome ran, phone did not run, browser parity passed,
 `proofSummary` matches the referenced summary and browser-evidence result,
+the desktop/Chrome external sync mode is explicitly API-simulated,
 summary manifest paths match the browser-evidence plan, browser evidence carries
 the `Web Readiness JSON` manifest path, top-level proof paths match the nested
 browser evidence, and the skipped phone evidence sentinel matches across layers.

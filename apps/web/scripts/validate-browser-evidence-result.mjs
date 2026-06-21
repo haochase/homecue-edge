@@ -53,6 +53,7 @@ const PROOF_SUMMARY_LOOP_KEYS = [
   'screenshotCount',
   'uniqueScreenshotDigestCount',
   'externalExecutionSource',
+  'externalExecutionSourceMode',
   'acceptedActionCount',
 ]
 const PROOF_SUMMARY_PHONE_LOOP_KEYS = ['run', 'success']
@@ -617,6 +618,7 @@ function formatBrowserEvidenceProofSummary(value, summary) {
     `text=${formatTextIntegrityPair(proofSummary ?? summary)}`,
     `selftests=${formatSelfTestState(value?.plan?.selfTest)}`,
     `external=${formatExternalSource(proofSummary ?? summary)}`,
+    `externalMode=${formatExternalSourceMode(proofSummary ?? summary)}`,
     `devEnvEvidence=${formatDisplayPath(proofSummary?.evidence?.devEnvEvidencePath)}`,
     `webReadinessEvidence=${formatDisplayPath(proofSummary?.evidence?.webReadinessEvidencePath)}`,
     `summary=${formatDisplayPath(proofSummary?.evidence?.summaryPath ?? value?.plan?.summaryPath)}`,
@@ -702,6 +704,16 @@ function formatExternalSource(summary) {
     summary?.loops?.phone?.externalExecutionSource,
   ].filter((source) => typeof source === 'string' && source.length > 0)
   return [...new Set(sources)].join('+') || 'unknown'
+}
+
+function formatExternalSourceMode(summary) {
+  const modes = [
+    summary?.loops?.desktop?.externalExecutionSync?.sourceMode,
+    summary?.loops?.desktop?.externalExecutionSourceMode,
+    summary?.loops?.windowsChrome?.externalExecutionSync?.sourceMode,
+    summary?.loops?.windowsChrome?.externalExecutionSourceMode,
+  ].filter((mode) => typeof mode === 'string' && mode.length > 0)
+  return [...new Set(modes)].join('+') || 'unknown'
 }
 
 function formatDisplayPath(value) {
@@ -997,6 +1009,13 @@ function validateProofSummaryLoop(errors, proof, summary, label) {
     summary.externalExecutionSync?.latestSource ?? null,
     `${label}.externalExecutionSource`,
     'summary loop external execution source',
+  )
+  compareValue(
+    errors,
+    proof.externalExecutionSourceMode ?? null,
+    summary.externalExecutionSync?.sourceMode ?? null,
+    `${label}.externalExecutionSourceMode`,
+    'summary loop external execution source mode',
   )
   compareValue(
     errors,

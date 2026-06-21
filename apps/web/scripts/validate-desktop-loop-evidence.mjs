@@ -515,6 +515,9 @@ function validateExecutionChecks(errors, checks) {
   if (checks?.externalExecutionSync?.latestSource !== 'esp32-serial') {
     errors.push('checks.externalExecutionSync.latestSource must be esp32-serial.')
   }
+  if (checks?.externalExecutionSync?.sourceMode !== 'api-simulated-room-terminal') {
+    errors.push('checks.externalExecutionSync.sourceMode must be api-simulated-room-terminal.')
+  }
   if (!positiveNumber(checks?.externalExecutionSync?.acceptedActionCount)) {
     errors.push('checks.externalExecutionSync.acceptedActionCount must be positive.')
   }

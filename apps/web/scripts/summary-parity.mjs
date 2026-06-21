@@ -54,6 +54,7 @@ export function recomputeBrowserParity(desktop, chrome) {
     chrome?.externalExecutionSync?.acceptedActionCount,
   )
   compareParityValue(errors, 'external sync source', desktop?.externalExecutionSync?.latestSource, chrome?.externalExecutionSync?.latestSource)
+  compareParityValue(errors, 'external sync mode', desktop?.externalExecutionSync?.sourceMode, chrome?.externalExecutionSync?.sourceMode)
   compareParityValue(errors, 'runtime issue count', desktop?.runtimeHealth?.issueCount, chrome?.runtimeHealth?.issueCount)
   compareParityValue(errors, 'screenshot count', desktop?.screenshotEvidence?.count, chrome?.screenshotEvidence?.count)
   compareParityValue(
@@ -90,6 +91,7 @@ export function validateBrowserParityInputs(loop, label) {
     ['offlineFallback.latestSource', loop.offlineFallback?.latestSource],
     ['externalExecutionSync.acceptedActionCount', loop.externalExecutionSync?.acceptedActionCount],
     ['externalExecutionSync.latestSource', loop.externalExecutionSync?.latestSource],
+    ['externalExecutionSync.sourceMode', loop.externalExecutionSync?.sourceMode],
     ['runtimeHealth.issueCount', loop.runtimeHealth?.issueCount],
     ['screenshotEvidence.count', loop.screenshotEvidence?.count],
     ['screenshotEvidence.uniqueDigestCount', loop.screenshotEvidence?.uniqueDigestCount],

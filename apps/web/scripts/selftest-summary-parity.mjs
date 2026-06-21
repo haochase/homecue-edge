@@ -39,6 +39,13 @@ const cases = [
     },
   },
   {
+    name: 'execution source mode mismatch',
+    expectedError: 'external sync mode mismatch',
+    mutate: (chrome) => {
+      chrome.externalExecutionSync.sourceMode = 'serial-hardware'
+    },
+  },
+  {
     name: 'runtime and screenshot mismatch',
     expectedError: 'screenshot unique digest count mismatch',
     mutate: (chrome) => {
@@ -144,6 +151,7 @@ function createLoopSummary() {
     externalExecutionSync: {
       acceptedActionCount: 5,
       latestSource: 'esp32-serial',
+      sourceMode: 'api-simulated-room-terminal',
     },
     runtimeHealth: {
       issueCount: 0,

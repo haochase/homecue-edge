@@ -534,6 +534,7 @@ async function verifyExternalExecutionSync(page) {
   return {
     acceptedActionCount: acceptedActions.length,
     apiSource: execution.source,
+    sourceMode: 'api-simulated-room-terminal',
     apiSequence: execution.sequence,
     latestSource: latest.source,
     latestSequence: latest.sequence,

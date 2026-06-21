@@ -220,20 +220,10 @@ function New-SummaryClone {
   return (($Value | ConvertTo-Json -Depth 20) | ConvertFrom-Json)
 }
 
-function Protect-DefaultSummaryFromMutableDevEnv {
+function Protect-DefaultSummaryFromMutableEvidence {
   param($OriginalSummary)
 
   if ($SummaryPathProvided) {
-    return $null
-  }
-  if ($OriginalSummary.environment.preflight.run -ne $true) {
-    return $null
-  }
-
-  $DevEnvEntry = @($OriginalSummary.evidence.files | Where-Object {
-      $_.present -eq $true -and $_.label -eq "Dev Environment JSON"
-    } | Select-Object -First 1)
-  if ($DevEnvEntry.Count -eq 0) {
     return $null
   }
 
@@ -242,24 +232,33 @@ function Protect-DefaultSummaryFromMutableDevEnv {
   $SnapshotSummaryPath = Join-Path $SnapshotDir "full-loop-report.json"
   New-Item -ItemType Directory -Force -Path $SnapshotDir | Out-Null
 
-  $Preflight = $OriginalSummary.environment.preflight
-  $SnapshotDevEnv = [pscustomobject]@{
-    generatedAt = $Preflight.generatedAt
-    success = $Preflight.success
-    required = $Preflight.required
-    requirePhone = $Preflight.requirePhone
-    checks = $Preflight.checks
-  }
-  Write-JsonFile -Path $SnapshotDevEnvPath -Value $SnapshotDevEnv
-
   $SnapshotSummary = New-SummaryClone $OriginalSummary
-  $SnapshotEntry = @($SnapshotSummary.evidence.files | Where-Object {
-      $_.present -eq $true -and $_.label -eq "Dev Environment JSON"
-    } | Select-Object -First 1)
-  if ($SnapshotEntry.Count -ne 0) {
-    $SnapshotEntry[0].file = Convert-ToRepoRelativePath $SnapshotDevEnvPath
-    $SnapshotEntry[0].bytes = (Get-Item -LiteralPath $SnapshotDevEnvPath).Length
-    $SnapshotEntry[0].sha256 = Get-FileSha256Prefix $SnapshotDevEnvPath
+
+  if ($OriginalSummary.environment.preflight.run -eq $true) {
+    $SnapshotDevEnv = [pscustomobject]@{
+      generatedAt = $OriginalSummary.environment.preflight.generatedAt
+      success = $OriginalSummary.environment.preflight.success
+      required = $OriginalSummary.environment.preflight.required
+      requirePhone = $OriginalSummary.environment.preflight.requirePhone
+      checks = $OriginalSummary.environment.preflight.checks
+    }
+    Write-JsonFile -Path $SnapshotDevEnvPath -Value $SnapshotDevEnv
+    Set-SummaryManifestFile -Summary $SnapshotSummary -Label "Dev Environment JSON" -Path $SnapshotDevEnvPath
+  }
+
+  if ($SnapshotSummary.loops.desktop.run -eq $true) {
+    Protect-DefaultBrowserEvidence `
+      -Summary $SnapshotSummary `
+      -Loop $SnapshotSummary.loops.desktop `
+      -Label "Desktop JSON" `
+      -FileName "desktop-loop.json"
+  }
+  if ($SnapshotSummary.loops.windowsChrome.run -eq $true) {
+    Protect-DefaultBrowserEvidence `
+      -Summary $SnapshotSummary `
+      -Loop $SnapshotSummary.loops.windowsChrome `
+      -Label "Windows Chrome JSON" `
+      -FileName "chrome-loop.json"
   }
   Write-JsonFile -Path $SnapshotSummaryPath -Value $SnapshotSummary
 
@@ -267,6 +266,71 @@ function Protect-DefaultSummaryFromMutableDevEnv {
     summaryPath = $SnapshotSummaryPath
     summary = $SnapshotSummary
   }
+}
+
+function Protect-DefaultBrowserEvidence {
+  param(
+    [Parameter(Mandatory = $true)]$Summary,
+    [Parameter(Mandatory = $true)]$Loop,
+    [Parameter(Mandatory = $true)][string]$Label,
+    [Parameter(Mandatory = $true)][string]$FileName
+  )
+
+  $Entry = Get-SummaryManifestEntry -Summary $Summary -Label $Label
+  if (-not $Entry) {
+    return
+  }
+
+  $SourcePath = Resolve-RepoPath ([string]$Entry.file)
+  if (-not (Test-Path -LiteralPath $SourcePath -PathType Leaf)) {
+    return
+  }
+
+  $SnapshotPath = Join-Path (Join-Path $Root "assets\tmp\browser-evidence-default-summary") $FileName
+  $RawEvidence = Read-JsonFile $SourcePath
+  if (-not $RawEvidence.checks) {
+    $RawEvidence | Add-Member -NotePropertyName checks -NotePropertyValue ([pscustomobject]@{})
+  }
+  if (-not $RawEvidence.checks.externalExecutionSync) {
+    $RawEvidence.checks | Add-Member -NotePropertyName externalExecutionSync -NotePropertyValue ([pscustomobject]@{})
+  }
+  $RawEvidence.checks.externalExecutionSync | Add-Member -Force -NotePropertyName sourceMode -NotePropertyValue "api-simulated-room-terminal"
+  $Loop.externalExecutionSync | Add-Member -Force -NotePropertyName sourceMode -NotePropertyValue "api-simulated-room-terminal"
+  Write-JsonFile -Path $SnapshotPath -Value $RawEvidence
+  Set-SummaryManifestFile -Summary $Summary -Label $Label -Path $SnapshotPath
+}
+
+function Get-SummaryManifestEntry {
+  param(
+    [Parameter(Mandatory = $true)]$Summary,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+
+  $Entry = @($Summary.evidence.files | Where-Object {
+      $_.present -eq $true -and $_.label -eq $Label
+    } | Select-Object -First 1)
+  if ($Entry.Count -eq 0) {
+    return $null
+  }
+
+  return $Entry[0]
+}
+
+function Set-SummaryManifestFile {
+  param(
+    [Parameter(Mandatory = $true)]$Summary,
+    [Parameter(Mandatory = $true)][string]$Label,
+    [Parameter(Mandatory = $true)][string]$Path
+  )
+
+  $Entry = Get-SummaryManifestEntry -Summary $Summary -Label $Label
+  if (-not $Entry) {
+    return
+  }
+
+  $Entry.file = Convert-ToRepoRelativePath $Path
+  $Entry.bytes = (Get-Item -LiteralPath $Path).Length
+  $Entry.sha256 = Get-FileSha256Prefix $Path
 }
 
 function Get-ManifestFile {
@@ -335,7 +399,7 @@ function Get-ScreenshotDirFromRawEvidence {
 
 Assert-File -Path $SummaryPath -Label "Full-loop summary evidence"
 $Summary = Read-JsonFile $SummaryPath
-$DefaultSummarySnapshot = Protect-DefaultSummaryFromMutableDevEnv $Summary
+$DefaultSummarySnapshot = Protect-DefaultSummaryFromMutableEvidence $Summary
 if ($DefaultSummarySnapshot) {
   $SummaryPath = $DefaultSummarySnapshot.summaryPath
   $Summary = $DefaultSummarySnapshot.summary
@@ -591,6 +655,7 @@ function New-LoopProofSummary {
     screenshotCount = $Loop.screenshotEvidence.count
     uniqueScreenshotDigestCount = $Loop.screenshotEvidence.uniqueDigestCount
     externalExecutionSource = $Loop.externalExecutionSync.latestSource
+    externalExecutionSourceMode = $Loop.externalExecutionSync.sourceMode
     acceptedActionCount = $Loop.externalExecutionSync.acceptedActionCount
   }
 }
