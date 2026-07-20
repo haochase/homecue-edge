@@ -29,18 +29,28 @@
 .PARAMETER All
   Scan every tracked file (default when neither -Staged nor -All is given).
 
+.PARAMETER IncludeUntracked
+  When scanning all files, also scan untracked non-ignored files from the working
+  tree. This is useful before staging new scripts or docs.
+
 .PARAMETER Quiet
   Suppress the "clean" success banner (still prints findings).
 
+.PARAMETER ResultJsonPath
+  Optional path for a structured JSON scan summary.
+
 .EXAMPLE
-  powershell -File ./scripts/scan-secrets.ps1            # scan all tracked files
-  powershell -File ./scripts/scan-secrets.ps1 -Staged    # scan staged (pre-commit)
+  powershell -File ./scripts/scan-secrets.ps1
+  powershell -File ./scripts/scan-secrets.ps1 -All -IncludeUntracked
+  powershell -File ./scripts/scan-secrets.ps1 -Staged
 #>
 [CmdletBinding()]
 param(
     [switch]$Staged,
     [switch]$All,
-    [switch]$Quiet
+    [switch]$IncludeUntracked,
+    [switch]$Quiet,
+    [string]$ResultJsonPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,6 +62,14 @@ if (-not $repoRoot) {
     exit 2
 }
 Set-Location -LiteralPath $repoRoot
+
+function New-ParentDirectory {
+    param([string]$Path)
+    $Parent = Split-Path -Parent $Path
+    if ($Parent -and -not (Test-Path -LiteralPath $Parent)) {
+        New-Item -ItemType Directory -Path $Parent | Out-Null
+    }
+}
 
 # --- sensitive literals (fragmented so the verbatim value is NOT in this file)
 $emailLocalPart = 'ylh' + '1122c'   # personal email local-part
@@ -99,34 +117,73 @@ $selfExclude = @(
 $skipExtRegex = '\.(png|jpe?g|gif|ico|svg|webp|bmp|pdf|woff2?|ttf|eot|otf|mp4|mov|webm|zip|gz|tar|7z|whl|pyc|lock)$'
 
 # --- secret files that must never be staged at all ---------------------------
-$forbiddenFileRegex = '(^|/)(\.env(\..+)?|secrets\.h)$'
+$forbiddenFileRegex = '(^|/)(\.env$|\.env\.(?!example$).+|secrets\.h$)'
 
 # --- collect the file list ---------------------------------------------------
 if ($Staged) {
-    $files = & git diff --cached --name-only --diff-filter=ACM
+    $fileItems = @(& git diff --cached --name-only --diff-filter=ACM | ForEach-Object {
+        [pscustomobject]@{ Path = $_; Source = 'staged' }
+    })
 } else {
-    $files = & git ls-files
+    $fileItems = @(& git ls-files | ForEach-Object {
+        [pscustomobject]@{ Path = $_; Source = 'tracked' }
+    })
+    if ($IncludeUntracked) {
+        $fileItems += @(& git ls-files --others --exclude-standard | ForEach-Object {
+            [pscustomobject]@{ Path = $_; Source = 'untracked' }
+        })
+    }
 }
-$files = @($files | Where-Object { $_ -and $_.Trim() })
+$fileItems = @($fileItems | Where-Object { $_.Path -and $_.Path.Trim() })
 
-$findings = New-Object System.Collections.Generic.List[string]
+$findings = New-Object System.Collections.Generic.List[object]
+$scannedFiles = New-Object System.Collections.Generic.List[string]
+$skippedFiles = New-Object System.Collections.Generic.List[string]
+
+function Add-Finding {
+    param(
+        [string]$Path,
+        [int]$Line,
+        [string]$Category,
+        [string]$Name,
+        [string]$Message
+    )
+
+    $script:findings.Add([pscustomobject]@{
+        path = $Path
+        line = $Line
+        category = $Category
+        name = $Name
+        message = $Message
+        text = ("{0}:{1} : [{2}:{3}] {4}" -f $Path, $Line, $Category, $Name, $Message)
+    })
+}
 
 # --- guard: forbidden secret files staged ------------------------------------
 if ($Staged) {
-    foreach ($f in $files) {
+    foreach ($item in $fileItems) {
+        $f = $item.Path
         if ($f -match $forbiddenFileRegex) {
-            $findings.Add("${f}:0 : [staged-secret-file] this file is git-ignored and must never be committed")
+            Add-Finding -Path $f -Line 0 -Category 'staged-secret-file' -Name 'forbidden-file' -Message 'this file is git-ignored and must never be committed'
         }
     }
 }
 
 # --- scan file contents ------------------------------------------------------
-foreach ($f in $files) {
+foreach ($item in $fileItems) {
+    $f = $item.Path
     $norm = $f -replace '\\', '/'
-    if ($selfExclude -contains $norm) { continue }
-    if ($norm -imatch $skipExtRegex) { continue }
+    if ($selfExclude -contains $norm) {
+        $skippedFiles.Add($norm)
+        continue
+    }
+    if ($norm -imatch $skipExtRegex) {
+        $skippedFiles.Add($norm)
+        continue
+    }
 
-    # Read the exact bytes that would be committed.
+    # Staged scans read the exact blobs to be committed; all-file scans read the
+    # current working-tree content so new edits are checked before staging.
     $text = $null
     try {
         if ($Staged) {
@@ -135,9 +192,15 @@ foreach ($f in $files) {
             $text = Get-Content -LiteralPath $f -Raw -ErrorAction Stop
         }
     } catch {
+        $skippedFiles.Add($norm)
         continue
     }
-    if (-not $text) { continue }
+    if (-not $text) {
+        $skippedFiles.Add($norm)
+        continue
+    }
+
+    $scannedFiles.Add($norm)
 
     $lines = $text -split "`n"
     for ($i = 0; $i -lt $lines.Count; $i++) {
@@ -147,25 +210,46 @@ foreach ($f in $files) {
 
         foreach ($kw in $keywordPatterns) {
             if ($line -imatch $kw.Pattern) {
-                $findings.Add("${norm}:${lineNo} : [keyword:$($kw.Name)] non-technical keyword detected")
+                Add-Finding -Path $norm -Line $lineNo -Category 'keyword' -Name $kw.Name -Message 'non-technical keyword detected'
             }
         }
         foreach ($sp in $secretPatterns) {
             if ($line -imatch $sp.Pattern) {
-                $findings.Add("${norm}:${lineNo} : [secret:$($sp.Name)] secret-shaped token detected")
+                Add-Finding -Path $norm -Line $lineNo -Category 'secret' -Name $sp.Name -Message 'secret-shaped token detected'
             }
         }
     }
 }
 
 # --- report ------------------------------------------------------------------
+$clean = $findings.Count -eq 0
+if ($ResultJsonPath) {
+    New-ParentDirectory -Path $ResultJsonPath
+    $mode = if ($Staged) { 'staged' } else { 'all' }
+    $result = @{
+        checkedAt = (Get-Date).ToString('o')
+        repoRoot = $repoRoot
+        mode = $mode
+        includeUntracked = [bool]$IncludeUntracked
+        clean = [bool]$clean
+        findingCount = $findings.Count
+        scannedCount = $scannedFiles.Count
+        skippedCount = $skippedFiles.Count
+        sources = [string[]]@($fileItems | Select-Object -ExpandProperty Source -Unique)
+        findings = [object[]]$findings.ToArray()
+        scannedFiles = [string[]]$scannedFiles.ToArray()
+        skippedFiles = [string[]]$skippedFiles.ToArray()
+    }
+    $result | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ResultJsonPath -Encoding UTF8
+}
+
 if ($findings.Count -gt 0) {
     Write-Host ''
     Write-Host '============================================================' -ForegroundColor Red
     Write-Host (" scan-secrets: {0} issue(s) found -- commit BLOCKED" -f $findings.Count) -ForegroundColor Red
     Write-Host '============================================================' -ForegroundColor Red
     foreach ($hit in $findings) {
-        Write-Host "  $hit" -ForegroundColor Yellow
+        Write-Host "  $($hit.text)" -ForegroundColor Yellow
     }
     Write-Host ''
     Write-Host 'Fix or remove the content above before committing.' -ForegroundColor Red

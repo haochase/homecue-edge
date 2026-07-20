@@ -4,6 +4,7 @@ node_modules/
 __pycache__/
 *.pyc
 .pytest_cache/
+.pytest-tmp-*/
 
 # Builds
 dist/
@@ -39,3 +40,8 @@ Thumbs.db
 
 # Local generated output
 assets/
+.runtime/
+runtime/
+
+# Private/local planning records - never publish
+HomeCueAgentDevelopment/
