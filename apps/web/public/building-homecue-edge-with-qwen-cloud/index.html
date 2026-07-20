@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Building HomeCue Edge with Qwen Cloud</title>
+    <meta
+      name="description"
+      content="The engineering journey behind HomeCue Edge: privacy-aware context, Qwen Cloud planning, human confirmation, local policy enforcement, and offline fallback."
+    />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Building HomeCue Edge with Qwen Cloud" />
+    <meta
+      property="og:description"
+      content="How a smart-home agent became a safe, inspectable edge-to-cloud system."
+    />
+    <meta
+      property="og:image"
+      content="https://haochase.github.io/homecue-edge/building-homecue-edge-with-qwen-cloud/homecue-edge-console.png"
+    />
+    <link
+      rel="canonical"
+      href="https://haochase.github.io/homecue-edge/building-homecue-edge-with-qwen-cloud/"
+    />
+    <style>
+      :root {
+        color: #17201e;
+        background: #f7f8f5;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-synthesis: none;
+        letter-spacing: 0;
+      }
+
+      * {
+        box-sizing: border-box;
+        letter-spacing: 0;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        overflow-x: hidden;
+        background: #f7f8f5;
+        color: #17201e;
+        line-height: 1.7;
+      }
+
+      a {
+        color: #12644f;
+        text-underline-offset: 3px;
+      }
+
+      a:hover {
+        color: #8a3f20;
+      }
+
+      .site-header {
+        border-bottom: 1px solid #cfd6d1;
+        background: #ffffff;
+      }
+
+      .site-header__inner {
+        width: min(1120px, calc(100% - 40px));
+        min-height: 64px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+      }
+
+      .brand {
+        color: #17201e;
+        font-size: 15px;
+        font-weight: 760;
+        text-decoration: none;
+      }
+
+      .site-nav {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        font-size: 14px;
+      }
+
+      .site-nav a {
+        color: #3d4a46;
+        text-decoration: none;
+      }
+
+      .hero {
+        width: min(1120px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 40px 0 20px;
+      }
+
+      .eyebrow {
+        margin: 0 0 14px;
+        color: #12644f;
+        font-size: 13px;
+        font-weight: 760;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 920px;
+        margin-bottom: 24px;
+        color: #10251f;
+        font-size: 56px;
+        line-height: 1.06;
+        font-weight: 790;
+      }
+
+      .hero__lead {
+        max-width: 800px;
+        margin-bottom: 22px;
+        color: #40504b;
+        font-size: 21px;
+        line-height: 1.55;
+      }
+
+      .hero__meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 24px;
+        color: #596761;
+        font-size: 14px;
+      }
+
+      .product-figure {
+        width: min(960px, calc(100% - 24px));
+        margin: 0 auto 28px;
+      }
+
+      .product-figure img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border: 1px solid #bfc9c3;
+        border-radius: 6px;
+        background: #ffffff;
+      }
+
+      .product-figure figcaption {
+        width: min(880px, calc(100% - 16px));
+        margin: 12px auto 0;
+        color: #65716d;
+        font-size: 13px;
+        text-align: center;
+      }
+
+      main {
+        width: min(1120px, calc(100% - 40px));
+        margin: 0 auto;
+      }
+
+      .article-section {
+        display: grid;
+        grid-template-columns: minmax(180px, 280px) minmax(0, 700px);
+        gap: 56px;
+        justify-content: space-between;
+        padding: 64px 0;
+        border-top: 1px solid #cfd6d1;
+      }
+
+      .article-section h2 {
+        margin-bottom: 0;
+        color: #10251f;
+        font-size: 27px;
+        line-height: 1.25;
+      }
+
+      .article-section h3 {
+        margin: 32px 0 8px;
+        color: #26332f;
+        font-size: 18px;
+        line-height: 1.35;
+      }
+
+      .article-copy {
+        min-width: 0;
+        color: #33423d;
+        font-size: 17px;
+      }
+
+      .article-copy p,
+      .article-copy ul,
+      .article-copy ol {
+        margin-bottom: 20px;
+      }
+
+      .article-copy li + li {
+        margin-top: 10px;
+      }
+
+      .pull-quote {
+        margin: 30px 0;
+        padding: 20px 24px;
+        border-left: 4px solid #d48a37;
+        background: #fff9ef;
+        color: #3b3125;
+        font-size: 19px;
+        font-weight: 620;
+      }
+
+      .architecture-flow {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        margin: 30px 0 18px;
+        padding: 0;
+        list-style: none;
+        border-top: 1px solid #9facA5;
+        border-bottom: 1px solid #9faca5;
+      }
+
+      .architecture-flow li {
+        position: relative;
+        min-height: 118px;
+        padding: 20px 14px;
+        border-right: 1px solid #cfd6d1;
+        color: #26332f;
+        font-size: 13px;
+        font-weight: 680;
+        line-height: 1.4;
+      }
+
+      .architecture-flow li:last-child {
+        border-right: 0;
+      }
+
+      .architecture-flow span {
+        display: block;
+        margin-bottom: 8px;
+        color: #9a4e23;
+        font-size: 12px;
+        font-weight: 760;
+      }
+
+      pre {
+        max-width: 100%;
+        margin: 28px 0;
+        overflow-x: auto;
+        padding: 20px 22px;
+        border-radius: 4px;
+        background: #12211d;
+        color: #edf5f0;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+
+      .incident-list {
+        margin: 30px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .incident-list li {
+        display: grid;
+        grid-template-columns: 120px minmax(0, 1fr);
+        gap: 18px;
+        padding: 20px 0;
+        border-top: 1px solid #d8ded9;
+      }
+
+      .incident-list strong {
+        color: #9a4e23;
+        font-size: 13px;
+        text-transform: uppercase;
+      }
+
+      .incident-list p {
+        margin-bottom: 0;
+      }
+
+      .evidence-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin: 30px 0;
+        border: 1px solid #aebbb4;
+        background: #ffffff;
+      }
+
+      .evidence-item {
+        min-height: 150px;
+        padding: 22px 18px;
+        border-right: 1px solid #cfd6d1;
+      }
+
+      .evidence-item:last-child {
+        border-right: 0;
+      }
+
+      .evidence-item strong {
+        display: block;
+        margin-bottom: 8px;
+        color: #12644f;
+        font-size: 34px;
+        line-height: 1;
+      }
+
+      .evidence-item span {
+        color: #4c5a55;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .article-footer {
+        margin-top: 24px;
+        padding: 54px 0 72px;
+        border-top: 1px solid #cfd6d1;
+        text-align: center;
+      }
+
+      .article-footer h2 {
+        margin-bottom: 14px;
+        color: #10251f;
+        font-size: 28px;
+      }
+
+      .article-footer p {
+        max-width: 640px;
+        margin: 0 auto 22px;
+        color: #52605b;
+      }
+
+      .footer-links {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 14px 22px;
+        font-weight: 700;
+      }
+
+      @media (max-width: 820px) {
+        h1 {
+          font-size: 42px;
+        }
+
+        .article-section {
+          grid-template-columns: 1fr;
+          gap: 20px;
+        }
+
+        .architecture-flow {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .architecture-flow li:nth-child(3) {
+          border-right: 0;
+        }
+
+        .architecture-flow li:nth-child(-n + 3) {
+          border-bottom: 1px solid #cfd6d1;
+        }
+
+        .evidence-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .evidence-item:nth-child(2) {
+          border-right: 0;
+        }
+
+        .evidence-item:nth-child(-n + 2) {
+          border-bottom: 1px solid #cfd6d1;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .site-header__inner,
+        .hero,
+        main {
+          width: min(100% - 28px, 1120px);
+        }
+
+        .site-header__inner {
+          min-height: 58px;
+        }
+
+        .site-nav a:first-child {
+          display: none;
+        }
+
+        .hero {
+          padding: 48px 0 30px;
+        }
+
+        h1 {
+          font-size: 36px;
+        }
+
+        .hero__lead {
+          font-size: 18px;
+        }
+
+        .product-figure {
+          width: calc(100% - 12px);
+          margin-bottom: 24px;
+        }
+
+        .article-section {
+          padding: 48px 0;
+        }
+
+        .article-copy {
+          font-size: 16px;
+        }
+
+        .architecture-flow {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .architecture-flow li,
+        .architecture-flow li:nth-child(3) {
+          border-right: 1px solid #cfd6d1;
+          border-bottom: 1px solid #cfd6d1;
+        }
+
+        .architecture-flow li:nth-child(even) {
+          border-right: 0;
+        }
+
+        .architecture-flow li:nth-last-child(-n + 2) {
+          border-bottom: 0;
+        }
+
+        .incident-list li {
+          grid-template-columns: 1fr;
+          gap: 6px;
+        }
+
+        .evidence-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .evidence-item,
+        .evidence-item:nth-child(2) {
+          min-height: 0;
+          border-right: 0;
+          border-bottom: 1px solid #cfd6d1;
+        }
+
+        .evidence-item:last-child {
+          border-bottom: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="brand" href="https://haochase.github.io/homecue-edge/">HomeCue Edge</a>
+        <nav class="site-nav" aria-label="Article links">
+          <a href="#architecture">Architecture</a>
+          <a href="#evidence">Evidence</a>
+          <a href="https://github.com/haochase/homecue-edge">Source</a>
+        </nav>
+      </div>
+    </header>
+
+    <article>
+      <header class="hero">
+        <p class="eyebrow">Engineering journal · Edge AI · Smart home</p>
+        <h1>Building HomeCue Edge with Qwen Cloud</h1>
+        <p class="hero__lead">
+          A practical account of turning local home context into explainable routines while keeping
+          device execution behind an edge policy and an explicit human decision.
+        </p>
+        <div class="hero__meta">
+          <span>Model: qwen3.7-plus</span>
+          <span>Gateway: FastAPI</span>
+          <span>Console: React + TypeScript</span>
+          <span>Hardware path: ESP32-S3</span>
+        </div>
+      </header>
+
+      <figure class="product-figure">
+        <img
+          src="./homecue-edge-console.png"
+          alt="HomeCue Edge console showing local context, an explainable agent trace, and pending guarded actions"
+          width="1440"
+          height="720"
+        />
+        <figcaption>
+          The HomeCue Edge console keeps context, planning evidence, policy decisions, and device
+          state visible in one place.
+        </figcaption>
+      </figure>
+
+      <main>
+        <section class="article-section" id="problem">
+          <h2>The Product Problem</h2>
+          <div class="article-copy">
+            <p>
+              A smart-home agent should understand more than a single command. Coming home tired on
+              a warm evening might involve lighting, climate, entertainment, food, and a reminder.
+              That context makes an agent useful, but it also makes the system sensitive: schedules,
+              preferences, occupancy, and device state should not move freely between services.
+            </p>
+            <p>
+              The other risk is authority. A language model is good at producing a plan, but a fluent
+              answer is not permission to change a home. I wanted the model to reason while the edge
+              retained control over what could run and when.
+            </p>
+            <blockquote class="pull-quote">
+              The model proposes. The edge validates. The person confirms.
+            </blockquote>
+            <p>
+              That sentence became the product contract for HomeCue Edge. It shaped the API, the web
+              console, the firmware path, and the fallback behavior.
+            </p>
+          </div>
+        </section>
+
+        <section class="article-section" id="architecture">
+          <h2>The Edge-to-Cloud Loop</h2>
+          <div class="article-copy">
+            <p>
+              The gateway starts with simulated home context and reduces it to a compact privacy
+              summary. Qwen Cloud receives that summary and returns structured routine JSON. The
+              result is still only a proposal: the edge guard checks every device, command, and value,
+              and the user must confirm before the separate execute endpoint changes state.
+            </p>
+            <ol class="architecture-flow" aria-label="HomeCue Edge architecture flow">
+              <li><span>01</span>Local context</li>
+              <li><span>02</span>Privacy summary</li>
+              <li><span>03</span>Qwen proposal</li>
+              <li><span>04</span>Policy precheck</li>
+              <li><span>05</span>Human confirmation</li>
+              <li><span>06</span>Guarded execution</li>
+            </ol>
+            <p>
+              Agent mode adds an inspectable tool trace: read context, query device state, precheck
+              proposed actions, then emit the plan. Offline mode skips the cloud call and produces a
+              deterministic local routine through the same confirmation boundary.
+            </p>
+          </div>
+        </section>
+
+        <section class="article-section" id="qwen">
+          <h2>Connecting Qwen Cloud</h2>
+          <div class="article-copy">
+            <p>
+              HomeCue Edge uses the OpenAI-compatible interface exposed by Alibaba Cloud Model Studio.
+              Provider selection remains configuration rather than application logic, so the gateway
+              can require Qwen for verification or use a deterministic local planner for repeatable
+              demonstrations.
+            </p>
+            <pre><code>ACTIVE_PROVIDER=qwen
+QWEN_MODEL=qwen3.7-plus
+QWEN_PLANNER_PROVIDER=qwen</code></pre>
+            <p>
+              The cloud response follows a strict schema: summary, privacy summary, reasoning steps,
+              actions, and suggestions. Pydantic validates the shape before any action reaches the
+              guard. Required-provider mode raises on a cloud failure instead of silently presenting a
+              fallback as a successful model result.
+            </p>
+            <p>
+              The planner sees only the local summary. Raw schedules or household records are not
+              required for the routine, which keeps the cloud boundary small and explicit.
+            </p>
+          </div>
+        </section>
+
+        <section class="article-section" id="incidents">
+          <h2>What Broke, and What Fixed It</h2>
+          <div class="article-copy">
+            <p>
+              The useful work was not the first successful response. It was isolating each failure
+              without weakening the product contract.
+            </p>
+            <ol class="incident-list">
+              <li>
+                <strong>Transport</strong>
+                <p>
+                  TLS connections failed even though DNS and port 443 were healthy. The process had
+                  inherited a stale loopback proxy. A direct, process-scoped bypass restored the
+                  connection without changing system networking.
+                </p>
+              </li>
+              <li>
+                <strong>Allocation</strong>
+                <p>
+                  The configured qwen-plus model returned a free-tier allocation error. The account
+                  and API key were valid; that model's allocation was exhausted. Model inventory and
+                  the console showed that qwen3.7-plus still had an active free allocation, so the
+                  planner moved to that model.
+                </p>
+              </li>
+              <li>
+                <strong>Latency</strong>
+                <p>
+                  A small qwen3.7-plus request worked, but the structured routine exceeded the
+                  gateway's 30-second read timeout. A controlled comparison showed that default
+                  thinking caused the delay. Setting <code>enable_thinking=false</code> for this model
+                  returned valid routine JSON in about six seconds.
+                </p>
+              </li>
+              <li>
+                <strong>Regression</strong>
+                <p>
+                  The compatibility behavior was added behind a model-specific condition and a
+                  red-green regression test. Other providers, the deterministic planner, and the
+                  default API contract remained unchanged.
+                </p>
+              </li>
+            </ol>
+          </div>
+        </section>
+
+        <section class="article-section" id="safety">
+          <h2>Why the Model Never Executes Devices Directly</h2>
+          <div class="article-copy">
+            <p>
+              Planning and execution are separate endpoints. A plan can include five actions and still
+              change nothing. The console displays those actions as pending, together with a read-only
+              policy precheck. Only the confirm action sends the approved subset to the guarded execute
+              endpoint.
+            </p>
+            <p>
+              The allowlist is deliberately narrow. It defines valid devices, commands, and values for
+              lighting, climate, projector, speaker, and reminders. Unknown combinations are rejected
+              locally, even when their JSON is syntactically valid.
+            </p>
+            <p>
+              In the fresh Qwen verification, the model proposed five actions. Four passed the guard
+              and one was rejected. That rejection is valuable evidence: the policy is an independent
+              control boundary, not a decorative success message.
+            </p>
+          </div>
+        </section>
+
+        <section class="article-section" id="evidence">
+          <h2>Evidence, Not Just a Demo</h2>
+          <div class="article-copy">
+            <p>
+              A deterministic demo is useful for presentation, while a provider-forced verification is
+              useful for truth. HomeCue Edge keeps both. The current verification records
+              <code>provider=qwen</code>, <code>model=qwen3.7-plus</code>, and
+              <code>mode=qwen_cloud_reasoning</code>.
+            </p>
+            <div class="evidence-grid" aria-label="Verified engineering evidence">
+              <div class="evidence-item"><strong>100</strong><span>confirmed successful Qwen Cloud calls</span></div>
+              <div class="evidence-item"><strong>73</strong><span>passing FastAPI tests</span></div>
+              <div class="evidence-item"><strong>24/24</strong><span>firmware-flow checks</span></div>
+              <div class="evidence-item"><strong>4/5</strong><span>fresh actions accepted by the local guard</span></div>
+            </div>
+            <p>
+              The broader local gate also runs TypeScript compilation, ESLint, the Vite production
+              build, a software-demo profile contract, whitespace checks, and repository secret scans.
+              Hardware voice and speaker work remain an enhancement path rather than a prerequisite for
+              the software loop.
+            </p>
+          </div>
+        </section>
+
+        <section class="article-section" id="lessons">
+          <h2>What I Learned</h2>
+          <div class="article-copy">
+            <ol>
+              <li>
+                <strong>Make fallback visible.</strong> A fallback is a reliability feature only when
+                the UI and proof data identify it honestly.
+              </li>
+              <li>
+                <strong>Treat policy as product behavior.</strong> Users should see that a proposal is
+                pending and understand when state changes.
+              </li>
+              <li>
+                <strong>Diagnose boundaries one at a time.</strong> DNS, TCP, proxy behavior, key
+                validity, model allocation, inference latency, schema validation, and execution policy
+                are different layers.
+              </li>
+              <li>
+                <strong>Optimize for reproducible truth.</strong> A local deterministic path and a
+                forced real-provider path answer different questions, and both are necessary.
+              </li>
+            </ol>
+          </div>
+        </section>
+
+        <section class="article-section" id="next">
+          <h2>What Comes Next</h2>
+          <div class="article-copy">
+            <p>
+              The next engineering step is replacing simulated device state with a real integration
+              layer through Home Assistant, Matter, or vendor APIs while preserving the same
+              propose-confirm-execute contract. The ESP32-S3 terminal can then act as a room-level voice
+              and confirmation surface rather than the owner of policy.
+            </p>
+            <p>
+              Longer term, local inference can take over privacy summarization and selected offline
+              planning. Qwen Cloud remains the stronger reasoning layer when the network is available;
+              the edge remains the authority over household state.
+            </p>
+          </div>
+        </section>
+
+        <footer class="article-footer">
+          <h2>Explore HomeCue Edge</h2>
+          <p>
+            Review the implementation, run the deterministic demo, and inspect the separation between
+            cloud planning and local execution.
+          </p>
+          <div class="footer-links">
+            <a href="https://github.com/haochase/homecue-edge">View source on GitHub</a>
+            <a href="https://haochase.github.io/homecue-edge/">Open the live demo</a>
+          </div>
+        </footer>
+      </main>
+    </article>
+  </body>
+</html>

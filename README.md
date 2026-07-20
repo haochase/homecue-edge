@@ -114,6 +114,10 @@ Planner modes:
 
 Offline network mode always uses the local fallback routine. Weak-network mode keeps cached local context and marks the routine as weak-network reasoning.
 
+## Build Journey
+
+Read [Building HomeCue Edge with Qwen Cloud](https://haochase.github.io/homecue-edge/building-homecue-edge-with-qwen-cloud/) for the engineering story behind the Qwen planner, local safety boundary, human confirmation flow, and offline fallback.
+
 ## Local Development
 
 Run the API:

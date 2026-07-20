@@ -1,6 +1,9 @@
 name: Pages
 
 on:
+  push:
+    branches:
+      - codex/software-demo-closure
   workflow_dispatch:
 
 permissions:
