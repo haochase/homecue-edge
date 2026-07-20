@@ -63,6 +63,8 @@ async def build_qwen_plan(prompt: str, privacy_summary: dict, settings: Settings
         "temperature": 0.3,
         "response_format": {"type": "json_object"},
     }
+    if settings.qwen_model == "qwen3.7-plus":
+        payload["enable_thinking"] = False
 
     data = await _chat_completion(payload, settings)
 

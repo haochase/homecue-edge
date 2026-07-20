@@ -10,7 +10,7 @@ from starlette.websockets import WebSocketDisconnect
 from app.config import Settings
 from app.context import BASE_CONTEXT
 from app.main import app
-from app.planner import agent, service
+from app.planner import agent, qwen, service
 from app import voice_chat as voice_chat_module
 from app.schemas import Routine
 
@@ -49,6 +49,26 @@ def _final_response(content=FINAL_ROUTINE_JSON):
 
 def _agent_settings():
     return Settings(qwen_api_key="test-key", planner_provider="auto")
+
+
+def test_qwen37_plus_disables_thinking_for_predictable_planner_latency(monkeypatch):
+    captured_payload = {}
+
+    async def fake_chat_completion(payload, settings):
+        captured_payload.update(payload)
+        return _final_response()
+
+    monkeypatch.setattr(qwen, "_chat_completion", fake_chat_completion)
+
+    asyncio.run(
+        qwen.build_qwen_plan(
+            "Make the room comfortable.",
+            {"occupancy": "home", "mood": "tired"},
+            Settings(qwen_api_key="test-key", qwen_model="qwen3.7-plus", planner_provider="qwen"),
+        )
+    )
+
+    assert captured_payload["enable_thinking"] is False
 
 
 def _wav_bytes(samples, sample_rate=16000, channels=1):
