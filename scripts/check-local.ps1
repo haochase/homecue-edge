@@ -3,6 +3,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
+$RuntimeRoot = Join-Path $RepoRoot ".runtime\check-local"
+$ApiPytestBaseTemp = Join-Path $RuntimeRoot "pytest-api-tmp"
+$ApiPytestCacheDir = Join-Path $RuntimeRoot "pytest-api-cache"
+
+New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
 
 function Invoke-Checked {
   param(
@@ -24,7 +30,7 @@ try {
   }
   Invoke-Checked { .\.venv\Scripts\python -m pip install -r requirements.txt }
   Invoke-Checked { .\.venv\Scripts\python -m compileall app }
-  Invoke-Checked { .\.venv\Scripts\python -m pytest }
+  Invoke-Checked { .\.venv\Scripts\python -m pytest --basetemp $ApiPytestBaseTemp -o "cache_dir=$ApiPytestCacheDir" }
 }
 finally {
   Pop-Location
@@ -34,6 +40,9 @@ if (-not $SkipFirmware) {
   Write-Host "Checking HomeCue Edge firmware flow..."
   Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\check-firmware-flow.ps1" -Required }
 }
+
+Write-Host "Checking HomeCue Edge software demo profile..."
+Invoke-Checked { powershell -NoProfile -ExecutionPolicy Bypass -File "$PSScriptRoot\test-software-demo-profile.ps1" }
 
 Write-Host "Checking HomeCue Edge web console..."
 Push-Location "$PSScriptRoot\..\apps\web"

@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HomeCue Phone Probe</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      body {
+        margin: 0;
+        background: #101418;
+        color: #eef3f8;
+      }
+
+      main {
+        box-sizing: border-box;
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 24px;
+      }
+
+      p {
+        color: #aab7c4;
+      }
+
+      button,
+      input {
+        border: 1px solid #405061;
+        border-radius: 8px;
+        background: #1d2833;
+        color: #eef3f8;
+        font: inherit;
+      }
+
+      button {
+        min-height: 42px;
+        padding: 0 14px;
+      }
+
+      input {
+        box-sizing: border-box;
+        width: 100%;
+        padding: 10px 12px;
+      }
+
+      .toolbar,
+      .grid {
+        display: grid;
+        gap: 12px;
+      }
+
+      .toolbar {
+        grid-template-columns: 1fr auto;
+        margin: 16px 0;
+      }
+
+      .grid {
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      }
+
+      .card {
+        border: 1px solid #2a3642;
+        border-radius: 8px;
+        padding: 14px;
+        background: #151d25;
+      }
+
+      .card strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      .ok {
+        color: #7ee787;
+      }
+
+      .warn {
+        color: #ffd166;
+      }
+
+      .fail {
+        color: #ff7b72;
+      }
+
+      pre {
+        overflow: auto;
+        border-radius: 8px;
+        padding: 12px;
+        background: #0a0e12;
+        color: #d8e2ec;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>HomeCue Phone Probe</h1>
+      <p>Checks phone browser permissions, LAN API access, microphone, camera, and image capture input.</p>
+
+      <div class="toolbar">
+        <input id="apiBase" aria-label="API base" />
+        <button id="run">Run</button>
+      </div>
+
+      <div class="grid" id="cards"></div>
+
+      <section class="card">
+        <strong>Camera file picker</strong>
+        <input id="imageInput" type="file" accept="image/*" capture="environment" />
+        <p id="imageStatus">not selected</p>
+      </section>
+
+      <pre id="log"></pre>
+    </main>
+
+    <script>
+      const cards = document.querySelector("#cards")
+      const log = document.querySelector("#log")
+      const apiInput = document.querySelector("#apiBase")
+      const imageInput = document.querySelector("#imageInput")
+      const imageStatus = document.querySelector("#imageStatus")
+
+      const params = new URLSearchParams(window.location.search)
+      apiInput.value = params.get("apiBase") || `${window.location.protocol}//${window.location.hostname}:8723`
+
+      const results = []
+
+      function writeLog() {
+        log.textContent = JSON.stringify(
+          {
+            href: window.location.href,
+            userAgent: navigator.userAgent,
+            results,
+          },
+          null,
+          2,
+        )
+      }
+
+      function appendText(parent, tag, text, className) {
+        const element = document.createElement(tag)
+        if (className) {
+          element.className = className
+        }
+        element.textContent = text
+        parent.appendChild(element)
+      }
+
+      function addResult(name, status, detail) {
+        const item = { name, status, detail: String(detail || ""), time: new Date().toISOString() }
+        results.push(item)
+        render()
+        writeLog()
+      }
+
+      function render() {
+        cards.textContent = ""
+        for (const item of results) {
+          const card = document.createElement("article")
+          card.className = "card"
+          appendText(card, "strong", item.name)
+          appendText(card, "span", item.status, item.status)
+          appendText(card, "p", item.detail)
+          cards.appendChild(card)
+        }
+      }
+
+      async function testApi() {
+        const apiBase = apiInput.value.replace(/\/+$/, "")
+        const response = await fetch(`${apiBase}/health`)
+        const text = await response.text()
+        addResult("API /health", response.ok ? "ok" : "fail", text.slice(0, 180))
+      }
+
+      async function testMicrophone() {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          addResult("microphone API", "fail", "navigator.mediaDevices.getUserMedia unavailable")
+          return
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        stream.getTracks().forEach((track) => track.stop())
+        addResult("microphone permission", "ok", "audio stream opened and stopped")
+      }
+
+      async function testCamera() {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          addResult("camera API", "fail", "navigator.mediaDevices.getUserMedia unavailable")
+          return
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+        stream.getTracks().forEach((track) => track.stop())
+        addResult("camera permission", "ok", "video stream opened and stopped")
+      }
+
+      async function runProbe() {
+        results.length = 0
+        addResult("secure context", window.isSecureContext ? "ok" : "warn", `isSecureContext=${window.isSecureContext}`)
+        addResult("mediaDevices", navigator.mediaDevices ? "ok" : "fail", navigator.mediaDevices ? "available" : "unavailable")
+        try {
+          await testApi()
+        } catch (error) {
+          addResult("API /health", "fail", error.message || error)
+        }
+        try {
+          await testMicrophone()
+        } catch (error) {
+          addResult("microphone permission", "fail", error.message || error)
+        }
+        try {
+          await testCamera()
+        } catch (error) {
+          addResult("camera permission", "fail", error.message || error)
+        }
+      }
+
+      imageInput.addEventListener("change", () => {
+        const file = imageInput.files && imageInput.files[0]
+        imageStatus.textContent = file ? `${file.name} / ${file.type || "unknown"} / ${file.size} bytes` : "not selected"
+        addResult("image file picker", file ? "ok" : "warn", imageStatus.textContent)
+      })
+
+      document.querySelector("#run").addEventListener("click", () => {
+        void runProbe()
+      })
+
+      void runProbe()
+    </script>
+  </body>
+</html>

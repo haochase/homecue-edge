@@ -24,6 +24,44 @@ class ExecuteRequest(BaseModel):
     actions: list[DeviceAction] = Field(default_factory=list)
 
 
+class VoiceChatRequest(BaseModel):
+    # Text mode lets scripts and tests exercise MiMo/TTS before ESP32 WAV upload
+    # is wired. WAV upload uses the same /voice-chat endpoint with raw bytes.
+    text: str = ""
+    speak: bool = False
+    reply_audio: bool = False
+    session_id: str | None = None
+    reset_session: bool = False
+    user_id: str | None = None
+    device_id: str | None = None
+
+
+class VoiceChatTaskRequest(BaseModel):
+    title: str
+    detail: str = ""
+    due_text: str = ""
+    due_at: float | None = None
+    recurrence: str | None = None
+    user_id: str | None = None
+    device_id: str | None = None
+
+
+class VoiceChatTaskUpdateRequest(BaseModel):
+    title: str | None = None
+    detail: str | None = None
+    due_text: str | None = None
+    due_at: float | None = None
+    recurrence: str | None = None
+    status: Literal["open", "done", "cancelled"] | None = None
+    reminded: bool | None = None
+
+
+class Esp32SpeakerTestRequest(BaseModel):
+    base_url: str
+    seconds: int = Field(default=8, ge=1, le=10)
+    mode: Literal["all", "both", "left", "right", "sweep"] = "all"
+
+
 class Suggestion(BaseModel):
     type: str
     title: str

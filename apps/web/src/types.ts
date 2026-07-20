@@ -65,7 +65,113 @@ export type PlanResponse = {
   trace?: TraceStep[]
 }
 
+export type ExecuteResponse = {
+  execution: ExecutionResult[]
+  devices: DeviceState
+}
+
 export type InitialState = {
   context: HomeContext
   devices: DeviceState
+}
+
+export type VoiceMemory = {
+  memory_id: string
+  memory_type: string
+  content: string
+  source_text: string
+  user_id: string
+  device_id: string
+  updated_at: number
+}
+
+export type VoiceTask = {
+  task_id: string
+  title: string
+  detail: string
+  due_text: string
+  recurrence: string
+  due_at: number | null
+  reminded_at: number | null
+  status: 'open' | 'done' | 'cancelled'
+  user_id: string
+  device_id: string
+}
+
+export type VoiceMood = {
+  mood_id: string
+  mood: string
+  valence: number
+  confidence: number
+  source_text: string
+  user_id: string
+  device_id: string
+  created_at: number
+}
+
+export type VoiceRuntimeStatus = {
+  provider: string
+  model: string
+  tts: {
+    provider: string
+    model: string
+    voice: string
+    configured: boolean
+  }
+  memory: {
+    sqlite_enabled: boolean
+  }
+  asr: {
+    provider: string
+    model: string
+    language: string
+    effective_provider: string
+    faster_whisper_available?: boolean
+    windows_available?: boolean
+    windows_speech_available?: boolean
+  }
+  realtime: {
+    websocket: boolean
+    pcm_s16le: boolean
+    stt_partial_events: boolean
+    audio_partial_asr: boolean
+    mimo_streaming_tts: boolean
+    opus_stream: boolean
+    full_duplex: boolean
+  }
+}
+
+export type Esp32DiagHealth = {
+  base_url: string
+  health: {
+    status?: string
+    wifi_ip?: string
+    i2s_ready?: boolean
+    es8311_ready?: boolean
+    speaker_pa_enabled?: boolean
+    esp_sr_started?: boolean
+    [key: string]: unknown
+  }
+}
+
+export type Esp32SpeakerTestResult = {
+  base_url: string
+  speaker_test: {
+    ok?: boolean
+    seconds?: number
+    mode?: string
+    speaker_pa_enabled?: boolean
+    [key: string]: unknown
+  }
+  human_audible_confirmation_required: boolean
+}
+
+export type VoiceWsEvent = Record<string, unknown> & {
+  type?: string
+  state?: string
+  text?: string
+  detail?: string
+  session_id?: string
+  turn_index?: number
+  provider?: string
 }

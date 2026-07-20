@@ -1,4 +1,4 @@
-import type { DeviceState, ExecutionResult, HomeContext, NetworkMode, PlanResponse, Routine, TraceStep } from './types'
+import type { DeviceState, ExecuteResponse, ExecutionResult, HomeContext, NetworkMode, PlanResponse, Routine, TraceStep } from './types'
 
 const staticContext: HomeContext = {
   home: {
@@ -57,7 +57,7 @@ export function buildStaticPlan(
   const routine = networkMode === 'offline' ? buildFallbackPlan(prompt) : buildMockPlan(prompt, networkMode, useAgent)
   const devices = clone(currentDevices)
   // Read-only pre-check mirrors the edge guard without mutating device state.
-  const precheck = routine.actions.map((action) => applyAction(clone(devices), action))
+  const precheck = routine.actions.map((action) => precheckAction(devices, action))
   // Propose-only: leave devices untouched, awaiting hardware confirmation.
   const execution = execute ? routine.actions.map((action) => applyAction(devices, action)) : []
 
@@ -70,6 +70,16 @@ export function buildStaticPlan(
     devices,
     trace: useAgent ? buildStaticTrace(prompt) : [],
   }
+}
+
+export function executeStaticActions(
+  currentDevices: DeviceState,
+  actions: Routine['actions'],
+): ExecuteResponse {
+  const devices = clone(currentDevices)
+  const execution = actions.map((action) => applyAction(devices, action))
+
+  return { execution, devices }
 }
 
 function buildStaticTrace(prompt: string): TraceStep[] {
@@ -224,6 +234,23 @@ function applyAction(
   }
 
   return { device, command, value, accepted: true, reason: 'executed locally' }
+}
+
+function precheckAction(
+  devices: DeviceState,
+  action: { device: string; command: string; value: string | number | boolean },
+): ExecutionResult {
+  const { device, command, value } = action
+
+  if (!(device in devices)) {
+    return { device, command, value, accepted: false, reason: 'unknown device' }
+  }
+
+  if (!isAllowed(device, command, value)) {
+    return { device, command, value, accepted: false, reason: 'action not allowed by edge policy' }
+  }
+
+  return { device, command, value, accepted: true, reason: 'passes edge policy (not yet executed)' }
 }
 
 function isAllowed(device: string, command: string, value: string | number | boolean): boolean {

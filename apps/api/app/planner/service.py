@@ -3,6 +3,7 @@ from app.context import build_privacy_summary
 from app.planner.agent import build_agent_plan
 from app.planner.mock import build_fallback_plan, build_mock_plan
 from app.planner.qwen import build_qwen_plan
+from app.planner.tools import dispatch_tool
 from app.schemas import Routine
 
 
@@ -44,6 +45,34 @@ async def build_plan_with_trace(
                 raise
             routine = build_mock_plan(prompt)
             routine.mode = "mock_after_qwen_error"
+    elif agent_mode:
+        routine = build_mock_plan(prompt)
+        routine.mode = "mock_agent_reasoning"
+        actions = [action.model_dump() for action in routine.actions]
+        trace = [
+            {
+                "step": 1,
+                "type": "tool_call",
+                "name": "get_home_context",
+                "args": {},
+                "result": build_privacy_summary(context),
+            },
+            {
+                "step": 2,
+                "type": "tool_call",
+                "name": "get_device_states",
+                "args": {},
+                "result": dispatch_tool("get_device_states"),
+            },
+            {
+                "step": 3,
+                "type": "tool_call",
+                "name": "propose_actions",
+                "args": {"actions": actions},
+                "result": dispatch_tool("propose_actions", {"actions": actions}),
+            },
+            {"step": 4, "type": "final", "content": routine.summary},
+        ]
     else:
         routine = build_mock_plan(prompt)
 
