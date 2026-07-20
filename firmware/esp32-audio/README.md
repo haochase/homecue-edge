@@ -50,7 +50,7 @@
 | --- | --- | --- |
 | WiFi 名称（2.4G） | 路由器背面 / 手机热点设置 | `MyHome-2.4G` |
 | WiFi 密码 | 同上 | `********` |
-| PC 局域网 IPv4 | 见 **第 6 节** `ipconfig` | `192.168.1.100` |
+| PC 局域网 IPv4 | 见 **第 6 节** `ipconfig` | `192.168.x.x` |
 | PC 端口 | 固定 | `8723` |
 
 ---
@@ -269,7 +269,15 @@ homecue:plan 2      # Movie time
 homecue:execute     # 确认并 POST /execute
 homecue:reject      # 丢弃当前提议
 homecue:health      # 重新检查 /health
+homecue:reminders   # 拉取 /voice-chat/tasks/due-audio 并播放到期提醒
 ```
+
+`homecue:reminders` is also the manual version of the firmware's idle reminder
+poll. After boot, the ESP32 waits briefly, then polls
+`/voice-chat/tasks/due-audio` in the background while no plan, command window,
+or voice-chat turn is active. The 2026-06-16 hardware proof shows this automatic
+path using MiMo TTS `mimo-v2.5-tts` with voice `Mia`, downloading a WAV and
+playing it through the ES8311 board speaker without a serial command.
 
 自动化采集 Level 4 证明时可运行：
 
@@ -298,7 +306,7 @@ notepad secrets.h
 ```cpp
 #define WIFI_SSID      "你的2.4G-WiFi名"      // 不能是 5G-only
 #define WIFI_PASSWORD  "你的WiFi密码"
-#define PC_HOST        "192.168.1.100"        // ipconfig 里 WLAN 的 IPv4
+#define PC_HOST        "192.168.x.x"        // ipconfig 里 WLAN 的 IPv4
 #define PC_PORT        "8723"
 ```
 
@@ -308,11 +316,11 @@ notepad secrets.h
 ipconfig
 ```
 
-示例输出（把 `192.168.1.100` 填进 `PC_HOST`）：
+示例输出（把 `192.168.x.x` 填进 `PC_HOST`）：
 
 ```
 无线局域网适配器 WLAN:
-   IPv4 地址 . . . . . . . . . . . . : 192.168.1.100
+   IPv4 地址 . . . . . . . . . . . . : 192.168.x.x
 ```
 
 ### 4B.4 Arduino 烧录设置（与语音识别例程不同）
@@ -344,7 +352,7 @@ ipconfig
 [keys] TCA9555 OK — KEY1=plan KEY2=confirm KEY3=reject BOOT=plan-fallback
 [WiFi] connecting to YourSSID ...
 ........
-[WiFi] connected, IP = 192.168.1.50
+[WiFi] connected, IP = 192.168.x.y
 [/health] HTTP 200
 [RGB] IDLE (dim)
 ```
@@ -446,6 +454,7 @@ npm run dev
 | ES7210 初始化 | 双麦 ADC 需经 I2C 配置增益/TDM 槽（`esp32-audio.ino` 内 `espSrBegin()` 的 `TODO[VENDOR]`，从厂商例程抄） |
 
 > 模型来源：用厂商 ESP-SR 例程的 `srmodels.bin`，或 arduino-esp32 `ESP_SR` 示例随附的模型/分区脚本。模型语言必须是 **english**（与命令词一致）。
+> 当前 arduino-esp32 3.0.7 随附的 `srmodels.bin` 已核查：包含 `hiesp` 和 English MultiNet，不包含 `xiaoqian`、`nihaoxiaozhi`、`nihaoxiaoxin`。可用 `scripts\check-esp32-sr-models.ps1` 复核。
 
 ### 4C.3 如何开启
 
@@ -459,11 +468,14 @@ npm run dev
 
 唤醒词：**english 模型默认（通常 "hi esp"）**，由模型决定，可按 wiki 换 wakenet 模型。
 
+目标唤醒词 `你好小千` 不能通过修改下表实现；下表只是 MultiNet 命令词。`你好小千` 需要新的 WakeNet/自定义唤醒模型、匹配的 `srmodels.bin`，并且需要绕开或修改 arduino-esp32 `ESP_SR` 封装里当前硬编码选择 `hiesp` 的路径。
+
 | MultiNet id | 你说的命令词（english） | 映射到 | 发送到 `/plan` 的 prompt 摘要 |
 | --- | --- | --- | --- |
 | 0 | "I am home" | `COMMAND_WORDS[0]` I'm home | 刚回家很累，舒适房间 + 放松观影 |
 | 1 | "sleep mode" | `COMMAND_WORDS[1]` Sleep mode | 睡眠模式，柔和灯光 + 温和提醒 |
 | 2 | "movie time" | `COMMAND_WORDS[2]` Movie time | 观影夜：暖光、影院模式、环境音 |
+| 3 | "chat mode" | `/voice-chat` | 录制下一段语音并上传到后端聊天；不执行设备动作 |
 
 > `esp32-audio.ino` 里的 `SR_COMMANDS` 第三列是音素/G2P 串，已用 esp-sr 的 `gen_sr_commands.py` 针对 arduino-esp32 3.0.7 的 english multinet 模型生成。**换 core 版本或换模型后需重新生成并替换**，否则识别会失准。命令词文字与 `COMMAND_WORDS` 标签可以不同，只要 `sr_cmd_t` 的 id 落在 `0..COMMAND_COUNT-1` 即可。
 
@@ -471,6 +483,7 @@ npm run dev
 
 - 语音、按键、串口三条路**汇入同一个** `requestPlan(... execute=false ...)`，下游 `/plan → 确认 → /execute` 完全一致。
 - 语音**只触发提议**；执行永远要 CONFIRM 键或 `homecue:execute`。
+- `chat mode` 和串口 `homecue:voice-chat [seconds]` 是聊天路线，只会录音上传 `/voice-chat`，不会执行设备动作。
 - 语音任何时候不灵，立刻改用 **NEXT/BOOT 键** 或串口 `homecue:plan [0|1|2]`，演示与联调不中断。
 - 关掉 `ENABLE_ESP_SR` 即回到纯按键 MVP，编译与 CI 不变。
 
@@ -482,6 +495,7 @@ npm run dev
 | `[esp-sr] model init FAILED` | `srmodels.bin` 未烧入或分区方案选错；改 **ESP SR 16M** 分区并重烧模型 |
 | `[esp-sr] I2S init FAILED` | ES7210 未初始化 / 引脚不对；补 `espSrBegin()` 里 `TODO[VENDOR]` 的 ES7210 I2C 初始化（从厂商例程抄），核对 MCLK=12/BCLK=13/WS=14/DIN=15 |
 | 唤醒词「hi esp」无反应（**你的实测风险**） | ① 麦克风增益：ES7210 增益寄存器调高、贴近正面说；② 模型语言：确认是 english wakenet/multinet 且与命令词一致；③ 唤醒灵敏度：用 wiki/esp-sr 的灵敏度档位调高；④ 换唤醒模型或重烧 `srmodels.bin`；⑤ **兜底**：直接用 NEXT/BOOT 键或串口 `homecue:plan` 触发，不依赖语音 |
+| 想把唤醒词改成「你好小千」 | 先跑 `scripts\check-esp32-sr-models.ps1 -RequiredWakeKeyword xiaoqian`。当前默认模型会显示缺失；需要获得/生成 `xiaoqian` WakeNet 模型并重打包 `srmodels.bin`，再改 ESP-SR 启动模型选择。MiMo 无法替代本地唤醒词检测 |
 | 唤醒成功但命令词识别不到 | 命令词音素串与模型不匹配（用 multinet g2p 重生成）；命令窗口太短就紧接着说；降低环境噪音 |
 | 唤醒/命令乱触发 | 调低灵敏度；远离噪声源；必要时回退到按键路线 |
 
@@ -559,7 +573,7 @@ ipconfig
 
 ```
 无线局域网适配器 WLAN:
-   IPv4 地址 . . . . . . . . . . . . : 192.168.1.100
+   IPv4 地址 . . . . . . . . . . . . : 192.168.x.x
 ```
 
 记下这个地址 → 后面写入 `secrets.h` 的 `PC_HOST`。
@@ -597,10 +611,10 @@ New-NetFirewallRule -DisplayName "HomeCue API 8723" -Direction Inbound -Protocol
 
 ### 7.3 验证「局域网能访问」
 
-把 `192.168.1.100` 换成你第 6 节查到的 IP：
+把 `192.168.x.x` 换成你第 6 节查到的 IP：
 
 ```powershell
-curl http://192.168.1.100:8723/health
+curl http://192.168.x.x:8723/health
 ```
 
 应返回与 5.4 相同的 JSON。  
@@ -624,7 +638,7 @@ Copy-Item secrets.h.example secrets.h
 ```cpp
 #define WIFI_SSID      "你的2.4G-WiFi名"
 #define WIFI_PASSWORD  "你的WiFi密码"
-#define PC_HOST        "192.168.1.100"   // 第 6 节的 IPv4
+#define PC_HOST        "192.168.x.x"   // 第 6 节的 IPv4
 #define PC_PORT        "8723"
 ```
 
@@ -742,7 +756,7 @@ if (digitalRead(0) == LOW) return KEY_CONFIRM;  // BOOT 键低电平触发，以
 [HomeCue Edge] ESP32-S3-AUDIO-Board firmware booting...
 [WiFi] connecting to YourSSID ...
 ........
-[WiFi] connected, IP = 192.168.1.50
+[WiFi] connected, IP = 192.168.x.y
 ```
 
 触发一次 `/plan`（语音、NEXT 键、或你在 `setup()` 里写的测试调用）后：
@@ -937,6 +951,54 @@ npm run dev
 | ES7210 I2S | MCLK=12, SCLK=13, LRCK=14, ASDOUT=15 |
 | I2C | SDA=11, SCL=10 |
 | RGB / 用户键 | 经 **TCA9555** 扩展，以厂商例程为准 |
+
+---
+
+## Appendix: Ubuntu LAN API + MiMo TTS Proof
+
+The board can be pointed at an Ubuntu LAN API without editing the checked-out
+`secrets.h`. Build or flash from the repository root with temporary overrides:
+
+```powershell
+.\scripts\flash-esp32.ps1 -Port COM7 -Upload -EnableEspSr -ApiHostOverride 192.0.2.101 -ApiPortOverride 8723
+```
+
+This patches only the temporary build copy of the firmware secrets. The current
+proof target is `edge-host` at `http://192.0.2.101:8723`, running the
+user-level `homecue-edge-api` systemd service.
+
+If the API sets `VOICE_CHAT_ACCESS_TOKEN`, either put the same value in the
+gitignored `secrets.h` or pass it only to the temporary build:
+
+```powershell
+.\scripts\flash-esp32.ps1 -Port COM7 -Upload -EnableEspSr -ApiHostOverride 192.0.2.101 -ApiPortOverride 8723 -VoiceChatAccessTokenOverride dev-token
+```
+
+The firmware sends that token on `/voice-chat`, `/voice-chat/ws`,
+`/voice-chat/tasks/due-audio`, and protected reply-audio downloads.
+
+The status endpoint currently reports MiMo for both chat and board-speaker TTS:
+
+```text
+GET http://192.0.2.101:8723/voice-chat/status
+provider = mimo
+model    = mimo-v2.5-pro
+tts      = mimo / mimo-v2.5-tts / Mia
+memory   = sqlite_enabled
+```
+
+Hardware evidence captured on 2026-06-16:
+
+```text
+assets/demo/esp32-ubuntu-lan-reminders-auto.log
+assets/demo/esp32-ubuntu-lan-reminders-auto-markers.log
+assets/demo/esp32-ubuntu-lan-reminders-auto-check.json
+```
+
+That proof created a due reminder through the Ubuntu API, let the ESP32 idle
+auto-poll `/voice-chat/tasks/due-audio`, downloaded the generated MiMo WAV, and
+logged board-speaker playback completion. It verifies the ES8311 speaker output
+path with the deployed MiMo TTS voice `Mia`.
 
 ---
 

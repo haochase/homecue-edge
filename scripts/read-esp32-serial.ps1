@@ -3,7 +3,8 @@ param(
   [int]$Baud = 115200,
   [int]$Seconds = 8,
   [string[]]$SendCommand = @(),
-  [int]$SendAfterSeconds = 2
+  [int]$SendAfterSeconds = 2,
+  [switch]$SkipReset
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,10 +19,12 @@ try {
   $SerialPort.Open()
   Write-Host ("Reading {0} at {1} baud for {2}s..." -f $Port, $Baud, $Seconds)
 
-  # Pulse reset on ESP32 USB CDC boards so the boot banner is captured.
-  $SerialPort.RtsEnable = $false
-  Start-Sleep -Milliseconds 100
-  $SerialPort.RtsEnable = $true
+  if (-not $SkipReset) {
+    # Pulse reset on ESP32 USB CDC boards so the boot banner is captured.
+    $SerialPort.RtsEnable = $false
+    Start-Sleep -Milliseconds 100
+    $SerialPort.RtsEnable = $true
+  }
 
   $Deadline = (Get-Date).AddSeconds($Seconds)
   $CommandIndex = 0
@@ -48,6 +51,8 @@ try {
   Write-Host ""
 } finally {
   if ($SerialPort.IsOpen) {
+    $SerialPort.DtrEnable = $false
+    $SerialPort.RtsEnable = $true
     $SerialPort.Close()
   }
 }

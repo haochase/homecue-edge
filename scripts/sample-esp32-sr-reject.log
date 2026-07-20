@@ -1,0 +1,13 @@
+[HomeCue Edge] firmware booting
+[mode] button-route + ESP-SR voice command route
+[keys] TCA9555 OK
+[keys] KEY1=plan, KEY2=confirm, KEY3=reject, BOOT=plan-fallback
+[WiFi] connected, IP = 192.0.2.42
+[/health] HTTP 200
+[esp-sr] ES7210 codec ready
+[esp-sr] ready
+[esp-sr] wake word detected
+[voice] command: I'm home
+[/plan] proposed 5 action(s)
+[key] REJECT - discarding proposal
+[RGB] REJECTED (red)

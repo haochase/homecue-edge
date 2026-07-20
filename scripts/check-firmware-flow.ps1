@@ -61,6 +61,12 @@ Write-Check "serial execute route exists" (Test-Pattern 'homecue:execute') "auto
 Write-Check "voice hook exists" (Test-Pattern 'static\s+int\s+pollVoiceCommand\(\)') "ESP-SR integration has one function boundary" $true
 Write-Check "vendor TODO markers" (Test-Pattern 'TODO\[VENDOR\]') "vendor audio/RGB integration points are explicit" $true
 Write-Check "voice placeholder is inert" (Test-Pattern '(?s)static\s+int\s+pollVoiceCommand\(\).*return\s+-1\s*;') "button route stays stable until ESP-SR is wired" $false
+Write-Check "ESP-SR compile gate" (Test-Pattern '#if\s+ENABLE_ESP_SR') "optional voice route stays behind an explicit build flag" $true
+Write-Check "ESP-SR mode keeps fallback" (Test-Pattern 'button-route \+ ESP-SR voice command route') "voice is additive; key/serial fallback stays visible" $true
+Write-Check "ES7210 codec init" (Test-Pattern 'initEs7210Codec\(\)') "dual-mic ADC init has a dedicated failure boundary" $true
+Write-Check "ES7210 codec config" (Test-Pattern 'es7210_config_codec') "sample rate, bit width, bias, and gain are configured after shared I2S clocks start" $true
+Write-Check "ES7210 volume config" (Test-Pattern 'es7210_config_volume') "mic input gain path is visible for wake-word tuning" $false
+Write-Check "voice failure falls back" (Test-Pattern 'voice route unavailable - use KEY1/BOOT or serial commands') "ESP-SR init failure cannot block the proven demo route" $true
 
 Write-Check "health probe" (Test-Pattern 'checkHealth\(\)') "gateway reachability is visible at boot" $false
 Write-Check "precheck logging" (Test-Pattern 'resp\["precheck"\]') "edge guard decisions are visible on serial" $false

@@ -10,6 +10,8 @@ param(
   [switch]$AutoSerialLevel4,
   [ValidateRange(0, 2)]
   [int]$SerialCommandIndex = 0,
+  [ValidateRange(0, 100)]
+  [int]$ExpectedActionCount = 0,
   [switch]$SkipReset,
   [switch]$RequireInteraction,
   [switch]$Required
@@ -94,6 +96,8 @@ function Read-SerialLog {
     Write-Host ""
   } finally {
     if ($SerialPort.IsOpen) {
+      $SerialPort.DtrEnable = $false
+      $SerialPort.RtsEnable = $true
       $SerialPort.Close()
     }
   }
@@ -154,15 +158,23 @@ Write-Host ""
 Write-Host "Checking expected firmware markers..."
 
 $InteractionRequired = [bool]$RequireInteraction
+$BootMarkersRequired = -not ([bool]$RequireInteraction -and [bool]$SkipReset)
+$ButtonRouteModeOk = $LogText -match "\[mode\] button-route MVP" -or $LogText -match "\[mode\] button-route \+ ESP-SR voice command route"
+$EspSrUnavailableOk = $LogText -match "\[esp-sr\] voice route unavailable - use KEY1/BOOT or serial commands"
+$EspSrReadyOk = $LogText -match "\[esp-sr\] ready"
+$VoiceFallbackOk = -not ($LogText -match "\[mode\] button-route \+ ESP-SR voice command route") -or $EspSrUnavailableOk -or $EspSrReadyOk
+$ExpectedActionCountOk = $ExpectedActionCount -le 0 -or $LogText -match ("\[/plan\] proposed {0} action\(s\)" -f $ExpectedActionCount)
 
-Write-Check "boot banner" ($LogText -match "\[HomeCue Edge\].*firmware booting") "HomeCue firmware started" $true
-Write-Check "button-route mode" ($LogText -match "\[mode\] button-route MVP") "current firmware keeps ESP-SR optional" $true
+Write-Check "boot banner" ($LogText -match "\[HomeCue Edge\].*firmware booting") "HomeCue firmware started" $BootMarkersRequired
+Write-Check "button-route mode" $ButtonRouteModeOk "current firmware keeps ESP-SR optional and fallback-visible" $BootMarkersRequired
+Write-Check "ESP-SR fallback status" $VoiceFallbackOk "ESP-SR mode must either become ready or explicitly fall back" $false
 Write-Check "TCA9555 key expander" ($LogText -match "\[keys\] TCA9555 OK") "KEY1/KEY2/KEY3 route detected" $false
-Write-Check "BOOT fallback" ($LogText -match "BOOT=plan-fallback") "fallback route documented by firmware" $true
-Write-Check "WiFi connected" ($LogText -match "\[WiFi\] connected, IP =") "board joined local network" $true
-Write-Check "gateway health" ($LogText -match "\[/health\] HTTP 200") "PC gateway reachable on configured host/port" $true
+Write-Check "BOOT fallback" ($LogText -match "BOOT=plan-fallback") "fallback route documented by firmware" $BootMarkersRequired
+Write-Check "WiFi connected" ($LogText -match "\[WiFi\] connected, IP =") "board joined local network" $BootMarkersRequired
+Write-Check "gateway health" ($LogText -match "\[/health\] HTTP 200") "PC gateway reachable on configured host/port" $BootMarkersRequired
 Write-Check "plan trigger" ($LogText -match "\[key\] NEXT ->" -or $LogText -match "\[voice\] command:" -or $LogText -match "\[serial\] PLAN ->") "requires KEY1/BOOT, voice, or serial test trigger during capture" $InteractionRequired
 Write-Check "plan proposal" ($LogText -match "\[/plan\] proposed \d+ action\(s\)") "requires plan trigger during capture" $InteractionRequired
+Write-Check "expected action count" $ExpectedActionCountOk ("expected {0} proposed action(s); pass 0 to skip" -f $ExpectedActionCount) ($InteractionRequired -and $ExpectedActionCount -gt 0)
 Write-Check "confirm trigger" ($LogText -match "\[key\] CONFIRM" -or $LogText -match "\[serial\] CONFIRM") "requires KEY2/confirm or serial test trigger during capture" $InteractionRequired
 Write-Check "execute confirmation" ($LogText -match "exec .+ -> accepted") "requires confirm trigger during capture" $InteractionRequired
 
@@ -189,6 +201,7 @@ if ($ResultJsonPath) {
     baud = $ResultBaud
     source = $ResultSource
     seconds = $ResultSeconds
+    expectedActionCount = $ExpectedActionCount
     requireInteraction = [bool]$RequireInteraction
     requiredMode = [bool]$Required
     failures = [string[]]$Failures.ToArray()
